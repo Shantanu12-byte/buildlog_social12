@@ -1,98 +1,234 @@
-import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
+import { View, Text, FlatList, ScrollView, StyleSheet, RefreshControl } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useState } from 'react';
+import { Colors, FontSizes, Spacing } from '@/constants/theme';
+import { FeedPostCard, FeedPost } from '@/components/FeedPostCard';
+import { ChallengeCard, Challenge } from '@/components/ChallengeCard';
 
-import { HelloWave } from '@/components/hello-wave';
-import ParallaxScrollView from '@/components/parallax-scroll-view';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Link } from 'expo-router';
+// Mock data for Active Challenges
+const MOCK_CHALLENGES: Challenge[] = [
+  { id: '1', username: 'Alex', projectName: 'E-commerce App', currentDay: 12, totalDays: 15 },
+  { id: '2', username: 'Sarah', projectName: 'AI Chatbot', currentDay: 8, totalDays: 30 },
+  { id: '3', username: 'Mike', projectName: 'Portfolio Site', currentDay: 5, totalDays: 15 },
+  { id: '4', username: 'Emma', projectName: 'Game Dev', currentDay: 22, totalDays: 30 },
+  { id: '5', username: 'John', projectName: 'Mobile App', currentDay: 3, totalDays: 15 },
+];
 
-export default function HomeScreen() {
+// Mock data for Feed Posts
+const MOCK_POSTS: FeedPost[] = [
+  {
+    id: '1',
+    username: 'alex_dev',
+    timestamp: '2h ago',
+    projectTitle: 'Building an API',
+    caption: 'Finally got the authentication system working! 🎉 Next up: implementing rate limiting and caching.',
+    hasGithubLink: true,
+    cheers: 24,
+    comments: 5,
+  },
+  {
+    id: '2',
+    username: 'sarah_codes',
+    timestamp: '4h ago',
+    projectTitle: 'AI Chatbot',
+    caption: 'Day 8 of my 30-day sprint. The NLP model is starting to understand context better. Still a long way to go!',
+    cheers: 42,
+    comments: 12,
+  },
+  {
+    id: '3',
+    username: 'mike_builds',
+    timestamp: '6h ago',
+    projectTitle: 'Portfolio Site',
+    caption: 'Added dark mode toggle and smooth animations. Really happy with how the hero section turned out!',
+    hasGithubLink: true,
+    cheers: 18,
+    comments: 3,
+  },
+  {
+    id: '4',
+    username: 'emma_ships',
+    timestamp: '1d ago',
+    projectTitle: 'Game Dev',
+    caption: 'Character movement and collision detection done! Now working on the enemy AI. Game development is harder than I thought but so rewarding.',
+    cheers: 67,
+    comments: 15,
+  },
+  {
+    id: '5',
+    username: 'john_codes',
+    timestamp: '1d ago',
+    projectTitle: 'Mobile App',
+    caption: 'Just started my 15-day sprint! Setting up the project structure and navigation today. Let\'s go! 🚀',
+    cheers: 31,
+    comments: 8,
+  },
+];
+
+export default function FeedScreen() {
+  const [refreshing, setRefreshing] = useState(false);
+  const [posts, setPosts] = useState<FeedPost[]>(MOCK_POSTS);
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    // Simulate API call
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    setRefreshing(false);
+  };
+
+  const handleCheerPress = (postId: string) => {
+    setPosts(prevPosts =>
+      prevPosts.map(post =>
+        post.id === postId
+          ? { ...post, cheers: post.cheers + 1 }
+          : post
+      )
+    );
+  };
+
+  const handleCommentPress = (postId: string) => {
+    // Navigate to comments screen (to be implemented)
+    console.log('Navigate to comments for post:', postId);
+  };
+
+  const renderPost = ({ item }: { item: FeedPost }) => (
+    <FeedPostCard
+      post={item}
+      onCheerPress={handleCheerPress}
+      onCommentPress={handleCommentPress}
+    />
+  );
+
+  const renderHeader = () => (
+    <View style={styles.headerSection}>
+      {/* Active Challenges Section */}
+      <View style={styles.sectionHeader}>
+        <Text style={styles.sectionTitle}>ACTIVE CHALLENGES</Text>
+        <Text style={styles.seeAllText}>See all</Text>
+      </View>
+
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.challengesScroll}
+        contentContainerStyle={styles.challengesContent}
+      >
+        {MOCK_CHALLENGES.map(challenge => (
+          <ChallengeCard key={challenge.id} challenge={challenge} />
+        ))}
+      </ScrollView>
+
+      {/* Feed Header */}
+      <View style={styles.feedHeader}>
+        <Text style={styles.sectionTitle}>LATEST UPDATES</Text>
+      </View>
+    </View>
+  );
+
+  const renderEmptyState = () => (
+    <View style={styles.emptyState}>
+      <Text style={styles.emptyStateText}>NO POSTS YET</Text>
+      <Text style={styles.emptyStateSubtext}>
+        Start following other builders to see their updates here!
+      </Text>
+    </View>
+  );
+
   return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-      headerImage={
-        <Image
-          source={require('@/assets/images/partial-react-logo.png')}
-          style={styles.reactLogo}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome!</ThemedText>
-        <HelloWave />
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 1: Try it</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to see changes.
-          Press{' '}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({
-              ios: 'cmd + d',
-              android: 'cmd + m',
-              web: 'F12',
-            })}
-          </ThemedText>{' '}
-          to open developer tools.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <Link href="/modal">
-          <Link.Trigger>
-            <ThemedText type="subtitle">Step 2: Explore</ThemedText>
-          </Link.Trigger>
-          <Link.Preview />
-          <Link.Menu>
-            <Link.MenuAction title="Action" icon="cube" onPress={() => alert('Action pressed')} />
-            <Link.MenuAction
-              title="Share"
-              icon="square.and.arrow.up"
-              onPress={() => alert('Share pressed')}
-            />
-            <Link.Menu title="More" icon="ellipsis">
-              <Link.MenuAction
-                title="Delete"
-                icon="trash"
-                destructive
-                onPress={() => alert('Delete pressed')}
-              />
-            </Link.Menu>
-          </Link.Menu>
-        </Link>
+    <SafeAreaView style={styles.container} edges={['top']}>
+      {/* Screen Title */}
+      <View style={styles.titleContainer}>
+        <Text style={styles.screenTitle}>BUILDLOG</Text>
+      </View>
 
-        <ThemedText>
-          {`Tap the Explore tab to learn more about what's included in this starter app.`}
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
-        <ThemedText>
-          {`When you're ready, run `}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{' '}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
-        </ThemedText>
-      </ThemedView>
-    </ParallaxScrollView>
+      {/* Main Feed */}
+      <FlatList
+        data={posts}
+        renderItem={renderPost}
+        keyExtractor={item => item.id}
+        ListHeaderComponent={renderHeader}
+        ListEmptyComponent={renderEmptyState}
+        contentContainerStyle={styles.feedContent}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={Colors.primary}
+            colors={[Colors.primary]}
+          />
+        }
+      />
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: Colors.background,
+  },
   titleContainer: {
+    paddingHorizontal: Spacing.lg,
+    paddingTop: Spacing.md,
+    paddingBottom: Spacing.sm,
+  },
+  screenTitle: {
+    fontSize: FontSizes['3xl'],
+    fontWeight: 'bold',
+    color: Colors.textPrimary,
+    textTransform: 'uppercase',
+  },
+  headerSection: {
+    marginBottom: Spacing.md,
+  },
+  sectionHeader: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    gap: 8,
+    paddingHorizontal: Spacing.lg,
+    marginBottom: Spacing.md,
   },
-  stepContainer: {
-    gap: 8,
-    marginBottom: 8,
+  sectionTitle: {
+    fontSize: FontSizes.lg,
+    fontWeight: 'bold',
+    color: Colors.textPrimary,
+    textTransform: 'uppercase',
   },
-  reactLogo: {
-    height: 178,
-    width: 290,
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
+  seeAllText: {
+    fontSize: FontSizes.sm,
+    color: Colors.primary,
+  },
+  challengesScroll: {
+    marginBottom: Spacing.lg,
+  },
+  challengesContent: {
+    paddingHorizontal: Spacing.lg,
+  },
+  feedHeader: {
+    paddingHorizontal: Spacing.lg,
+    marginBottom: Spacing.sm,
+  },
+  feedContent: {
+    paddingBottom: Spacing['5xl'],
+  },
+  emptyState: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: Spacing['2xl'],
+    paddingVertical: Spacing['5xl'],
+  },
+  emptyStateText: {
+    fontSize: FontSizes.xl,
+    fontWeight: 'bold',
+    color: Colors.textPrimary,
+    marginBottom: Spacing.sm,
+    textTransform: 'uppercase',
+  },
+  emptyStateSubtext: {
+    fontSize: FontSizes.base,
+    color: Colors.textSecondary,
+    textAlign: 'center',
   },
 });

@@ -1,0 +1,17 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Crafted Design System - Neubrutalism */
+:root {
+  --color-background: #121212;
+  --color-surface: #2A2A2A;
+  --color-stone-gray: #2A2A2A;
+  --color-primary: #00F0FF;
+  --color-diamond-cyan: #00F0FF;
+  --color-emerald-green: #00FF85;
+  --color-gold-yellow: #FFD700;
+  --color-stark-black: #000000;
+  --color-text-primary: #FFFFFF;
+  --color-text-secondary: #A0A0A0;
+}
