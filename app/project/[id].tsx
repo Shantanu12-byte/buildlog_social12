@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Alert, ActivityIndicator, TextInput, KeyboardAvoidingView, Platform, Keyboard } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, Alert, ActivityIndicator, TextInput, KeyboardAvoidingView, Platform, Keyboard, Linking } from 'react-native';
 import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -279,11 +279,35 @@ export default function ProjectDetailScreen() {
     );
   };
 
-  const renderLogItem = ({ item }: { item: any }) => (
+  const handleShareLog = (logContent: string, index: number) => {
+    const totalLogs = logs.length;
+    const dayNumber = totalLogs - index; // Correct day calculation for reversed list
+    const message = `[BUILDLOG]: Day ${dayNumber}/${project?.challenge_duration || 30} of my quest: ${logContent}. Join the tavern: https://buildlog.dev`;
+    const url = `whatsapp://send?text=${encodeURIComponent(message)}`;
+    
+    Linking.canOpenURL(url).then(supported => {
+      if (supported) {
+        Linking.openURL(url);
+      } else {
+        Alert.alert('QUEST_ERROR', 'WHATSAPP_NOT_DETECTED: Please install WhatsApp to share your progress.');
+      }
+    });
+  };
+
+  const renderLogItem = ({ item, index }: { item: any, index: number }) => (
     <View style={styles.logCard}>
-      <Text style={styles.logDate}>
-        {new Date(item.created_at).toLocaleDateString()} - LOG_ENTRY
-      </Text>
+      <View style={styles.logHeader}>
+        <Text style={styles.logDate}>
+          {new Date(item.created_at).toLocaleDateString()} - LOG_ENTRY
+        </Text>
+        <TouchableOpacity 
+          style={styles.shareButton} 
+          onPress={() => handleShareLog(item.content, index)}
+        >
+          <MaterialCommunityIcons name="share-variant" size={14} color="#00FF00" />
+          <Text style={styles.shareButtonText}>SHARE_TO_ALLY</Text>
+        </TouchableOpacity>
+      </View>
       {item.image_url && (
         <View style={styles.logImageFrame}>
           <Image source={{ uri: item.image_url }} style={styles.logImage} />
@@ -662,11 +686,35 @@ const styles = StyleSheet.create({
     borderBottomColor: '#000000',
     borderRightColor: '#000000',
   },
+  logHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: Spacing.md,
+  },
+  shareButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#0A2A0A',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderWidth: 2,
+    borderTopColor: '#00FF00',
+    borderLeftColor: '#00FF00',
+    borderBottomColor: '#000000',
+    borderRightColor: '#000000',
+  },
+  shareButtonText: {
+    fontFamily: 'monospace',
+    fontSize: 8,
+    color: '#00FF00',
+    fontWeight: 'bold',
+  },
   logDate: {
     fontFamily: 'monospace',
     fontSize: 10,
     color: '#666666',
-    marginBottom: Spacing.md,
   },
   logImageFrame: {
     width: '100%',
