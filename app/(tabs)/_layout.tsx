@@ -1,18 +1,61 @@
 import { Tabs } from 'expo-router';
 import React from 'react';
-import { View, StyleSheet } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { View, StyleSheet, Text } from 'react-native';
+import { Feather } from '@expo/vector-icons';
+import { supabase } from '@/lib/supabase';
+import { useUserStore } from '@/store/userStore';
+import { useEffect, useState } from 'react';
 
 import { HapticTab } from '@/components/haptic-tab';
 import { Colors } from '@/constants/theme';
 
 export default function TabLayout() {
+  const { userProfile } = useUserStore();
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  useEffect(() => {
+    if (!userProfile?.id) return;
+
+    const fetchUnreadCount = async () => {
+      const { count } = await supabase
+        .from('notifications')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', userProfile.id)
+        .eq('is_read', false);
+      
+      setUnreadCount(count || 0);
+    };
+
+    fetchUnreadCount();
+
+    const channel = supabase
+      .channel(`unread_notifications:${userProfile.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'notifications',
+          filter: `user_id=eq.${userProfile.id}`,
+        },
+        () => {
+          fetchUnreadCount();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [userProfile?.id]);
+
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: Colors.primary,
-        tabBarInactiveTintColor: Colors.textSecondary,
+        tabBarActiveTintColor: '#FFFFFF',
+        tabBarInactiveTintColor: '#888888',
         tabBarStyle: styles.tabBar,
+        tabBarLabelStyle: { fontFamily: 'monospace', fontSize: 10, fontWeight: 'bold' },
         headerShown: false,
         tabBarButton: HapticTab,
       }}>
@@ -21,20 +64,40 @@ export default function TabLayout() {
         options={{
           title: 'Feed',
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="layers-outline" size={size} color={color} />
+            <Feather name="home" size={size} color={color} />
           ),
         }}
       />
       <Tabs.Screen
-        name="new-post"
+        name="search"
         options={{
-          title: 'New Post',
-          tabBarIcon: ({ color }) => (
-            <View style={styles.newPostIcon}>
-              <Ionicons name="add-circle" size={42} color={Colors.primary} />
+          title: 'Search',
+          tabBarIcon: ({ color, size }) => (
+            <Feather name="search" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="tavern"
+        options={{
+          title: 'Tavern',
+          tabBarIcon: ({ color, size }) => (
+            <Feather name="coffee" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="inbox"
+        options={{
+          title: 'Inbox',
+          tabBarIcon: ({ color, size }) => (
+            <View>
+              <Feather name="mail" size={size} color={color} />
+              {unreadCount > 0 && (
+                <View style={styles.unreadBadge} />
+              )}
             </View>
           ),
-          tabBarLabelStyle: styles.newPostLabel,
         }}
       />
       <Tabs.Screen
@@ -42,8 +105,14 @@ export default function TabLayout() {
         options={{
           title: 'Profile',
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="person-outline" size={size} color={color} />
+            <Feather name="user" size={size} color={color} />
           ),
+        }}
+      />
+      <Tabs.Screen
+        name="chat"
+        options={{
+          href: null,
         }}
       />
     </Tabs>
@@ -52,9 +121,12 @@ export default function TabLayout() {
 
 const styles = StyleSheet.create({
   tabBar: {
-    backgroundColor: Colors.surface,
-    borderTopColor: '#000000',
+    backgroundColor: '#000000',
     borderTopWidth: 4,
+    borderTopColor: '#FFFFFF',
+    borderLeftColor: '#FFFFFF',
+    borderRightColor: '#555555',
+    borderBottomColor: '#555555',
     height: 85,
     paddingBottom: 20,
     paddingTop: 10,
@@ -63,10 +135,29 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginTop: -8,
+    backgroundColor: '#8B8B8B',
+    borderWidth: 2,
+    borderTopColor: '#FFFFFF',
+    borderLeftColor: '#FFFFFF',
+    borderBottomColor: '#333333',
+    borderRightColor: '#333333',
+    width: 48,
+    height: 48,
   },
   newPostLabel: {
-    color: Colors.textSecondary,
-    fontSize: 11,
+    fontFamily: 'monospace',
+    color: '#888888',
+    fontSize: 10,
     marginTop: -4,
+  },
+  unreadBadge: {
+    position: 'absolute',
+    top: -2,
+    right: -4,
+    width: 6,
+    height: 6,
+    backgroundColor: '#FF0000',
+    borderWidth: 1,
+    borderColor: '#FFF',
   },
 });

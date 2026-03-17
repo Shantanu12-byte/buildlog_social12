@@ -1,5 +1,6 @@
-import { View, Text, StyleSheet } from 'react-native';
-import { Colors, FontSizes, Spacing, NeubrutalismShadow } from '@/constants/theme';
+import { View, Text, StyleSheet, Platform } from 'react-native';
+import { BlurView } from 'expo-blur';
+import { Colors, FontSizes, Spacing } from '@/constants/theme';
 
 export interface Challenge {
   id: string;
@@ -7,6 +8,7 @@ export interface Challenge {
   projectName: string;
   currentDay: number;
   totalDays: number;
+  user_id?: string;
 }
 
 interface ChallengeCardProps {
@@ -14,23 +16,21 @@ interface ChallengeCardProps {
 }
 
 const SEGMENT_COUNT = 10;
+const glassBorder = { borderWidth: 1, borderColor: Colors.border };
 
 export function ChallengeCard({ challenge }: ChallengeCardProps) {
   const progress = challenge.currentDay / challenge.totalDays;
   const filledSegments = Math.round(progress * SEGMENT_COUNT);
 
-  return (
-    <View style={styles.container}>
-      {/* User Avatar Placeholder */}
-      <View style={styles.avatarContainer}>
+  const content = (
+    <>
+      <View style={[styles.avatarContainer, glassBorder]}>
         <Text style={styles.avatarText}>{challenge.username.charAt(0).toUpperCase()}</Text>
       </View>
 
-      {/* User and Project Info */}
       <Text style={styles.username} numberOfLines={1}>{challenge.username}</Text>
       <Text style={styles.projectName} numberOfLines={1}>{challenge.projectName}</Text>
 
-      {/* Blocky segment bar - thick horizontal, Diamond Cyan filled, individual blocks */}
       <View style={styles.progressContainer}>
         <View style={styles.segmentBar}>
           {Array.from({ length: SEGMENT_COUNT }).map((_, i) => (
@@ -48,55 +48,62 @@ export function ChallengeCard({ challenge }: ChallengeCardProps) {
         </Text>
       </View>
 
-      {/* Sprint Label */}
-      <View style={styles.sprintBadge}>
-        <Text style={styles.sprintText}>{challenge.totalDays}-DAY SPRINT</Text>
+      <View style={[styles.sprintBadge, glassBorder]}>
+        <Text style={styles.sprintText}>{challenge.totalDays}-Day Sprint</Text>
       </View>
+    </>
+  );
+
+  return (
+    <View style={styles.wrapper}>
+      <BlurView intensity={50} tint="dark" style={[styles.blur, glassBorder]}>
+        <View style={styles.inner}>{content}</View>
+      </BlurView>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    backgroundColor: Colors.surface,
-    borderRadius: 0,
+  wrapper: {
+    marginRight: Spacing.md,
+    borderRadius: 16,
+    overflow: 'hidden',
+  },
+  blur: {
+    borderRadius: 16,
+    overflow: 'hidden',
+  },
+  inner: {
     padding: Spacing.md,
     width: 120,
     alignItems: 'center',
-    marginRight: Spacing.md,
-    borderWidth: 4,
-    borderColor: '#000000',
-    ...NeubrutalismShadow,
+    backgroundColor: 'rgba(0,0,0,0.15)',
   },
   avatarContainer: {
     width: 48,
     height: 48,
-    borderRadius: 0,
-    backgroundColor: Colors.primary,
+    borderRadius: 24,
+    backgroundColor: 'rgba(0, 240, 255, 0.25)',
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: Spacing.sm,
-    borderWidth: 2,
-    borderColor: '#000000',
   },
   avatarText: {
-    color: '#000000',
+    color: Colors.textPrimary,
     fontSize: FontSizes.xl,
     fontWeight: 'bold',
   },
   username: {
     color: Colors.textPrimary,
     fontSize: FontSizes.sm,
-    fontWeight: 'bold',
+    fontWeight: '600',
     marginBottom: 2,
-    textTransform: 'uppercase',
   },
   projectName: {
     color: Colors.textSecondary,
     fontSize: FontSizes.xs,
     marginBottom: Spacing.sm,
     textAlign: 'center',
-    textTransform: 'uppercase',
   },
   progressContainer: {
     width: '100%',
@@ -112,35 +119,27 @@ const styles = StyleSheet.create({
   },
   segment: {
     flex: 1,
-    borderRadius: 0,
+    borderRadius: 2,
   },
   segmentFilled: {
     backgroundColor: Colors.primary,
-    borderWidth: 1,
-    borderColor: '#000000',
   },
   segmentEmpty: {
-    backgroundColor: Colors.surface,
-    borderWidth: 1,
-    borderColor: '#000000',
+    backgroundColor: 'rgba(255,255,255,0.1)',
   },
   progressText: {
     color: Colors.textSecondary,
     fontSize: FontSizes.xs,
-    fontFamily: undefined,
   },
   sprintBadge: {
-    backgroundColor: Colors.primary,
+    backgroundColor: 'rgba(0, 240, 255, 0.2)',
     paddingHorizontal: Spacing.sm,
     paddingVertical: 2,
-    borderRadius: 0,
-    borderWidth: 2,
-    borderColor: '#000000',
+    borderRadius: 9999,
   },
   sprintText: {
-    color: '#000000',
+    color: Colors.primary,
     fontSize: 10,
-    fontWeight: 'bold',
-    textTransform: 'uppercase',
+    fontWeight: '600',
   },
 });

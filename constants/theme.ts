@@ -1,45 +1,42 @@
 /**
- * Buildlog Design System - "Crafted" Vibe (Neubrutalism)
+ * Buildlog Design System - Monochrome Minimalist
  *
- * Palette:
- * - Background: Deep Obsidian (#121212)
- * - Cards/Surfaces: Stone Gray (#2A2A2A)
- * - Accents: Diamond Cyan (#00F0FF), Emerald Green (#00FF85), Gold Yellow (#FFD700)
- * - Borders/Shadows: Stark Black (#000000)
- * - All corners: 0px (perfectly square)
+ * - Background: Premium soft dark grey (#0A0A0A)
+ * - Borders: Clean single-color borders (GitHub blue #2F81F7 or white)
+ * - Accents: GitHub Blue (#2F81F7), minimal and professional
+ * - Typography: High-contrast white and soft grey (text-gray-400)
  */
 
 import { Platform } from 'react-native';
 
 export const Colors = {
-  background: '#121212',
-  surface: '#2A2A2A',
-  primary: '#00F0FF',
-  primaryDark: '#00C4CC',
-  accentEmerald: '#00FF85',
+  background: '#0A0A0A',
+  surface: '#1A1A1A',
+  primary: '#FFFFFF', // Refined for 8-bit aesthetic
+  primaryDark: '#8B8B8B',
+  accentEmerald: '#55FF55',
   accentGold: '#FFD700',
-  border: '#000000',
+  border: '#FFFFFF',
+  borderSubtle: '#8B8B8B',
   textPrimary: '#FFFFFF',
-  textSecondary: '#A0A0A0',
+  textSecondary: '#AAAAAA',
+};
 
-  light: {
-    text: '#FFFFFF',
-    background: '#121212',
-    tint: '#00F0FF',
-    icon: '#A0A0A0',
-    tabIconDefault: '#A0A0A0',
-    tabIconSelected: '#00F0FF',
-    surface: '#2A2A2A',
-  },
-  dark: {
-    text: '#FFFFFF',
-    background: '#121212',
-    tint: '#00F0FF',
-    icon: '#A0A0A0',
-    tabIconDefault: '#A0A0A0',
-    tabIconSelected: '#00F0FF',
-    surface: '#2A2A2A',
-  },
+export const EnderColors = {
+  background: '#0F0014', // Deep Obsidian
+  surface: '#1A0026',
+  primary: '#D155FF', // Bright Purple
+  primaryDark: '#8F00FF',
+  accentEmerald: '#FF00FF', // Magenta
+  accentGold: '#55FF55', // Ender Green
+  border: '#D155FF',
+  borderSubtle: '#8F00FF',
+  textPrimary: '#FFFFFF',
+  textSecondary: '#D155FF',
+};
+
+export const getThemeColors = (isEnderMode: boolean) => {
+  return isEnderMode ? EnderColors : Colors;
 };
 
 export const BorderRadius = {

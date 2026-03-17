@@ -1,4 +1,5 @@
 import { View, Text, StyleSheet } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Colors, FontSizes, Spacing } from '@/constants/theme';
 
 interface CircularProgressBarProps {
@@ -9,6 +10,8 @@ interface CircularProgressBarProps {
 }
 
 const SEGMENT_COUNT = 15;
+const NEON_CYAN = '#00F0FF';
+const NEON_PURPLE = 'rgba(160, 100, 255, 0.9)';
 
 export function CircularProgressBar({
   currentDay,
@@ -21,16 +24,29 @@ export function CircularProgressBar({
 
   return (
     <View style={[styles.container, { width: size }]}>
-      <View style={styles.segmentBar}>
-        {Array.from({ length: SEGMENT_COUNT }).map((_, i) => (
-          <View
-            key={i}
-            style={[
-              styles.segment,
-              i < filledSegments ? styles.segmentFilled : styles.segmentEmpty,
-            ]}
-          />
-        ))}
+      <View style={styles.trackWrapper}>
+        <LinearGradient
+          colors={['rgba(0,240,255,0.15)', 'rgba(88,28,135,0.2)', 'rgba(0,240,255,0.15)']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 0 }}
+          style={styles.track}
+        >
+          <View style={styles.segmentBar}>
+            {Array.from({ length: SEGMENT_COUNT }).map((_, i) => (
+              i < filledSegments ? (
+                <LinearGradient
+                  key={i}
+                  colors={[NEON_CYAN, NEON_PURPLE]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={[styles.segment, styles.segmentFilled]}
+                />
+              ) : (
+                <View key={i} style={[styles.segment, styles.segmentEmpty]} />
+              )
+            ))}
+          </View>
+        </LinearGradient>
       </View>
       <View style={styles.textContainer}>
         <Text style={styles.dayNumber}>{currentDay}</Text>
@@ -46,31 +62,36 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  trackWrapper: {
+    width: '100%',
+    borderRadius: 12,
+    overflow: 'hidden',
+    marginBottom: Spacing.md,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 240, 255, 0.3)',
+  },
+  track: {
+    padding: 3,
+  },
   segmentBar: {
     flexDirection: 'row',
     width: '100%',
     height: 24,
-    gap: 3,
-    marginBottom: Spacing.md,
-    borderWidth: 4,
-    borderColor: '#000000',
-    borderRadius: 0,
-    padding: 2,
-    backgroundColor: Colors.surface,
+    gap: 2,
   },
   segment: {
     flex: 1,
-    borderRadius: 0,
+    borderRadius: 4,
   },
   segmentFilled: {
-    backgroundColor: Colors.primary,
-    borderWidth: 1,
-    borderColor: '#000000',
+    shadowColor: '#00F0FF',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.8,
+    shadowRadius: 4,
+    elevation: 4,
   },
   segmentEmpty: {
-    backgroundColor: Colors.surface,
-    borderWidth: 1,
-    borderColor: '#000000',
+    backgroundColor: 'rgba(255,255,255,0.05)',
   },
   textContainer: {
     justifyContent: 'center',
@@ -80,6 +101,9 @@ const styles = StyleSheet.create({
     color: Colors.textPrimary,
     fontSize: FontSizes['4xl'],
     fontWeight: 'bold',
+    textShadowColor: 'rgba(255,255,255,0.35)',
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 6,
   },
   dayLabel: {
     color: Colors.textSecondary,

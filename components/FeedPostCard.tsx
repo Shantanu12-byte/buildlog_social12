@@ -1,11 +1,14 @@
 import { View, Text, Image, StyleSheet, Pressable } from 'react-native';
-import { Feather, MaterialIcons } from '@expo/vector-icons';
-import { Colors, FontSizes, Spacing, NeubrutalismShadow } from '@/constants/theme';
+import { Feather } from '@expo/vector-icons';
+import { Colors, FontSizes, Spacing } from '@/constants/theme';
+import { AvatarBlock } from './AvatarBlock';
+import { router } from 'expo-router';
 
 export interface FeedPost {
   id: string;
   username: string;
   userAvatar?: string;
+  author_id?: string;
   timestamp: string;
   projectTitle: string;
   caption: string;
@@ -17,39 +20,64 @@ export interface FeedPost {
 
 interface FeedPostCardProps {
   post: FeedPost;
+  likeCount?: number;
+  isLiked?: boolean;
+  onLikePress?: (postId: string) => void;
   onCheerPress?: (postId: string) => void;
   onCommentPress?: (postId: string) => void;
+  onProfilePress?: (userId: string) => void;
 }
 
-export function FeedPostCard({ post, onCheerPress, onCommentPress }: FeedPostCardProps) {
+const IMAGE_ASPECT_RATIO = 4 / 5; // width : height (4:5 portrait)
+
+const LIKED_COLOR = '#EF4444'; // Red for liked heart
+
+export function FeedPostCard({ post, likeCount, isLiked, onLikePress, onCheerPress, onCommentPress, onProfilePress }: FeedPostCardProps) {
+  const displayLikeCount = likeCount ?? post.cheers;
+  const handleLikePress = () => {
+    if (onLikePress) onLikePress(post.id);
+    else onCheerPress?.(post.id);
+  };
+  const handleProfilePress = () => {
+    if (post.author_id) {
+      if (onProfilePress) {
+        onProfilePress(post.author_id);
+      } else {
+        router.push({ pathname: '/user/[id]', params: { id: post.author_id } });
+      }
+    }
+  };
+
   return (
-    <View style={styles.container}>
-      {/* Header: Avatar, Username, Timestamp */}
+    <View style={styles.card}>
+      {/* Header: Avatar, Username, Project tag, 3-dot menu */}
       <View style={styles.header}>
-        <View style={styles.avatarContainer}>
-          {post.userAvatar ? (
-            <Image source={{ uri: post.userAvatar }} style={styles.avatar} />
-          ) : (
-            <View style={styles.avatarPlaceholder}>
-              <Text style={styles.avatarText}>{post.username.charAt(0).toUpperCase()}</Text>
+        <Pressable style={styles.headerLeft} onPress={handleProfilePress}>
+          <AvatarBlock 
+            url={post.userAvatar} 
+            username={post.username} 
+            size={36} 
+          />
+          <View style={styles.headerText}>
+            <Text style={styles.username}>{post.username}</Text>
+            <View style={styles.projectTag}>
+              <Text style={styles.projectTagText}>{post.projectTitle}</Text>
             </View>
-          )}
-        </View>
-        <View style={styles.headerText}>
-          <Text style={styles.username}>{post.username}</Text>
-          <Text style={styles.timestamp}>{post.timestamp}</Text>
-        </View>
+          </View>
+        </Pressable>
+        <Pressable hitSlop={12} style={styles.menuButton}>
+          <Feather name="more-horizontal" size={20} color={Colors.textPrimary} />
+        </Pressable>
       </View>
 
-      {/* Project Badge - stark cyan rectangular tag, uppercase black text */}
-      <View style={styles.projectBadge}>
-        <Text style={styles.projectBadgeText}>{post.projectTitle.toUpperCase()}</Text>
-      </View>
-
-      {/* Progress Image */}
-      <View style={styles.imageContainer}>
+      {/* Full-width image: edge-to-edge, 4:5 aspect ratio */}
+      <View style={styles.imageWrap}>
         {post.imageUrl ? (
-          <Image source={{ uri: post.imageUrl }} style={styles.image} resizeMode="cover" />
+          <Image
+            source={{ uri: post.imageUrl }}
+            style={styles.image}
+            resizeMode="cover"
+          />
         ) : (
           <View style={styles.imagePlaceholder}>
             <Feather name="image" size={48} color={Colors.textSecondary} />
@@ -58,170 +86,170 @@ export function FeedPostCard({ post, onCheerPress, onCommentPress }: FeedPostCar
         )}
       </View>
 
-      {/* Caption */}
-      <Text style={styles.caption}>{post.caption}</Text>
-
-      {/* Footer: Interaction Icons - square grey boxes with thick black borders */}
-      <View style={styles.footer}>
-        <Pressable
-          style={styles.interactionButton}
-          onPress={() => onCheerPress?.(post.id)}
-        >
-          <Feather name="heart" size={20} color={Colors.textSecondary} />
-          <Text style={styles.interactionText}>{post.cheers}</Text>
-        </Pressable>
-
-        <Pressable
-          style={styles.interactionButton}
-          onPress={() => onCommentPress?.(post.id)}
-        >
-          <Feather name="message-square" size={20} color={Colors.textSecondary} />
-          <Text style={styles.interactionText}>{post.comments}</Text>
-        </Pressable>
-
-        {post.hasGithubLink && (
-          <Pressable style={styles.githubButton}>
-            <MaterialIcons name="link" size={18} color={Colors.primary} />
-            <Text style={styles.githubText}>View Repo</Text>
+      {/* Action bar: Heart, Message-Circle, Send */}
+      <View style={styles.actions}>
+        <View style={styles.actionsLeft}>
+          <Pressable
+            style={styles.actionBtn}
+            onPress={handleLikePress}
+          >
+            <Feather 
+              name="heart" 
+              size={24} 
+              color={isLiked ? LIKED_COLOR : Colors.textPrimary}
+              fill={isLiked ? LIKED_COLOR : 'transparent'}
+            />
           </Pressable>
+          <Pressable
+            style={styles.actionBtn}
+            onPress={() => onCommentPress?.(post.id)}
+          >
+            <Feather name="message-circle" size={24} color={Colors.textPrimary} />
+          </Pressable>
+          <Pressable style={styles.actionBtn}>
+            <Feather name="send" size={22} color={Colors.textPrimary} />
+          </Pressable>
+        </View>
+      </View>
+
+      {/* Caption area: "Liked by X people", username + caption, timestamp */}
+      <View style={styles.captionArea}>
+        {displayLikeCount > 0 && (
+          <Text style={styles.likedBy}>
+            Liked by <Text style={styles.likedByBold}>{displayLikeCount} people</Text>
+          </Text>
         )}
+        <Text style={styles.captionBlock}>
+          <Text style={styles.captionUsername}>{post.username}</Text>
+          {' '}
+          <Text style={styles.captionText}>{post.caption}</Text>
+        </Text>
+        <Text style={styles.timestamp}>{post.timestamp}</Text>
       </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    backgroundColor: Colors.surface,
+  card: {
+    marginBottom: Spacing.xl,
+    backgroundColor: '#333333',
     borderWidth: 4,
-    borderColor: '#000000',
-    borderRadius: 0,
-    padding: Spacing.lg,
-    marginHorizontal: Spacing.lg,
-    marginBottom: Spacing.lg,
-    ...NeubrutalismShadow,
+    borderTopColor: '#FFFFFF',
+    borderLeftColor: '#FFFFFF',
+    borderBottomColor: '#111111',
+    borderRightColor: '#111111',
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: Spacing.md,
+    justifyContent: 'space-between',
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.md,
+    backgroundColor: '#222222',
+    borderBottomWidth: 2,
+    borderBottomColor: '#444444',
   },
-  avatarContainer: {
-    marginRight: Spacing.md,
-  },
-  avatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 0,
-  },
-  avatarPlaceholder: {
-    width: 40,
-    height: 40,
-    borderRadius: 0,
-    backgroundColor: Colors.primary,
-    justifyContent: 'center',
+  headerLeft: {
+    flexDirection: 'row',
     alignItems: 'center',
-    borderWidth: 2,
-    borderColor: '#000000',
+    flex: 1,
   },
-  avatarText: {
-    color: '#000000',
-    fontSize: FontSizes.lg,
-    fontWeight: 'bold',
-  },
+
   headerText: {
     flex: 1,
   },
   username: {
-    color: Colors.textPrimary,
-    fontSize: FontSizes.base,
-    fontWeight: 'bold',
-    textTransform: 'uppercase',
-  },
-  timestamp: {
-    color: Colors.textSecondary,
+    color: '#FFFFFF',
     fontSize: FontSizes.sm,
+    fontFamily: 'monospace',
+    fontWeight: 'bold',
+  },
+  projectTag: {
     marginTop: 2,
   },
-  projectBadge: {
-    backgroundColor: Colors.primary,
-    alignSelf: 'flex-start',
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.xs,
-    borderRadius: 0,
-    marginBottom: Spacing.md,
-    borderWidth: 2,
-    borderColor: '#000000',
-  },
-  projectBadgeText: {
-    color: '#000000',
-    fontSize: FontSizes.sm,
-    fontWeight: 'bold',
+  projectTagText: {
+    color: '#AAAAAA',
+    fontSize: 10,
+    fontFamily: 'monospace',
     textTransform: 'uppercase',
   },
-  imageContainer: {
-    borderRadius: 0,
-    overflow: 'hidden',
-    marginBottom: Spacing.md,
-    borderWidth: 4,
-    borderColor: '#000000',
+  menuButton: {
+    padding: Spacing.xs,
+  },
+  imageWrap: {
+    width: '100%',
+    aspectRatio: IMAGE_ASPECT_RATIO,
+    backgroundColor: '#000000',
+    borderTopWidth: 2,
+    borderBottomWidth: 2,
+    borderColor: '#111111',
   },
   image: {
     width: '100%',
-    aspectRatio: 16 / 9,
+    height: '100%',
   },
   imagePlaceholder: {
     width: '100%',
-    aspectRatio: 16 / 9,
-    backgroundColor: Colors.surface,
+    height: '100%',
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 2,
-    borderColor: '#000000',
   },
   imagePlaceholderText: {
-    color: Colors.textSecondary,
+    color: '#666666',
     fontSize: FontSizes.sm,
+    fontFamily: 'monospace',
     marginTop: Spacing.sm,
   },
-  caption: {
-    color: Colors.textPrimary,
-    fontSize: FontSizes.base,
-    lineHeight: 22,
-    marginTop: Spacing.sm,
-    marginBottom: Spacing.md,
-  },
-  footer: {
+  actions: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingTop: Spacing.sm,
-    borderTopWidth: 4,
-    borderTopColor: '#000000',
-  },
-  interactionButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginRight: Spacing.xl,
-    backgroundColor: Colors.surface,
-    borderWidth: 4,
-    borderColor: '#000000',
-    paddingVertical: Spacing.sm,
     paddingHorizontal: Spacing.md,
-    borderRadius: 0,
+    paddingVertical: Spacing.sm,
+    backgroundColor: '#222222',
+    borderBottomWidth: 2,
+    borderBottomColor: '#444444',
   },
-  interactionText: {
-    color: Colors.textSecondary,
-    fontSize: FontSizes.sm,
-    marginLeft: Spacing.xs,
-  },
-  githubButton: {
+  actionsLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginLeft: 'auto',
+    gap: Spacing.xl,
   },
-  githubText: {
-    color: Colors.primary,
+  actionBtn: {
+    padding: Spacing.xs,
+  },
+  captionArea: {
+    padding: Spacing.md,
+    backgroundColor: '#333333',
+  },
+  likedBy: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontFamily: 'monospace',
+    marginBottom: Spacing.xs,
+  },
+  likedByBold: {
+    fontWeight: 'bold',
+  },
+  captionBlock: {
+    marginBottom: Spacing.xs,
+  },
+  captionUsername: {
+    color: '#FFFFFF',
     fontSize: FontSizes.sm,
-    marginLeft: Spacing.xs,
+    fontFamily: 'monospace',
+    fontWeight: 'bold',
+  },
+  captionText: {
+    color: '#DDDDDD',
+    fontSize: FontSizes.sm,
+    fontFamily: 'monospace',
+  },
+  timestamp: {
+    color: '#888888',
+    fontSize: 8,
+    fontFamily: 'monospace',
+    marginTop: 4,
+    textTransform: 'uppercase',
   },
 });
