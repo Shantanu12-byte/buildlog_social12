@@ -5,6 +5,7 @@ import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { supabase, getValidSession } from '@/lib/supabase';
+import { processImage } from '@/lib/imageProcessor';
 import { useUserStore } from '@/store/userStore';
 import { Colors, FontSizes, Spacing } from '@/constants/theme';
 import { Feather } from '@expo/vector-icons';
@@ -20,7 +21,13 @@ export default function EditProfileScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [userId, setUserId] = useState<string | null>(null);
   const [skills, setSkills] = useState('');
+  const [selectedLanguages, setSelectedLanguages] = useState<string[]>([]);
   const { updateUserProfile } = useUserStore();
+
+  const PREDEFINED_LANGUAGES = [
+    'JavaScript', 'TypeScript', 'Python', 'Java', 'C++', 'C#', 
+    'Go', 'Rust', 'Ruby', 'Swift', 'PHP', 'HTML', 'CSS'
+  ];
 
   // Robust session tracking
   useEffect(() => {
@@ -53,6 +60,9 @@ export default function EditProfileScreen() {
           setAvatarUrl(profile.avatar_url || null);
           if (profile.skills && Array.isArray(profile.skills)) {
             setSkills(profile.skills.join(', '));
+          }
+          if (profile.languages && Array.isArray(profile.languages)) {
+            setSelectedLanguages(profile.languages);
           }
         }
       } catch (e) {
@@ -113,8 +123,9 @@ export default function EditProfileScreen() {
 
       // 1. Handle Avatar Upload if it's a new local image
       if (avatarUrl && avatarUrl.startsWith('file://')) {
-        console.log('📸 AVATAR_UPLOAD: Processing image blob...');
-        const response = await fetch(avatarUrl);
+        console.log('📸 AVATAR_UPLOAD: Compressing and processing image...');
+        const processedImage = await processImage(avatarUrl);
+        const response = await fetch(processedImage.uri);
         const blob = await response.blob();
         const fileName = `avatar-${userId}-${Date.now()}.jpg`;
         const filePath = `${userId}/${fileName}`;
@@ -147,6 +158,7 @@ export default function EditProfileScreen() {
         linkedin_url: linkedinUrl.trim(),
         avatar_url: finalAvatarUrl,
         skills: skillsArray,
+        languages: selectedLanguages,
       });
       
       console.log('✨ SYNC_COMPLETE: Profile logic finished.');
@@ -251,6 +263,38 @@ export default function EditProfileScreen() {
               placeholder="e.g. Java, React Native, UI Design"
               placeholderTextColor="#555"
             />
+          </View>
+
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>LANGUAGE_STACK (SELECT_YOUR_POWER)</Text>
+            <View style={styles.languagesGrid}>
+              {PREDEFINED_LANGUAGES.map((lang) => {
+                const isSelected = selectedLanguages.includes(lang);
+                return (
+                  <TouchableOpacity
+                    key={lang}
+                    style={[
+                      styles.languageOption,
+                      isSelected && styles.languageOptionSelected
+                    ]}
+                    onPress={() => {
+                      if (isSelected) {
+                        setSelectedLanguages(prev => prev.filter(l => l !== lang));
+                      } else {
+                        setSelectedLanguages(prev => [...prev, lang]);
+                      }
+                    }}
+                  >
+                    <Text style={[
+                      styles.languageOptionText,
+                      isSelected && styles.languageOptionTextSelected
+                    ]}>
+                      {lang.toUpperCase()}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
           </View>
         </View>
 
@@ -403,5 +447,35 @@ const styles = StyleSheet.create({
   },
   disabledButton: {
     opacity: 0.6,
+  },
+  languagesGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 8,
+  },
+  languageOption: {
+    backgroundColor: '#111111',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderWidth: 2,
+    borderColor: '#333333',
+    borderBottomWidth: 4,
+    borderBottomColor: '#000000',
+  },
+  languageOptionSelected: {
+    backgroundColor: '#333333',
+    borderColor: '#FFFFFF',
+    borderBottomColor: '#888888',
+    transform: [{ translateY: 2 }],
+  },
+  languageOptionText: {
+    fontFamily: 'monospace',
+    color: '#888888',
+    fontSize: 10,
+    fontWeight: 'bold',
+  },
+  languageOptionTextSelected: {
+    color: '#FFFFFF',
   },
 });

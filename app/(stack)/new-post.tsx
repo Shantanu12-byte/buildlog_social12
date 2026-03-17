@@ -6,6 +6,7 @@ import { useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { Feather } from '@expo/vector-icons';
 import { supabase } from '@/lib/supabase';
+import { processImage } from '@/lib/imageProcessor';
 import { Colors, FontSizes, Spacing } from '@/constants/theme';
 
 export default function NewPostScreen() {
@@ -112,8 +113,11 @@ export default function NewPostScreen() {
         throw new Error('You must be logged in to post. Please sign in again.');
       }
 
-      // 2. Upload Image
-      const response = await fetch(imageUri);
+      // 2. Process and Upload Image
+      console.log('📸 IMAGE_UPLOAD: Compressing image...');
+      const processedImage = await processImage(imageUri);
+      
+      const response = await fetch(processedImage.uri);
       const blob = await response.blob();
       const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.jpg`;
       const filePath = `${userId}/${fileName}`;

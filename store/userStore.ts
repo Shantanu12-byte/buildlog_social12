@@ -8,6 +8,7 @@ interface UserProfile {
   bio: string;
   avatar_url: string | null;
   skills: string[];
+  languages: string[];
   level: string;
   github_url: string;
   linkedin_url: string;

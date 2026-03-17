@@ -9,9 +9,9 @@
     "userInterfaceStyle": "dark",
     "backgroundColor": "#000000",
     "splash": {
-      "image": "./assets/developer_splash.png",
+      "image": "./assets/images/buildlog_splash.png",
       "resizeMode": "contain",
-      "backgroundColor": "#000000"
+      "backgroundColor": "#0A0A0A"
     },
     "newArchEnabled": true,
     "ios": {
@@ -20,6 +20,7 @@
     "android": {
       "package": "com.shant.buildlog",
       "versionCode": 1,
+      "jsEngine": "hermes",
       "permissions": [
         "INTERNET",
         "ACCESS_NETWORK_STATE"
@@ -43,12 +44,12 @@
       [
         "expo-splash-screen",
         {
-          "image": "./assets/developer_splash.png",
+          "image": "./assets/images/buildlog_splash.png",
           "imageWidth": 200,
           "resizeMode": "contain",
-          "backgroundColor": "#000000",
+          "backgroundColor": "#0A0A0A",
           "dark": {
-            "backgroundColor": "#000000"
+            "backgroundColor": "#0A0A0A"
           }
         }
       ]

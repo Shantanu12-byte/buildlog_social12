@@ -13,3 +13,21 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     detectSessionInUrl: false,
   },
 });
+
+/**
+ * getValidSession - Helper to retrieve and validate the current Supabase session
+ * @returns {Promise<Session | null>} The current session or null if not found
+ */
+export const getValidSession = async () => {
+  try {
+    const { data: { session }, error } = await supabase.auth.getSession();
+    if (error) {
+      console.error('🔍 AUTH_HELPER: Session fetch error:', error);
+      return null;
+    }
+    return session;
+  } catch (err) {
+    console.error('🔍 AUTH_HELPER: Unexpected session error:', err);
+    return null;
+  }
+};

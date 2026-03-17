@@ -11,6 +11,7 @@ import { AuroraBackground } from '@/components/AuroraBackground';
 import { supabase } from '@/lib/supabase';
 import { useUserStore } from '@/store/userStore';
 import { getThemeColors } from '@/constants/theme';
+import { LanguageChip } from '@/components/LanguageChip';
 import { useState, useEffect, useCallback } from 'react';
 
 const glassBorder = { borderWidth: 1, borderColor: Colors.border };
@@ -241,6 +242,18 @@ export default function ProfileScreen() {
             <Text style={[styles.statLabel, { color: colors.textSecondary }]}>FOLLOWING</Text>
           </TouchableOpacity>
         </View>
+
+        {/* LANGUAGE STACK SECTION */}
+        {displayProfile?.languages && displayProfile.languages.length > 0 && (
+          <View style={styles.languageStackSection}>
+            <Text style={styles.languageStackTitle}>LANGUAGE_STACK</Text>
+            <View style={styles.languageStackContainer}>
+              {displayProfile.languages.map((lang: string, index: number) => (
+                <LanguageChip key={index} name={lang} />
+              ))}
+            </View>
+          </View>
+        )}
 
         <Text style={[styles.bio, { color: colors.textSecondary }]}>{displayProfile?.bio || 'NO BIO YET...'}</Text>
 
@@ -518,6 +531,23 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 12,
     fontWeight: 'bold',
+  },
+  languageStackSection: {
+    width: '90%',
+    marginBottom: Spacing.lg,
+    alignItems: 'flex-start',
+  },
+  languageStackTitle: {
+    fontFamily: 'monospace',
+    color: '#888888',
+    fontSize: 10,
+    marginBottom: 12,
+    letterSpacing: 2,
+  },
+  languageStackContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 4,
   },
   skillsSection: {
     width: '90%',
