@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, FlatList, TouchableOpacity, Alert, ActivityIndi
 import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { Feather, FontAwesome } from '@expo/vector-icons';
+import { Feather, FontAwesome, MaterialCommunityIcons } from '@expo/vector-icons';
 import { supabase } from '@/lib/supabase';
 import { useUserStore } from '@/store/userStore';
 import { Colors, FontSizes, Spacing } from '@/constants/theme';
