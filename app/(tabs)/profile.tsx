@@ -2,7 +2,7 @@ import { View, Text, StyleSheet, FlatList, Pressable, ActivityIndicator, Touchab
 import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
-import { Feather, FontAwesome, Ionicons } from '@expo/vector-icons';
+import { Feather, FontAwesome, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Colors, FontSizes, Spacing } from '@/constants/theme';
@@ -55,7 +55,7 @@ export default function ProfileScreen() {
     try {
       const { data, error } = await supabase
         .from('profiles')
-        .select('*', { count: 'exact' })
+        .select('*, streak_count')
         .eq('id', userId)
         .single();
 
@@ -75,39 +75,42 @@ export default function ProfileScreen() {
   }, []);
 
   const fetchProjects = useCallback(async (userId: string) => {
-    // ... same logic ...
     try {
-      const { data, error } = await supabase
+      // 1. Fetch projects
+      const { data: projectsData, error: projectsError } = await supabase
         .from('projects')
         .select('*')
         .eq('user_id', userId)
         .order('created_at', { ascending: false });
 
-      if (error) {
-        console.error('Error fetching projects:', error);
-        return [];
-      }
+      if (projectsError) throw projectsError;
+      if (!projectsData) return [];
 
-      if (!data) return [];
-
-      const projectsData: Project[] = data.map((project: any) => {
-        const createdDate = new Date(project.created_at);
-        const now = new Date();
-        const diffTime = now.getTime() - createdDate.getTime();
-        const currentDay = Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1;
-        const totalDays = project.challenge_duration || 30;
-
+      // 2. Fetch log counts for all projects in one go (or per project)
+      // For simplicity and since there aren't many projects usually, we can do a per-project count
+      // Or use a more advanced query if needed. Let's do a reliable count.
+      const projectsWithLogs = await Promise.all(projectsData.map(async (project) => {
+        const { count, error: countError } = await supabase
+          .from('quest_logs')
+          .select('*', { count: 'exact', head: true })
+          .eq('quest_id', project.id);
+        
         return {
-          id: project.id,
-          title: project.title,
-          type: project.needed_skills && project.needed_skills.length > 0 ? 'code' : 'other',
-          currentDay: Math.min(currentDay, totalDays),
-          totalDays: totalDays,
-          status: project.status as 'active' | 'completed',
+          ...project,
+          logCount: count || 0
         };
-      });
+      }));
 
-      return projectsData;
+      const finalProjects: Project[] = projectsWithLogs.map((p: any) => ({
+        id: p.id,
+        title: p.title,
+        type: p.needed_skills && p.needed_skills.length > 0 ? 'code' : 'other',
+        currentDay: p.logCount, // Dynamic progress
+        totalDays: p.challenge_duration || 30,
+        status: p.status as 'active' | 'completed',
+      }));
+
+      return finalProjects;
     } catch (e) {
       console.error('Network error fetching projects:', e);
       return [];
@@ -218,8 +221,28 @@ export default function ProfileScreen() {
           )}
         </View>
 
-        {/* User Info with Monospace */}
-        <Text style={[styles.username, { color: colors.primary }]}>{displayProfile?.username || 'BUILDLOG_USER'}</Text>
+        {/* User Info with Monospace and Streak */}
+        <View style={styles.usernameRow}>
+          <Text style={[styles.username, { color: colors.primary }]}>
+            {displayProfile?.username || 'BUILDLOG_USER'}
+          </Text>
+          {displayProfile?.streak_count !== undefined && displayProfile.streak_count > 0 && (
+            <View style={styles.streakBadge}>
+              <MaterialCommunityIcons 
+                name="fire" 
+                size={16} 
+                color={displayProfile.streak_count > 7 ? '#FFD700' : '#FF4500'} 
+              />
+              <Text style={[
+                styles.streakText, 
+                { color: displayProfile.streak_count > 7 ? '#FFD700' : '#FF4500' },
+                displayProfile.streak_count > 7 && styles.glowingText
+              ]}>
+                {displayProfile.streak_count}
+              </Text>
+            </View>
+          )}
+        </View>
         
         {/* STATS ROW */}
         <View style={styles.statsRow}>
@@ -434,7 +457,32 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: FontSizes.xl,
     fontWeight: 'bold',
+  },
+  usernameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
     marginBottom: Spacing.xs,
+  },
+  streakBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    backgroundColor: 'rgba(255, 69, 0, 0.1)',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 69, 0, 0.3)',
+  },
+  streakText: {
+    fontFamily: 'monospace',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  glowingText: {
+    textShadowColor: 'rgba(255, 215, 0, 0.8)',
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 10,
   },
   statsRow: {
     flexDirection: 'row',

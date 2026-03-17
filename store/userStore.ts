@@ -9,6 +9,7 @@ interface UserProfile {
   avatar_url: string | null;
   skills: string[];
   languages: string[];
+  streak_count: number;
   level: string;
   github_url: string;
   linkedin_url: string;

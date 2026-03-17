@@ -54,11 +54,11 @@ export default function ProjectDetailScreen() {
       if (projectError) throw projectError;
       setProject(projectData);
 
-      // 2. Fetch linked logs (posts) for this project
+      // 2. Fetch linked logs for this project
       const { data: logsData, error: logsError } = await supabase
-        .from('posts')
+        .from('quest_logs')
         .select('*')
-        .eq('project_id', id)
+        .eq('quest_id', id)
         .order('created_at', { ascending: false });
       
       if (logsError) throw logsError;
@@ -130,8 +130,26 @@ export default function ProjectDetailScreen() {
         )
         .subscribe();
 
+      // Real-time for logs
+      const logsChannel = supabase
+        .channel(`quest_logs:${id}`)
+        .on(
+          'postgres_changes',
+          {
+            event: 'INSERT',
+            schema: 'public',
+            table: 'quest_logs',
+            filter: `quest_id=eq.${id}`,
+          },
+          () => {
+            fetchProjectDetails();
+          }
+        )
+        .subscribe();
+
       return () => {
         supabase.removeChannel(channel);
+        supabase.removeChannel(logsChannel);
       };
     }
   }, [id, fetchProjectDetails, fetchComments]);
@@ -229,9 +247,9 @@ export default function ProjectDetailScreen() {
             // 3. Clear all posts for this project
             console.log('🧹 CLEARING_LOGS: Removing all logs for project');
             const { error: postsError } = await supabase
-              .from('posts')
+              .from('quest_logs')
               .delete()
-              .eq('project_id', id);
+              .eq('quest_id', id);
             
             if (postsError) throw postsError;
           }
@@ -271,7 +289,7 @@ export default function ProjectDetailScreen() {
           <Image source={{ uri: item.image_url }} style={styles.logImage} />
         </View>
       )}
-      <Text style={styles.logCaption}>{item.caption}</Text>
+      <Text style={styles.logCaption}>{item.content}</Text>
     </View>
   );
 
@@ -351,6 +369,16 @@ export default function ProjectDetailScreen() {
         <View style={styles.statBox}>
           <Text style={styles.statValue}>{logs.length}</Text>
           <Text style={styles.statLabel}>LOGS</Text>
+        </View>
+
+        {/* PROGRESS BAR */}
+        <View style={styles.progressSection}>
+          <View style={styles.progressBarWrapper}>
+            <View style={[styles.progressBar, { width: `${Math.min((logs.length / (project?.challenge_duration || 30)) * 100, 100)}%` }]} />
+          </View>
+          <Text style={styles.progressText}>
+            PROGRESS: {logs.length}/{project?.challenge_duration || 30} DAYS
+          </Text>
         </View>
         
         {project?.user_id === currentUserId && (
@@ -600,6 +628,28 @@ const styles = StyleSheet.create({
     flex: 1,
     height: 4,
     backgroundColor: '#222222',
+  },
+  progressSection: {
+    flex: 1,
+    paddingHorizontal: Spacing.md,
+  },
+  progressBarWrapper: {
+    width: '100%',
+    height: 8,
+    backgroundColor: '#111111',
+    borderWidth: 2,
+    borderColor: '#333333',
+    marginBottom: 4,
+  },
+  progressBar: {
+    height: '100%',
+    backgroundColor: '#FFFFFF',
+  },
+  progressText: {
+    fontFamily: 'monospace',
+    fontSize: 8,
+    color: '#666666',
+    textAlign: 'center',
   },
   logCard: {
     marginHorizontal: Spacing.xl,

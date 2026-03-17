@@ -107,11 +107,11 @@ export default function AddLogScreen() {
 
       // Database Insert - Matching Schema
       const { error: insertError } = await supabase
-        .from('posts')
+        .from('quest_logs')
         .insert({
-          author_id: finalUserId,
-          project_id: projectId,
-          caption: caption.trim(),
+          user_id: finalUserId,
+          quest_id: projectId,
+          content: caption.trim(),
           image_url: publicImageUrl,
         });
 
