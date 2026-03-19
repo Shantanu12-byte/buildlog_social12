@@ -1,6 +1,7 @@
-import { View, Text, Image, StyleSheet, Pressable } from 'react-native';
+import { View, Text, StyleSheet, Pressable, TouchableOpacity } from 'react-native';
 import { Feather } from '@expo/vector-icons';
-import { Colors, FontSizes, Spacing } from '@/constants/theme';
+import { Image } from 'expo-image';
+import { Colors, Typography, Spacing, Radius } from '@/constants/theme';
 import { AvatarBlock } from './AvatarBlock';
 import { router } from 'expo-router';
 
@@ -9,13 +10,23 @@ export interface FeedPost {
   username: string;
   userAvatar?: string;
   author_id?: string;
-  timestamp: string;
-  projectTitle: string;
-  caption: string;
+  timestamp?: string;
+  created_at?: string;
+  projectTitle?: string;
+  title?: string;
+  caption?: string;
+  description?: string;
   imageUrl?: string;
+  image_url?: string;
+  github_url?: string;
   hasGithubLink?: boolean;
-  cheers: number;
-  comments: number;
+  cheers?: number;
+  comments?: number;
+  skills?: string[];
+  needed_skills?: string[];
+  status?: string;
+  looking_for_collabs?: boolean;
+  progress?: number;
 }
 
 interface FeedPostCardProps {
@@ -28,12 +39,10 @@ interface FeedPostCardProps {
   onProfilePress?: (userId: string) => void;
 }
 
-const IMAGE_ASPECT_RATIO = 4 / 5; // width : height (4:5 portrait)
-
-const LIKED_COLOR = '#EF4444'; // Red for liked heart
+const IMAGE_ASPECT_RATIO = 16 / 9;
 
 export function FeedPostCard({ post, likeCount, isLiked, onLikePress, onCheerPress, onCommentPress, onProfilePress }: FeedPostCardProps) {
-  const displayLikeCount = likeCount ?? post.cheers;
+  const displayLikeCount = likeCount ?? (post.cheers || 0);
   const handleLikePress = () => {
     if (onLikePress) onLikePress(post.id);
     else onCheerPress?.(post.id);
@@ -43,213 +52,389 @@ export function FeedPostCard({ post, likeCount, isLiked, onLikePress, onCheerPre
       if (onProfilePress) {
         onProfilePress(post.author_id);
       } else {
-        router.push({ pathname: '/user/[id]', params: { id: post.author_id } });
+        router.push({ pathname: '/profile/[id]', params: { id: post.author_id } });
       }
     }
   };
 
+  // Compute text fallbacks
+  const displayTitle = post.projectTitle || post.title || 'Untitled Project';
+  const displayDesc = post.caption || post.description || '';
+  const displayImage = post.imageUrl || post.image_url;
+  
+  // Custom simple relative time
+  const getRelativeTime = (dateStr: string) => {
+    const diffMs = Date.now() - new Date(dateStr).getTime();
+    const diffMins = Math.round(diffMs / 60000);
+    if (diffMins < 60) return `${diffMins}m ago`;
+    const diffHours = Math.round(diffMins / 60);
+    if (diffHours < 24) return `${diffHours}h ago`;
+    return `${Math.round(diffHours / 24)}d ago`;
+  };
+  
+  const timeText = post.timestamp || (post.created_at ? getRelativeTime(post.created_at) : 'Just now');
+  const skillsList = post.skills || post.needed_skills || ['React', 'Node', 'OpenAI']; // Fallback for mockup
+  const progressVal = post.progress ?? 65; // Mockup fallback
+  const isCollab = post.looking_for_collabs !== false; // Default true for UI
+  const statusText = post.status || 'Building';
+
   return (
     <View style={styles.card}>
-      {/* Header: Avatar, Username, Project tag, 3-dot menu */}
+      {/* Header */}
       <View style={styles.header}>
         <Pressable style={styles.headerLeft} onPress={handleProfilePress}>
           <AvatarBlock 
             url={post.userAvatar} 
             username={post.username} 
-            size={36} 
+            size={40} 
           />
           <View style={styles.headerText}>
             <Text style={styles.username}>{post.username}</Text>
-            <View style={styles.projectTag}>
-              <Text style={styles.projectTagText}>{post.projectTitle}</Text>
+            <View style={styles.metaRow}>
+              <Text style={styles.timestamp}>{timeText}</Text>
+              <Text style={styles.dot}>•</Text>
+              
+              <View style={[styles.pill, { backgroundColor: 'transparent', borderColor: '#8A2BE2' }]}>
+                <Text style={[styles.pillText, { color: '#8A2BE2' }]}>{statusText}</Text>
+              </View>
+              
+              {isCollab && (
+                <View style={[styles.pill, { backgroundColor: 'transparent', borderColor: '#2EA043' }]}>
+                  <Text style={[styles.pillText, { color: '#2EA043' }]}>Open to collab</Text>
+                </View>
+              )}
             </View>
           </View>
         </Pressable>
-        <Pressable hitSlop={12} style={styles.menuButton}>
-          <Feather name="more-horizontal" size={20} color={Colors.textPrimary} />
-        </Pressable>
       </View>
 
-      {/* Full-width image: edge-to-edge, 4:5 aspect ratio */}
-      <View style={styles.imageWrap}>
-        {post.imageUrl ? (
-          <Image
-            source={{ uri: post.imageUrl }}
-            style={styles.image}
-            resizeMode="cover"
-          />
-        ) : (
-          <View style={styles.imagePlaceholder}>
-            <Feather name="image" size={48} color={Colors.textSecondary} />
-            <Text style={styles.imagePlaceholderText}>Progress Image</Text>
-          </View>
-        )}
-      </View>
-
-      {/* Action bar: Heart, Message-Circle, Send */}
-      <View style={styles.actions}>
-        <View style={styles.actionsLeft}>
-          <Pressable
-            style={styles.actionBtn}
-            onPress={handleLikePress}
-          >
-            <Feather 
-              name="heart" 
-              size={24} 
-              color={isLiked ? LIKED_COLOR : Colors.textPrimary}
-              fill={isLiked ? LIKED_COLOR : 'transparent'}
+      {/* Content && Image Wrapper for clickability */}
+      <TouchableOpacity 
+        style={styles.clickableArea} 
+        onPress={() => onCommentPress?.(post.id)}
+        activeOpacity={0.9}
+      >
+        {/* Image Preview */}
+        <View style={styles.imageContainer}>
+          {displayImage ? (
+            <Image
+              source={{ uri: displayImage }}
+              style={styles.image}
+              contentFit="cover"
             />
-          </Pressable>
+          ) : (
+            <View style={styles.imagePlaceholder}>
+              <Feather name="image" size={32} color={Colors.text.tertiary} />
+            </View>
+          )}
+          <View style={styles.inProgressBadge}>
+            <Text style={styles.inProgressText}>In Progress</Text>
+          </View>
+        </View>
+
+        {/* Content */}
+        <View style={styles.content}>
+          <Text style={styles.title}>{displayTitle}</Text>
+          {!!displayDesc && <Text style={styles.description}>{displayDesc}</Text>}
+
+          {/* Skills */}
+          {skillsList.length > 0 && (
+            <View style={styles.skillsRow}>
+              {skillsList.map((skill, i) => (
+                <View key={i} style={styles.skillPill}>
+                  <Text style={styles.skillText}>{skill}</Text>
+                </View>
+              ))}
+            </View>
+          )}
+
+          {/* Github Link */}
+          {(post.hasGithubLink || post.github_url) && (
+            <View style={styles.githubRow}>
+              <Feather name="github" size={14} color={Colors.text.secondary} />
+              <Text style={styles.githubText}>{post.github_url ? post.github_url.split('://').pop() : `github.com/${post.username}/${displayTitle.toLowerCase().replace(/\s+/g, '')}`}</Text>
+            </View>
+          )}
+
+          {/* Progress Bar */}
+          <View style={styles.progressContainer}>
+            <View style={styles.progressHeader}>
+              <Text style={styles.progressLabel}>Progress</Text>
+              <Text style={styles.progressPercentage}>{progressVal}%</Text>
+            </View>
+            <View style={styles.track}>
+              <View style={[styles.fill, { width: `${progressVal}%` }]} />
+            </View>
+          </View>
+        </View>
+      </TouchableOpacity>
+
+      {/* Action Bar */}
+      <View style={styles.actions}>
+        <TouchableOpacity
+          style={[styles.actionBtn, styles.hypeBtn, isLiked && styles.hypeBtnActive]}
+          onPress={handleLikePress}
+        >
+          <Feather 
+            name="plus" 
+            size={16} 
+            color={isLiked ? "#FFFFFF" : "#8A2BE2"} 
+            style={{ fontWeight: 'bold' }}
+          />
+          <Text style={[styles.hypeText, isLiked && styles.hypeTextActive]}>
+            Hype • {displayLikeCount}
+          </Text>
+        </TouchableOpacity>
+
+        <View style={styles.secondaryActions}>
           <Pressable
-            style={styles.actionBtn}
+            style={styles.actionBtnSmall}
             onPress={() => onCommentPress?.(post.id)}
           >
-            <Feather name="message-circle" size={24} color={Colors.textPrimary} />
+            <Feather name="message-square" size={16} color={Colors.text.primary} />
+            <Text style={styles.actionText}>{post.comments || 8}</Text>
           </Pressable>
-          <Pressable style={styles.actionBtn}>
-            <Feather name="send" size={22} color={Colors.textPrimary} />
+          
+          <Pressable style={styles.actionBtnSmall}>
+            <Feather name="upload" size={16} color={Colors.text.primary} />
           </Pressable>
         </View>
       </View>
-
-      {/* Caption area: "Liked by X people", username + caption, timestamp */}
-      <View style={styles.captionArea}>
-        {displayLikeCount > 0 && (
-          <Text style={styles.likedBy}>
-            Liked by <Text style={styles.likedByBold}>{displayLikeCount} people</Text>
-          </Text>
-        )}
-        <Text style={styles.captionBlock}>
-          <Text style={styles.captionUsername}>{post.username}</Text>
-          {' '}
-          <Text style={styles.captionText}>{post.caption}</Text>
-        </Text>
-        <Text style={styles.timestamp}>{post.timestamp}</Text>
-      </View>
+      
+      {/* Separator Line */}
+      <View style={styles.separator} />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   card: {
-    marginBottom: Spacing.xl,
-    backgroundColor: '#333333',
-    borderWidth: 4,
-    borderTopColor: '#FFFFFF',
-    borderLeftColor: '#FFFFFF',
-    borderBottomColor: '#111111',
-    borderRightColor: '#111111',
+    paddingHorizontal: Spacing.lg,
+    paddingTop: Spacing.xl,
+    backgroundColor: Colors.bg.primary,
+  },
+  clickableArea: {
+    marginVertical: Spacing.xs,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.md,
-    backgroundColor: '#222222',
-    borderBottomWidth: 2,
-    borderBottomColor: '#444444',
+    marginBottom: Spacing.md,
   },
   headerLeft: {
     flexDirection: 'row',
     alignItems: 'center',
     flex: 1,
+    gap: Spacing.sm,
   },
-
+  avatar: {
+    borderRadius: 20,
+    backgroundColor: Colors.bg.secondary,
+  },
   headerText: {
     flex: 1,
+    gap: 2,
   },
   username: {
-    color: '#FFFFFF',
-    fontSize: FontSizes.sm,
-    fontFamily: 'monospace',
-    fontWeight: 'bold',
+    color: Colors.text.primary,
+    fontSize: Typography.sizes.sm,
+    fontWeight: '700',
+    letterSpacing: -0.2,
   },
-  projectTag: {
-    marginTop: 2,
+  metaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flexWrap: 'wrap',
   },
-  projectTagText: {
-    color: '#AAAAAA',
+  timestamp: {
+    color: Colors.text.tertiary,
+    fontSize: Typography.sizes.xs,
+  },
+  dot: {
+    color: Colors.text.tertiary,
+    fontSize: Typography.sizes.xs,
+  },
+  pill: {
+    borderWidth: 1,
+    borderRadius: Radius.full,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+  },
+  pillText: {
     fontSize: 10,
-    fontFamily: 'monospace',
-    textTransform: 'uppercase',
+    fontWeight: '600',
   },
-  menuButton: {
-    padding: Spacing.xs,
-  },
-  imageWrap: {
+  imageContainer: {
     width: '100%',
     aspectRatio: IMAGE_ASPECT_RATIO,
-    backgroundColor: '#000000',
-    borderTopWidth: 2,
-    borderBottomWidth: 2,
-    borderColor: '#111111',
+    backgroundColor: Colors.bg.secondary,
+    borderRadius: Radius.lg,
+    overflow: 'hidden',
+    borderWidth: 0.5,
+    borderColor: Colors.border.subtle,
+    marginBottom: Spacing.md,
+    position: 'relative',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   image: {
     width: '100%',
     height: '100%',
   },
   imagePlaceholder: {
-    width: '100%',
-    height: '100%',
+    alignItems: 'center',
     justifyContent: 'center',
+  },
+  inProgressBadge: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: Radius.full,
+    borderWidth: 1,
+    borderColor: '#8A2BE2',
+  },
+  inProgressText: {
+    color: '#8A2BE2',
+    fontSize: 10,
+    fontWeight: '600',
+  },
+  content: {
+    gap: Spacing.sm,
+    marginBottom: Spacing.lg,
+  },
+  title: {
+    color: Colors.text.primary,
+    fontSize: Typography.sizes.lg,
+    fontWeight: '700',
+    letterSpacing: -0.4,
+  },
+  description: {
+    color: Colors.text.secondary,
+    fontSize: Typography.sizes.sm,
+    lineHeight: 20,
+  },
+  skillsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: Spacing.xs,
+    marginTop: 2,
+  },
+  skillPill: {
+    backgroundColor: Colors.bg.secondary,
+    borderWidth: 0.5,
+    borderColor: Colors.border.subtle,
+    borderRadius: Radius.sm,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  skillText: {
+    color: Colors.text.secondary,
+    fontSize: 11,
+    fontWeight: '500',
+  },
+  githubRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 2,
+  },
+  githubText: {
+    color: '#3B82F6', // Tech blue
+    fontSize: Typography.sizes.sm,
+  },
+  progressContainer: {
+    marginTop: Spacing.xs,
+    gap: 4,
+  },
+  progressHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
   },
-  imagePlaceholderText: {
-    color: '#666666',
-    fontSize: FontSizes.sm,
-    fontFamily: 'monospace',
-    marginTop: Spacing.sm,
+  progressLabel: {
+    color: Colors.text.tertiary,
+    fontSize: Typography.sizes.xs,
+  },
+  progressPercentage: {
+    color: '#8A2BE2',
+    fontSize: Typography.sizes.xs,
+    fontWeight: '600',
+  },
+  track: {
+    height: 4,
+    backgroundColor: Colors.bg.secondary,
+    borderRadius: 2,
+    overflow: 'hidden',
+  },
+  fill: {
+    height: '100%',
+    backgroundColor: '#8A2BE2',
+    borderRadius: 2,
   },
   actions: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
-    backgroundColor: '#222222',
-    borderBottomWidth: 2,
-    borderBottomColor: '#444444',
-  },
-  actionsLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.xl,
+    justifyContent: 'space-between',
+    marginBottom: Spacing.xl,
   },
   actionBtn: {
-    padding: Spacing.xs,
+    // Add missing actionBtn style
+    padding: 0,
   },
-  captionArea: {
-    padding: Spacing.md,
-    backgroundColor: '#333333',
+  hypeBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(138,43,226,0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(138,43,226,0.3)',
+    borderRadius: Radius.full,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    gap: 6,
+    minWidth: 120,
   },
-  likedBy: {
+  hypeBtnActive: {
+    backgroundColor: '#8A2BE2',
+    borderColor: '#8A2BE2',
+  },
+  hypeText: {
+    color: '#8A2BE2',
+    fontSize: Typography.sizes.sm,
+    fontWeight: '700',
+  },
+  hypeTextActive: {
     color: '#FFFFFF',
-    fontSize: 10,
-    fontFamily: 'monospace',
-    marginBottom: Spacing.xs,
   },
-  likedByBold: {
-    fontWeight: 'bold',
+  secondaryActions: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
   },
-  captionBlock: {
-    marginBottom: Spacing.xs,
+  actionBtnSmall: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.bg.secondary,
+    borderWidth: 0.5,
+    borderColor: Colors.border.subtle,
+    borderRadius: Radius.full,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    gap: 6,
   },
-  captionUsername: {
-    color: '#FFFFFF',
-    fontSize: FontSizes.sm,
-    fontFamily: 'monospace',
-    fontWeight: 'bold',
+  actionText: {
+    color: Colors.text.secondary,
+    fontSize: Typography.sizes.sm,
+    fontWeight: '600',
   },
-  captionText: {
-    color: '#DDDDDD',
-    fontSize: FontSizes.sm,
-    fontFamily: 'monospace',
-  },
-  timestamp: {
-    color: '#888888',
-    fontSize: 8,
-    fontFamily: 'monospace',
-    marginTop: 4,
-    textTransform: 'uppercase',
+  separator: {
+    height: 1,
+    backgroundColor: Colors.border.subtle,
+    opacity: 0.5,
   },
 });

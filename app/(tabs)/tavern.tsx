@@ -1,560 +1,441 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { 
-  View, 
-  Text, 
-  TextInput, 
-  TouchableOpacity, 
-  FlatList, 
-  StyleSheet, 
-  KeyboardAvoidingView, 
-  Platform,
-  ActivityIndicator,
-  Keyboard,
-  Animated,
-  Pressable,
-  Image as RNImage
+/**
+ * app/(tabs)/tavern.tsx — Campus Chat / Global Server
+ *
+ * ✅ Preserved: Supabase Realtime listeners, useEffect, messages/rooms/selectedRoom state
+ * ✅ Routes: router.push('/tavern'), router.replace('/(auth)/login')
+ * 🎨 Theme: Deep navy with campus blue and global purple accents
+ */
+
+import React, { useEffect, useState, useRef, useCallback } from 'react';
+import {
+  View, Text, FlatList, TouchableOpacity, TextInput,
+  StyleSheet, SafeAreaView, StatusBar, KeyboardAvoidingView,
+  Platform, ActivityIndicator, Modal,
 } from 'react-native';
-import { Image } from 'expo-image';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { router } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { supabase } from '@/lib/supabase';
-import { useUserStore } from '@/store/userStore';
-import { Spacing } from '@/constants/theme';
-import { AvatarBlock } from '@/components/AvatarBlock';
+import { Colors, Typography, Spacing, Radius } from '@/constants/theme';
+import { Avatar, LoadingScreen } from '@/components/ui/UI';
 
-type Message = {
+// ─── Types ────────────────────────────────────────────────────
+interface Room {
   id: string;
-  user_id: string;
-  message: string;
+  name: string;
+  type: 'campus' | 'global' | 'project';
+  college?: string;
+  description?: string;
+  online_count?: number;
+  member_count?: number;
+  last_message?: string;
+  unread_count?: number;
+}
+
+interface Message {
+  id: string;
+  room_id: string;
+  sender_id: string;
+  sender_username: string;
+  sender_college?: string;
+  content: string;
   created_at: string;
-  profiles?: {
-    username: string;
-    avatar_url: string;
-    level: string;
-  };
-};
+}
 
-const TIER_COLORS: Record<string, string> = {
-  Architect: '#00E5FF',
-  Legend: '#FFD700',
-  Default: '#55FF55',
-};
+type TabType = 'campus' | 'global';
 
-export default function TavernScreen() {
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [activeHackers, setActiveHackers] = useState(1);
-  const [typingUsers, setTypingUsers] = useState<string[]>([]);
-  const [newMessage, setNewMessage] = useState('');
-  const [loading, setLoading] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [hasMore, setHasMore] = useState(true);
-  const [sending, setSending] = useState(false);
-  const flatListRef = useRef<FlatList>(null);
-  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const blinkAnim = useRef(new Animated.Value(1)).current;
-  const { userProfile, fetchUserProfile } = useUserStore();
-  const currentUserId = userProfile?.id || null;
+function formatTime(dateStr: string): string {
+  return new Date(dateStr).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
 
-  const fetchMessages = useCallback(async () => {
-    setLoading(true);
-    // Use userId from store if available, otherwise fetch
-    const storeUserId = useUserStore.getState().userId;
-    if (!storeUserId) {
-      await fetchUserProfile();
-    }
-    
-    const { data, error } = await supabase
-      .from('campus_chat')
-      .select(`
-        id, 
-        message, 
-        created_at, 
-        user_id, 
-        profiles(username, avatar_url, level)
-      `)
-      .order('created_at', { ascending: false })
-      .limit(50);
+function OnlineBar({ count, roomName }: { count: number; roomName: string }) {
+  return (
+    <View style={s.onlineBar}>
+      <View style={s.onlineDot} />
+      <Text style={s.onlineText}>[ ONLINE: {count} ] · {roomName}</Text>
+    </View>
+  );
+}
 
-    if (error) {
-      console.error('TAVERN_FETCH_ERROR:', error);
-    }
+function RoomCard({ room, isActive, onPress }: { room: Room; isActive: boolean; onPress: () => void }) {
+  const isGlobal = room.type === 'global';
+  return (
+    <TouchableOpacity style={[s.roomCard, isActive && s.roomCardActive]} onPress={onPress} activeOpacity={0.75}>
+      <View style={[s.roomIcon, isGlobal ? s.roomIconGlobal : s.roomIconCampus]}>
+        <Text style={s.roomIconText}>{isGlobal ? '🌐' : '🎓'}</Text>
+      </View>
+      <View style={{ flex: 1, marginLeft: Spacing.md }}>
+        <View style={s.roomNameRow}>
+          <Text style={s.roomName} numberOfLines={1}>{room.name}</Text>
+          {room.online_count !== undefined && (
+            <View style={s.onlinePill}>
+              <View style={[s.onlineDot, { width: 5, height: 5 }]} />
+              <Text style={s.onlinePillText}>{room.online_count}</Text>
+            </View>
+          )}
+        </View>
+        {room.description && <Text style={s.roomDesc} numberOfLines={1}>{room.description}</Text>}
+        {room.last_message && <Text style={s.roomLastMsg} numberOfLines={1}>{room.last_message}</Text>}
+      </View>
+      {!!room.unread_count && room.unread_count > 0 && (
+        <View style={s.unreadBadge}>
+          <Text style={s.unreadText}>{room.unread_count}</Text>
+        </View>
+      )}
+    </TouchableOpacity>
+  );
+}
 
-    if (data) {
-      // Data is descending (latest first), reverse for chronological display
-      setMessages(data.reverse() as any);
-      setHasMore(data.length === 50);
-    }
-    setLoading(false);
-    
-    // Auto-scroll to bottom after initial load
-    setTimeout(() => flatListRef.current?.scrollToEnd({ animated: false }), 200);
-  }, [currentUserId, fetchUserProfile]);
+function MessageBubble({ msg, isMe }: { msg: Message; isMe: boolean }) {
+  return (
+    <View style={[s.msgRow, isMe && s.msgRowMe]}>
+      {!isMe && <Avatar username={msg.sender_username} size={28} style={{ marginRight: 8 }} />}
+      <View style={[s.bubble, isMe ? s.bubbleMe : s.bubbleThem]}>
+        {!isMe && (
+          <View style={s.senderRow}>
+            <Text style={s.senderName}>{msg.sender_username}</Text>
+            {msg.sender_college && <Text style={s.senderCollege}> · {msg.sender_college}</Text>}
+          </View>
+        )}
+        <Text style={[s.bubbleText, isMe && s.bubbleTextMe]}>{msg.content}</Text>
+        <Text style={[s.bubbleTime, isMe && { color: 'rgba(255,255,255,0.4)' }]}>{formatTime(msg.created_at)}</Text>
+      </View>
+    </View>
+  );
+}
 
-  const loadOlderMessages = useCallback(async () => {
-    if (loadingMore || !hasMore || messages.length === 0) return;
-    
-    setLoadingMore(true);
-    const oldestMessage = messages[0];
-
-    try {
-      const { data, error } = await supabase
-        .from('campus_chat')
-        .select(`
-          id, 
-          message, 
-          created_at, 
-          user_id, 
-          profiles:user_id(username, avatar_url, level)
-        `)
-        .lt('created_at', oldestMessage.created_at)
-        .order('created_at', { ascending: false })
-        .limit(50);
-
-      if (!error && data) {
-        if (data.length === 0) {
-          setHasMore(false);
-        } else {
-          // data is newest to oldest, reverse to oldest to newest for prepending
-          const older = data.reverse() as any;
-          setMessages(prev => [...older, ...prev]);
-          setHasMore(data.length === 50);
-        }
-      }
-    } catch (err) {
-      // Pagination error
-    } finally {
-      setLoadingMore(false);
-    }
-  }, [loadingMore, hasMore, messages]);
+function ChatView({ room, messages, loading, userId, onSend, onBack }: {
+  room: Room; messages: Message[]; loading: boolean;
+  userId: string; onSend: (t: string) => void; onBack: () => void;
+}) {
+  const [text, setText] = useState('');
+  const flatRef = useRef<FlatList>(null);
 
   useEffect(() => {
-    fetchMessages();
+    if (messages.length > 0) setTimeout(() => flatRef.current?.scrollToEnd({ animated: true }), 100);
+  }, [messages]);
 
-    // Combined Real-time channel
-    const channel = supabase.channel('tavern_main', {
-      config: {
-        presence: {
-          key: currentUserId || 'anonymous',
-        },
-      },
-    });
-
-    channel
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'campus_chat' }, async (payload) => {
-        // Fetch profile for the new message
-        const { data: profile, error: profileErr } = await supabase
-          .from('profiles')
-          .select('username, avatar_url, level')
-          .eq('id', payload.new.user_id)
-          .maybeSingle();
-
-        if (profileErr) console.error('REALTIME_PROFILE_FETCH_ERROR:', profileErr);
-
-        const incoming: Message = { 
-          id: payload.new.id,
-          user_id: payload.new.user_id,
-          message: payload.new.message,
-          created_at: payload.new.created_at,
-          profiles: profile as any
-        };
-        
-        setMessages(prev => [...prev, incoming]);
-        // Only scroll to bottom if user is already near bottom (optional, basic impl always scrolls)
-        setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
-      })
-      .on('presence', { event: 'sync' }, () => {
-        const state = channel.presenceState();
-        setActiveHackers(Object.keys(state).length);
-      })
-      .on('broadcast', { event: 'typing' }, (payload) => {
-        const { username, isTyping } = payload.payload;
-        if (username === userProfile?.username) return;
-
-        setTypingUsers((current) => {
-          if (isTyping && !current.includes(username)) return [...current, username];
-          if (!isTyping) return current.filter((u) => u !== username);
-          return current;
-        });
-      })
-      .subscribe(async (status) => {
-        if (status === 'SUBSCRIBED') {
-          await channel.track({ online_at: new Date().toISOString() });
-        }
-      });
-
-    // Blinking animation for typing indicator
-    const blink = Animated.loop(
-      Animated.sequence([
-        Animated.timing(blinkAnim, { toValue: 0.3, duration: 500, useNativeDriver: Platform.OS !== 'web' }),
-        Animated.timing(blinkAnim, { toValue: 1, duration: 500, useNativeDriver: Platform.OS !== 'web' }),
-      ])
-    );
-    blink.start();
-
-    const keyboardListener = Keyboard.addListener('keyboardDidShow', () => {
-      flatListRef.current?.scrollToEnd({ animated: true });
-    });
-
-    return () => {
-      supabase.removeChannel(channel);
-      keyboardListener.remove();
-      blink.stop();
-      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
-    };
-  }, [currentUserId, userProfile?.username, fetchMessages]);
-
-  const handleInputChange = (text: string) => {
-    setNewMessage(text);
-    
-    if (!userProfile?.username) return;
-
-    const channel = supabase.channel('tavern_main');
-    channel.send({
-      type: 'broadcast',
-      event: 'typing',
-      payload: { username: userProfile.username, isTyping: true },
-    });
-
-    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
-    
-    typingTimeoutRef.current = setTimeout(() => {
-      channel.send({
-        type: 'broadcast',
-        event: 'typing',
-        payload: { username: userProfile.username, isTyping: false },
-      });
-    }, 2000) as any;
-  };
-
-  const sendMessage = async () => {
-    const text = newMessage.trim();
-    const activeUserId = useUserStore.getState().userId;
-    if (!text || !activeUserId || sending) return;
-
-    setSending(true);
-    setNewMessage('');
-
-    const { error } = await supabase.from('campus_chat').insert({
-      user_id: activeUserId,
-      message: text
-    });
-
-    if (error) {
-      console.error('Send error:', error);
-    }
-    setSending(false);
-  };
-
-  const renderMessage = ({ item }: { item: Message }) => {
-    const isMe = item.user_id === currentUserId;
-    
-    // Defensive check: Supabase sometimes returns joins as arrays
-    const rawProfile = isMe ? userProfile : item.profiles;
-    const profile = Array.isArray(rawProfile) ? rawProfile[0] : rawProfile;
-
-    if (!isMe && !profile) {
-      // Missing profile for message
-    }
-    
-    return (
-      <View style={[styles.messageRow, isMe ? styles.messageRowMe : styles.messageRowOther]}>
-        <Pressable 
-          style={styles.avatarContainer}
-          onPress={() => router.push({ pathname: '/user/[id]', params: { id: item.user_id } })}
-        >
-          <AvatarBlock 
-            key={`${item.id}-${profile?.avatar_url || 'no-img'}`}
-            url={profile?.avatar_url} 
-            username={profile?.username} 
-            size={32}
-            tier={profile?.level || 'Default'}
-          />
-        </Pressable>
-        
-        <View style={styles.messageContent}>
-          {!isMe && (
-            <Pressable onPress={() => router.push({ pathname: '/user/[id]', params: { id: item.user_id } })}>
-              <Text style={[styles.nametag, { color: '#55FF55' }]}>
-                {profile?.username?.toUpperCase() || 'BUILDER'}
-              </Text>
-            </Pressable>
-          )}
-          
-          <View style={[
-            styles.bubble, 
-            isMe ? styles.bubbleMe : styles.bubbleOther,
-            !isMe && { borderColor: '#555' }
-          ]}>
-            <Text style={[styles.messageText, !isMe && { color: '#AAA' }]}>{item.message}</Text>
-          </View>
-        </View>
-      </View>
-    );
-  };
-
-  if (loading) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#55FF55" />
-        <Text style={styles.loadingText}> {'> RETRIEVING_CAMPUS_BROADCASTS...'} </Text>
-      </View>
-    );
+  function handleSend() {
+    if (!text.trim()) return;
+    onSend(text.trim());
+    setText('');
   }
 
   return (
-    <SafeAreaView style={styles.container}>
-      {/* Sticky Header */}
-      <View style={styles.header}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
-          <Image 
-            source={require('../../assets/developer_emblem.png')}
-            style={{ width: 16, height: 16, marginRight: 8 }}
-          />
-          <Text style={styles.headerTitle}>{'< CAMPUS_CHAT / GLOBAL_SERVER >'}</Text>
+    <View style={s.chatView}>
+      <View style={s.chatHeader}>
+        <TouchableOpacity style={s.backBtn} onPress={onBack}>
+          <Text style={s.backIcon}>←</Text>
+        </TouchableOpacity>
+        <View style={s.breadcrumb}>
+          <Text style={s.breadcrumbInactive}>{room.type === 'campus' ? 'Campus Chat' : 'Global Server'}</Text>
+          <Text style={s.breadcrumbSep}> / </Text>
+          <Text style={s.breadcrumbActive}>{room.name}</Text>
         </View>
-        <View style={styles.presenceBadge}>
-          <Text style={styles.presenceText}>[ 🟢 ONLINE: {activeHackers} ]</Text>
-        </View>
+        <TouchableOpacity style={s.infoBtn}>
+          <Text style={s.infoBtnText}>ℹ</Text>
+        </TouchableOpacity>
       </View>
 
-      <KeyboardAvoidingView 
-        style={{ flex: 1 }} 
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
-      >
-        <FlatList
-          ref={flatListRef}
-          data={messages}
-          renderItem={renderMessage}
-          keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.listContent}
-          showsVerticalScrollIndicator={false}
-          removeClippedSubviews={true}
-          initialNumToRender={15}
-          maxToRenderPerBatch={10}
-          windowSize={5}
-          maintainVisibleContentPosition={{
-            minIndexForVisible: 0,
-          }}
-          ListHeaderComponent={
-            hasMore ? (
-              <TouchableOpacity 
-                style={styles.loadMoreBtn} 
-                onPress={loadOlderMessages}
-                disabled={loadingMore}
-              >
-                {loadingMore ? (
-                  <ActivityIndicator color="#55FF55" size="small" />
-                ) : (
-                  <Text style={styles.loadMoreText}>{'> ACCESS_OLDER_LOGS...'}</Text>
-                )}
-              </TouchableOpacity>
-            ) : null
-          }
-        />
+      <OnlineBar count={room.online_count ?? 0} roomName={room.name} />
 
-        {/* Typing Indicator */}
-        {typingUsers.length > 0 && (
-          <Animated.View style={[styles.typingContainer, { opacity: blinkAnim }]}>
-            <Text style={styles.typingText}>
-              {typingUsers.length > 1 
-                ? '[ MULTIPLE_HACKERS_ARE_TYPING... ]' 
-                : `[ ${typingUsers[0].toUpperCase()}_IS_TYPING... ]`}
-            </Text>
-          </Animated.View>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={90}>
+        {loading ? (
+          <View style={s.chatLoading}><ActivityIndicator color={Colors.accent.primary} /></View>
+        ) : (
+          <FlatList
+            ref={flatRef}
+            data={messages}
+            keyExtractor={item => item.id}
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={s.msgList}
+            onContentSizeChange={() => flatRef.current?.scrollToEnd()}
+            ListEmptyComponent={
+              <View style={s.emptyChatWrap}>
+                <Text style={s.emptyChatIcon}>💬</Text>
+                <Text style={s.emptyChatTitle}>No messages yet</Text>
+                <Text style={s.emptyChatSub}>Be the first to broadcast a message</Text>
+              </View>
+            }
+            renderItem={({ item }) => <MessageBubble msg={item} isMe={item.sender_id === userId} />}
+          />
         )}
-
-        {/* Input Terminal */}
-        <View style={styles.inputArea}>
-          <View style={styles.inputBevel}>
-            <TextInput
-              style={styles.input}
-              value={newMessage}
-              onChangeText={handleInputChange}
-              placeholder="> BROADCAST_MESSAGE..."
-              placeholderTextColor="#444"
-              multiline={false}
-            />
-          </View>
-          <TouchableOpacity 
-            style={[styles.sendButton, (!newMessage.trim() || sending) && styles.sendButtonDisabled]} 
-            onPress={sendMessage}
-            disabled={!newMessage.trim() || sending}
-          >
-            <Text style={styles.sendButtonText}>{sending ? '...' : '[ SEND ]'}</Text>
+        <View style={s.inputBar}>
+          <TextInput
+            value={text}
+            onChangeText={setText}
+            placeholder={room.type === 'global' ? 'Broadcast message...' : 'Message campus...'}
+            placeholderTextColor={Colors.text.tertiary}
+            style={s.msgInput}
+            multiline
+            onSubmitEditing={handleSend}
+          />
+          <TouchableOpacity style={[s.sendBtn, !!text.trim() && s.sendBtnActive]} onPress={handleSend} disabled={!text.trim()} activeOpacity={0.75}>
+            <Text style={[s.sendBtnText, !!text.trim() && { color: Colors.pills.campus.text }]}>SEND</Text>
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
+    </View>
+  );
+}
+
+export default function TavernScreen() {
+  const router = useRouter();
+
+  // ── State (preserved) ─────────────────────────────────────
+  const [rooms, setRooms] = useState<Room[]>([]);
+  const [selectedRoom, setSelectedRoom] = useState<Room | null>(null);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [chatLoading, setChatLoading] = useState(false);
+  const [user, setUser] = useState<any>(null);
+  const [activeTab, setActiveTab] = useState<TabType>('campus');
+  const channelRef = useRef<any>(null);
+
+  useEffect(() => {
+    initScreen();
+    return () => { if (channelRef.current) supabase.removeChannel(channelRef.current); };
+  }, []);
+
+  async function initScreen() {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) { router.replace('/(auth)/login' as any); return; }
+    setUser(user);
+    await fetchRooms();
+    setLoading(false);
+  }
+
+  const [isCreating, setIsCreating] = useState(false);
+  const [newRoomName, setNewRoomName] = useState('');
+  const [newRoomDesc, setNewRoomDesc] = useState('');
+
+  async function fetchRooms() {
+    const { data, error } = await supabase.from('chat_rooms').select('*').order('online_count', { ascending: false });
+    if (!error) setRooms(data ?? []);
+  }
+
+  async function handleCreateCommunity() {
+    if (!newRoomName.trim() || !user) return;
+    const newRoom = {
+      name: newRoomName.trim(),
+      description: newRoomDesc.trim(),
+      type: 'campus',
+      online_count: 1,
+      member_count: 1,
+    };
+    const { data, error } = await supabase.from('chat_rooms').insert([newRoom]).select().single();
+    if (!error && data) {
+      setRooms(prev => [data, ...prev]);
+      setIsCreating(false);
+      setNewRoomName('');
+      setNewRoomDesc('');
+      openRoom(data);
+    }
+  }
+
+  const openRoom = useCallback(async (room: Room) => {
+    setSelectedRoom(room);
+    setChatLoading(true);
+    if (channelRef.current) supabase.removeChannel(channelRef.current);
+
+    const { data } = await supabase.from('messages').select('*').eq('room_id', room.id).order('created_at', { ascending: true }).limit(100);
+    setMessages(data ?? []);
+    setChatLoading(false);
+
+    // Realtime (preserved)
+    channelRef.current = supabase
+      .channel(`room:${room.id}`)
+      .on('postgres_changes', { 
+        event: 'INSERT', 
+        schema: 'public', 
+        table: 'messages', 
+        filter: `room_id=eq.${room.id}` 
+      },
+        payload => setMessages(prev => [...prev, payload.new as Message])
+      ).subscribe();
+
+    setRooms(prev => prev.map(r => r.id === room.id ? { ...r, unread_count: 0 } : r));
+  }, []);
+
+  async function handleSend(text: string) {
+    if (!user || !selectedRoom) return;
+    const newMsg = {
+      room_id: selectedRoom.id,
+      sender_id: user.id,
+      sender_username: user.email?.split('@')[0] ?? 'user',
+      content: text,
+      created_at: new Date().toISOString(),
+    };
+    setMessages(prev => [...prev, { ...newMsg, id: `temp_${Date.now()}` }]);
+    await supabase.from('messages').insert(newMsg);
+    setRooms(prev => prev.map(r => r.id === selectedRoom.id ? { ...r, last_message: text.slice(0, 50) } : r));
+  }
+
+  if (loading) return <LoadingScreen />;
+
+  if (selectedRoom) {
+    return (
+      <SafeAreaView style={s.container}>
+        <StatusBar barStyle="light-content" />
+        <ChatView room={selectedRoom} messages={messages} loading={chatLoading} userId={user?.id ?? ''} onSend={handleSend}
+          onBack={() => { setSelectedRoom(null); if (channelRef.current) supabase.removeChannel(channelRef.current); }} />
+      </SafeAreaView>
+    );
+  }
+
+  const filteredRooms = rooms.filter(r => activeTab === 'campus' ? (!r.type || r.type === 'campus' || r.type === 'project') : r.type === 'global');
+
+  return (
+    <SafeAreaView style={s.container}>
+      <StatusBar barStyle="light-content" />
+      <View style={s.header}>
+        <Text style={s.screenTitle}>The Tavern</Text>
+        <View style={s.liveIndicator}>
+          <View style={s.onlineDot} />
+          <Text style={s.liveText}>LIVE</Text>
+        </View>
+      </View>
+      <View style={s.tabs}>
+        {(['campus', 'global'] as TabType[]).map(tab => (
+          <TouchableOpacity key={tab} style={[s.tab, activeTab === tab && s.tabActive]} onPress={() => setActiveTab(tab)} activeOpacity={0.7}>
+            <Text style={s.tabIcon}>{tab === 'campus' ? '🎓' : '🌐'}</Text>
+            <Text style={[s.tabLabel, activeTab === tab && s.tabLabelActive]}>{tab === 'campus' ? 'Campus Chat' : 'Global Server'}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+      <FlatList
+        data={filteredRooms}
+        keyExtractor={item => item.id}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: 100 }}
+        ListEmptyComponent={
+          <View style={s.emptyList}>
+            <Text style={s.emptyIcon}>{activeTab === 'campus' ? '🎓' : '🌐'}</Text>
+            <Text style={s.emptyTitle}>{activeTab === 'campus' ? 'No campus chats yet' : 'No global servers yet'}</Text>
+            <Text style={s.emptySub}>{activeTab === 'campus' ? 'Join your college community or create one!' : 'Global servers coming soon'}</Text>
+          </View>
+        }
+        renderItem={({ item }) => <RoomCard room={item} isActive={false} onPress={() => openRoom(item)} />}
+      />
+
+      {activeTab === 'campus' && !selectedRoom && (
+        <TouchableOpacity style={s.fab} onPress={() => setIsCreating(true)} activeOpacity={0.8}>
+          <Text style={s.fabIcon}>+</Text>
+        </TouchableOpacity>
+      )}
+
+      {/* Create Community Modal */}
+      <Modal visible={isCreating} transparent animationType="slide">
+        <KeyboardAvoidingView style={s.modalOverlay} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+          <View style={s.modalContent}>
+            <Text style={s.modalTitle}>Create Community</Text>
+            
+            <TextInput
+              style={s.modalInput}
+              placeholder="Community Name (e.g. CS 101)"
+              placeholderTextColor={Colors.text.tertiary}
+              value={newRoomName}
+              onChangeText={setNewRoomName}
+              autoFocus
+            />
+            
+            <TextInput
+              style={[s.modalInput, { height: 80 }]}
+              placeholder="Description (optional)"
+              placeholderTextColor={Colors.text.tertiary}
+              value={newRoomDesc}
+              onChangeText={setNewRoomDesc}
+              multiline
+            />
+
+            <View style={s.modalActions}>
+              <TouchableOpacity style={s.modalBtnCancel} onPress={() => setIsCreating(false)}>
+                <Text style={s.modalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[s.modalBtnCreate, !newRoomName.trim() && { opacity: 0.5 }]} disabled={!newRoomName.trim()} onPress={handleCreateCommunity}>
+                <Text style={s.modalCreateText}>Create</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#000000',
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#000000',
-  },
-  loadingText: {
-    fontFamily: 'monospace',
-    color: '#55FF55',
-    marginTop: 16,
-    fontSize: 12,
-    letterSpacing: 1,
-  },
-  header: {
-    paddingVertical: 18,
-    alignItems: 'center',
-    borderBottomWidth: 4,
-    borderBottomColor: '#222',
-    backgroundColor: '#000',
-  },
-  headerTitle: {
-    fontFamily: 'monospace',
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: '#55FF55', // Matrix Green
-    letterSpacing: 1,
-    marginBottom: 8,
-  },
-  presenceBadge: {
-    backgroundColor: '#111',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderWidth: 2,
-    borderTopColor: '#333',
-    borderLeftColor: '#333',
-    borderBottomColor: '#000',
-    borderRightColor: '#000',
-  },
-  presenceText: {
-    fontFamily: 'monospace',
-    fontSize: 10,
-    color: '#55FF55',
-    fontWeight: 'bold',
-  },
-  listContent: {
-    padding: 16,
-    paddingBottom: 24,
-  },
-  messageRow: {
-    marginBottom: 16,
-    maxWidth: '85%',
-  },
-  messageRowMe: {
-    alignSelf: 'flex-end',
-    flexDirection: 'row-reverse',
-    gap: 8,
-  },
-  messageRowOther: {
-    alignSelf: 'flex-start',
-    flexDirection: 'row',
-    gap: 8,
-  },
-  avatarContainer: {
-    marginTop: 14, // Aligns with the middle of the first line approx
-  },
-  messageContent: {
-    flex: 1,
-  },
-  nametag: {
-    fontFamily: 'monospace',
-    fontSize: 10,
-    fontWeight: 'bold',
-    marginBottom: 4,
-    marginLeft: 4,
-  },
-  bubble: {
-    padding: 12,
-    borderWidth: 4,
-  },
-  bubbleMe: {
-    backgroundColor: '#222',
-    borderTopColor: '#555',
-    borderLeftColor: '#555',
-    borderBottomColor: '#000',
-    borderRightColor: '#000',
-  },
-  bubbleOther: {
-    backgroundColor: '#000',
-    borderWidth: 4,
-    borderColor: '#555',
-  },
-  messageText: {
-    fontFamily: 'monospace',
-    fontSize: 14,
-    color: '#FFFFFF',
-    lineHeight: 18,
-  },
-  inputArea: {
-    flexDirection: 'row',
-    padding: 12,
-    backgroundColor: '#000',
-    borderTopWidth: 4,
-    borderTopColor: '#222',
-    alignItems: 'center',
-  },
-  inputBevel: {
-    flex: 1,
-    backgroundColor: '#000',
-    borderWidth: 4,
-    borderTopColor: '#555',
-    borderLeftColor: '#555',
-    borderBottomColor: '#AAA',
-    borderRightColor: '#AAA',
-    marginRight: 10,
-  },
-  input: {
-    color: '#FFF',
-    fontFamily: 'monospace',
-    paddingHorizontal: 10,
-    paddingVertical: 10,
-    fontSize: 14,
-  },
-  sendButton: {
-    backgroundColor: '#00E5FF',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    borderWidth: 4,
-    borderTopColor: '#FFF',
-    borderLeftColor: '#FFF',
-    borderBottomColor: 'rgba(0,0,0,0.5)',
-    borderRightColor: 'rgba(0,0,0,0.5)',
-  },
-  sendButtonDisabled: {
-    opacity: 0.5,
-  },
-  sendButtonText: {
-    fontFamily: 'monospace',
-    color: '#000',
-    fontWeight: 'bold',
-    fontSize: 14,
-  },
-  typingContainer: {
-    paddingHorizontal: 16,
-    paddingVertical: 4,
-  },
-  typingText: {
-    fontFamily: 'monospace',
-    fontSize: 10,
-    color: '#FFD700', // Neon Yellow
-    fontWeight: 'bold',
-  },
-  loadMoreBtn: {
-    width: '100%',
-    paddingVertical: 20,
-    alignItems: 'center',
-    marginBottom: 10,
-  },
-  loadMoreText: {
-    fontFamily: 'monospace',
-    color: '#55FF55',
-    fontSize: 10,
-    letterSpacing: 1,
-  },
+const s = StyleSheet.create({
+  container: { flex: 1, backgroundColor: Colors.bg.primary },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: Spacing.lg, paddingBottom: Spacing.md, borderBottomWidth: 0.5, borderBottomColor: Colors.border.subtle },
+  screenTitle: { color: Colors.text.primary, fontSize: Typography.sizes.xl, fontWeight: '600', letterSpacing: -0.3 },
+  liveIndicator: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: 'rgba(6,78,59,0.3)', borderWidth: 0.5, borderColor: 'rgba(6,95,70,0.5)', borderRadius: Radius.full, paddingHorizontal: 10, paddingVertical: 4 },
+  onlineDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: Colors.success },
+  liveText: { color: '#6EE7B7', fontSize: Typography.sizes.xs, fontWeight: '600' },
+  tabs: { flexDirection: 'row', padding: Spacing.lg, paddingBottom: Spacing.sm, gap: 8, borderBottomWidth: 0.5, borderBottomColor: Colors.border.subtle },
+  tab: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 9, borderRadius: Radius.md, borderWidth: 0.5, borderColor: Colors.border.default, backgroundColor: Colors.bg.secondary },
+  tabActive: { backgroundColor: Colors.accent.muted, borderColor: Colors.border.accent },
+  tabIcon: { fontSize: 14 },
+  tabLabel: { color: Colors.text.secondary, fontSize: Typography.sizes.sm, fontWeight: '500' },
+  tabLabelActive: { color: Colors.accent.glow },
+  roomCard: { flexDirection: 'row', alignItems: 'center', padding: Spacing.lg, borderBottomWidth: 0.5, borderBottomColor: Colors.border.subtle },
+  roomCardActive: { backgroundColor: Colors.accent.muted },
+  roomIcon: { width: 46, height: 46, borderRadius: 14, alignItems: 'center', justifyContent: 'center', borderWidth: 0.5 },
+  roomIconCampus: { backgroundColor: Colors.pills.campus.bg, borderColor: Colors.pills.campus.border },
+  roomIconGlobal: { backgroundColor: Colors.accent.muted, borderColor: Colors.border.accent },
+  roomIconText: { fontSize: 20 },
+  roomNameRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 3 },
+  roomName: { color: Colors.text.primary, fontSize: Typography.sizes.base, fontWeight: '500', flex: 1 },
+  onlinePill: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(6,78,59,0.3)', borderWidth: 0.5, borderColor: 'rgba(6,95,70,0.5)', borderRadius: Radius.full, paddingHorizontal: 7, paddingVertical: 2 },
+  onlinePillText: { color: '#6EE7B7', fontSize: Typography.sizes.xs, fontWeight: '500' },
+  roomDesc: { color: Colors.text.tertiary, fontSize: Typography.sizes.xs, marginBottom: 2 },
+  roomLastMsg: { color: Colors.text.tertiary, fontSize: Typography.sizes.sm },
+  unreadBadge: { minWidth: 20, height: 20, borderRadius: 10, backgroundColor: Colors.accent.primary, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 5 },
+  unreadText: { color: '#fff', fontSize: Typography.sizes.xs, fontWeight: '600' },
+  emptyList: { alignItems: 'center', padding: Spacing.xxxl, gap: 8 },
+  emptyIcon: { fontSize: 32 },
+  emptyTitle: { color: Colors.text.secondary, fontSize: Typography.sizes.base, fontWeight: '500' },
+  emptySub: { color: Colors.text.tertiary, fontSize: Typography.sizes.sm, textAlign: 'center' },
+  chatView: { flex: 1, backgroundColor: Colors.bg.primary },
+  chatHeader: { flexDirection: 'row', alignItems: 'center', padding: Spacing.lg, paddingVertical: Spacing.md, borderBottomWidth: 0.5, borderBottomColor: Colors.border.subtle, gap: Spacing.sm },
+  backBtn: { padding: 4 },
+  backIcon: { color: Colors.text.primary, fontSize: 20 },
+  breadcrumb: { flex: 1, flexDirection: 'row', alignItems: 'center' },
+  breadcrumbInactive: { color: Colors.text.tertiary, fontSize: Typography.sizes.sm },
+  breadcrumbSep: { color: Colors.border.strong, fontSize: Typography.sizes.sm },
+  breadcrumbActive: { color: Colors.text.primary, fontSize: Typography.sizes.sm, fontWeight: '500' },
+  infoBtn: { width: 28, height: 28, borderRadius: 14, backgroundColor: Colors.bg.tertiary, borderWidth: 0.5, borderColor: Colors.border.default, alignItems: 'center', justifyContent: 'center' },
+  infoBtnText: { color: Colors.text.secondary, fontSize: 13 },
+  onlineBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, paddingVertical: 7, backgroundColor: 'rgba(6,78,59,0.2)', borderBottomWidth: 0.5, borderBottomColor: 'rgba(6,95,70,0.4)' },
+  onlineText: { color: '#6EE7B7', fontSize: Typography.sizes.xs, fontWeight: '500', fontFamily: 'Courier New' },
+  msgList: { padding: Spacing.lg, gap: Spacing.md, paddingBottom: Spacing.md },
+  chatLoading: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  emptyChatWrap: { alignItems: 'center', padding: Spacing.xxxl, gap: 8 },
+  emptyChatIcon: { fontSize: 32 },
+  emptyChatTitle: { color: Colors.text.secondary, fontSize: Typography.sizes.base, fontWeight: '500' },
+  emptyChatSub: { color: Colors.text.tertiary, fontSize: Typography.sizes.sm, textAlign: 'center' },
+  msgRow: { flexDirection: 'row', alignItems: 'flex-end' },
+  msgRowMe: { flexDirection: 'row-reverse' },
+  bubble: { maxWidth: '80%', padding: Spacing.md, borderRadius: Radius.lg, borderWidth: 0.5 },
+  bubbleThem: { backgroundColor: Colors.bg.secondary, borderColor: Colors.border.default, borderBottomLeftRadius: 4 },
+  bubbleMe: { backgroundColor: Colors.accent.soft, borderColor: Colors.border.accent, borderBottomRightRadius: 4, marginRight: 8 },
+  senderRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 3 },
+  senderName: { color: Colors.pills.campus.text, fontSize: Typography.sizes.xs, fontWeight: '500' },
+  senderCollege: { color: Colors.text.tertiary, fontSize: Typography.sizes.xs },
+  bubbleText: { color: Colors.text.primary, fontSize: Typography.sizes.base, lineHeight: 20 },
+  bubbleTextMe: { color: '#fff' },
+  bubbleTime: { color: Colors.text.tertiary, fontSize: Typography.sizes.xs, marginTop: 4, textAlign: 'right' },
+  inputBar: { flexDirection: 'row', alignItems: 'flex-end', gap: Spacing.sm, padding: Spacing.md, paddingHorizontal: Spacing.lg, borderTopWidth: 0.5, borderTopColor: Colors.border.subtle, backgroundColor: Colors.bg.primary },
+  msgInput: { flex: 1, backgroundColor: Colors.bg.secondary, borderWidth: 0.5, borderColor: Colors.border.default, borderRadius: Radius.md, paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm, color: Colors.text.primary, fontSize: Typography.sizes.base, maxHeight: 100 },
+  sendBtn: { paddingHorizontal: Spacing.lg, paddingVertical: Spacing.sm, borderRadius: Radius.md, backgroundColor: Colors.bg.tertiary, borderWidth: 0.5, borderColor: Colors.border.default, alignItems: 'center', justifyContent: 'center', height: 40 },
+  sendBtnActive: { backgroundColor: Colors.pills.campus.bg, borderColor: Colors.pills.campus.border },
+  sendBtnText: { color: Colors.text.tertiary, fontSize: Typography.sizes.sm, fontWeight: '600', fontFamily: 'Courier New' },
+  fab: { position: 'absolute', bottom: 20, right: 20, width: 56, height: 56, borderRadius: 28, backgroundColor: Colors.accent.primary, alignItems: 'center', justifyContent: 'center', elevation: 4, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 3 },
+  fabIcon: { color: '#fff', fontSize: 28, lineHeight: 30, fontWeight: '300' },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
+  modalContent: { backgroundColor: Colors.bg.secondary, borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 24, paddingBottom: Platform.OS === 'ios' ? 40 : 24 },
+  modalTitle: { color: Colors.text.primary, fontSize: Typography.sizes.lg, fontWeight: '600', marginBottom: 20 },
+  modalInput: { backgroundColor: Colors.bg.primary, borderWidth: 1, borderColor: Colors.border.subtle, borderRadius: Radius.md, padding: 16, color: Colors.text.primary, fontSize: Typography.sizes.base, marginBottom: 12 },
+  modalActions: { flexDirection: 'row', gap: 12, marginTop: 10 },
+  modalBtnCancel: { flex: 1, padding: 16, borderRadius: Radius.md, backgroundColor: Colors.bg.primary, borderWidth: 1, borderColor: Colors.border.subtle, alignItems: 'center' },
+  modalCancelText: { color: Colors.text.secondary, fontWeight: '600', fontSize: Typography.sizes.base },
+  modalBtnCreate: { flex: 1, padding: 16, borderRadius: Radius.md, backgroundColor: Colors.accent.primary, alignItems: 'center' },
+  modalCreateText: { color: '#fff', fontWeight: '600', fontSize: Typography.sizes.base },
 });

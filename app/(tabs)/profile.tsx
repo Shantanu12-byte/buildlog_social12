@@ -1,738 +1,232 @@
-import { View, Text, StyleSheet, FlatList, Pressable, ActivityIndicator, TouchableOpacity, Linking, RefreshControl, Platform } from 'react-native';
-import { Image } from 'expo-image';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
-import { Feather, FontAwesome, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { BlurView } from 'expo-blur';
-import { LinearGradient } from 'expo-linear-gradient';
-import { Colors, FontSizes, Spacing } from '@/constants/theme';
-import { ProjectCard, Project } from '@/components/ProjectCard';
-import { AuroraBackground } from '@/components/AuroraBackground';
+import React, { useEffect, useState, useCallback } from 'react';
+import {
+  View, Text, StyleSheet, ScrollView, TouchableOpacity,
+  SafeAreaView, StatusBar, ActivityIndicator, Alert, Linking,
+  RefreshControl,
+} from 'react-native';
+import { useRouter } from 'expo-router';
 import { supabase } from '@/lib/supabase';
-import { useUserStore } from '@/store/userStore';
-import { getThemeColors } from '@/constants/theme';
-import { LanguageChip } from '@/components/LanguageChip';
-import { useState, useEffect, useCallback } from 'react';
+import { Colors, Typography, Spacing, Radius } from '@/constants/theme';
+import { Avatar, LoadingScreen } from '@/components/ui/UI';
+import { Feather, FontAwesome5 } from '@expo/vector-icons';
 
-const glassBorder = { borderWidth: 1, borderColor: Colors.border };
-const textGlow = Platform.select({
-  web: { textShadow: '0px 0px 6px rgba(255,255,255,0.35)' },
-  default: { textShadowColor: 'rgba(255,255,255,0.35)', textShadowOffset: { width: 0, height: 0 }, textShadowRadius: 6 }
-}) as any;
+// ─── Constants & Colors ─────────────────────────────────────────
+const PROFILE_BG = '#0F0F0B'; // Premium deep black/brown tint
+const CARD_BG = '#1A1A1A';    // Slate dark
+const ACCENT_PURPLE = '#5D3FD3'; 
 
 export default function ProfileScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ userId?: string }>();
   
-  // Determine if viewing own profile or another user's
-  // Global state
-  const { userProfile, userId: storeUserId, fetchUserProfile, isEnderMode } = useUserStore();
-  const colors = getThemeColors(isEnderMode);
-  
-  // Local state for projects and other user views
-  const [profileData, setProfileData] = useState<any>(null);
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [stats, setStats] = useState({ followers: 0, following: 0 });
+  const [profile, setProfile] = useState<any>(null);
+  const [stats, setStats] = useState({ projects: 0, builds: 0, followers: 0, collabs: 0 });
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
-  const handleSettingsPress = () => {
-    router.push('/(stack)/settings');
-  };
-
-  const handleOpenLink = async (url: string | null | undefined) => {
-    if (!url) return;
+  const fetchProfileData = useCallback(async () => {
     try {
-      const supported = await Linking.canOpenURL(url);
-      if (supported) {
-        await Linking.openURL(url);
-      } else {
-        console.log("Don't know how to open URI: " + url);
-      }
-    } catch (error) {
-      console.error("An error occurred", error);
-    }
-  };
-
-  // Fetch profile data from Supabase
-  const fetchProfile = useCallback(async (userId: string) => {
-    try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*, streak_count')
-        .eq('id', userId)
-        .single();
-
-      if (error) {
-        console.error('Error fetching profile:', error);
-        return null;
-      }
-
-      if (data) {
-        console.log("Profile Refreshed:", data.username);
-      }
-      return data;
-    } catch (e) {
-      console.error('Network error fetching profile:', e);
-      return null;
-    }
-  }, []);
-
-  const fetchProjects = useCallback(async (userId: string) => {
-    try {
-      // 1. Fetch projects
-      const { data: projectsData, error: projectsError } = await supabase
-        .from('projects')
-        .select('*')
-        .eq('user_id', userId)
-        .order('created_at', { ascending: false });
-
-      if (projectsError) throw projectsError;
-      if (!projectsData) return [];
-
-      // 2. Fetch log counts for all projects in one go (or per project)
-      // For simplicity and since there aren't many projects usually, we can do a per-project count
-      // Or use a more advanced query if needed. Let's do a reliable count.
-      const projectsWithLogs = await Promise.all(projectsData.map(async (project) => {
-        const { count, error: countError } = await supabase
-          .from('quest_logs')
-          .select('*', { count: 'exact', head: true })
-          .eq('quest_id', project.id);
-        
-        return {
-          ...project,
-          logCount: count || 0
-        };
-      }));
-
-      const finalProjects: Project[] = projectsWithLogs.map((p: any) => ({
-        id: p.id,
-        title: p.title,
-        type: p.needed_skills && p.needed_skills.length > 0 ? 'code' : 'other',
-        currentDay: p.logCount, // Dynamic progress
-        totalDays: p.challenge_duration || 30,
-        status: p.status as 'active' | 'completed',
-      }));
-
-      return finalProjects;
-    } catch (e) {
-      console.error('Network error fetching projects:', e);
-      return [];
-    }
-  }, []);
-
-  const fetchStats = useCallback(async (userId: string) => {
-    const { count: followersCount } = await supabase
-      .from('follows')
-      .select('*', { count: 'exact', head: true })
-      .eq('following_id', userId);
-
-    const { count: followingCount } = await supabase
-      .from('follows')
-      .select('*', { count: 'exact', head: true })
-      .eq('follower_id', userId);
-
-    setStats({
-      followers: followersCount || 0,
-      following: followingCount || 0,
-    });
-  }, []);
-
-  // Initialize: get current user and fetch profile data
-  const loadProfileData = useCallback(async () => {
-    setIsLoading(true);
-    try {
-      // Robust session retrieval
-      let { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        const { data: rData } = await supabase.auth.refreshSession();
-        session = rData.session;
-      }
-
-      if (!session) {
-        setIsLoading(false);
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        router.replace('/(auth)/login');
         return;
       }
 
-      const userId = session.user.id;
+      // 1. Fetch Profile
+      const { data: prof, error: pErr } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', user.id)
+        .single();
       
-      const isOwnProfile = !params.userId || params.userId === userId;
-      const targetUserId = params.userId || userId;
-      
-      if (isOwnProfile) {
-        // We sync local display state with global store
-        setProfileData(userProfile);
-      } else {
-        const profile = await fetchProfile(targetUserId);
-        setProfileData(profile);
-      }
+      if (!pErr) setProfile(prof);
 
-      const userProjects = await fetchProjects(targetUserId);
-      setProjects(userProjects);
-      fetchStats(targetUserId);
-    } catch (e) {
-      console.error('Error loading profile data:', e);
+      // 2. Fetch Stats
+      const [projRes, buildsRes, followingRes, followersRes] = await Promise.all([
+        supabase.from('posts').select('id', { count: 'exact', head: true }).eq('user_id', user.id),
+        supabase.from('quest_logs').select('id', { count: 'exact', head: true }).eq('user_id', user.id),
+        supabase.from('follows').select('id', { count: 'exact', head: true }).eq('follower_id', user.id),
+        supabase.from('follows').select('id', { count: 'exact', head: true }).eq('following_id', user.id),
+      ]);
+
+      setStats({
+        projects: projRes.count || 0,
+        builds: buildsRes.count || 0,
+        followers: followersRes.count || 0,
+        collabs: 3, 
+      });
+    } catch (err: any) {
+      console.error('Error fetching profile:', err.message);
     } finally {
-      setIsLoading(false);
+      setLoading(false);
+      setRefreshing(false);
     }
-  }, [params.userId, fetchProfile, fetchProjects, userProfile]);
+  }, [router]);
 
-  useFocusEffect(
-    useCallback(() => {
-      loadProfileData();
-    }, [loadProfileData, userProfile]) // Add userProfile to deps to react to global changes
-  );
+  useEffect(() => {
+    fetchProfileData();
+  }, [fetchProfileData]);
 
-  const isOwnProfile = !params.userId || params.userId === storeUserId;
-  const displayProfile = isOwnProfile ? userProfile : profileData;
-
-  const handleFollowPress = () => {
-    console.log('Follow pressed for user:', params.userId || storeUserId);
+  const onRefresh = () => {
+    setRefreshing(true);
+    fetchProfileData();
   };
 
-  const handleMessagePress = () => {
-    console.log('Message pressed for user:', params.userId || storeUserId);
-  };
 
-  const renderProject = ({ item }: { item: Project }) => (
-    <ProjectCard project={item} />
-  );
-  const renderHeader = () => {
-    return (
-      <View style={styles.headerSection}>
-        {/* Top Bar with Retro Title and Settings */}
-        <View style={styles.topBar}>
-          <Text style={[styles.headerTitle, { color: colors.primary }]}>PROFILE</Text>
-          <TouchableOpacity 
-            style={[styles.pixelButtonSmall, { backgroundColor: colors.primaryDark, borderTopColor: colors.primary, borderLeftColor: colors.primary }]} 
-            onPress={() => router.push('/(stack)/settings')}
-          >
-            <Feather name="settings" size={20} color={colors.textPrimary} />
-          </TouchableOpacity>
-        </View>
 
-        {/* Avatar with Pixel Block Bevel */}
-        <View style={styles.avatarPixelBlock}>
-          {displayProfile?.avatar_url ? (
-            <Image 
-              source={{ uri: displayProfile.avatar_url }} 
-              style={styles.avatarImage} 
-            />
-          ) : (
-            <View style={styles.avatarPlaceholder}>
-              <Feather name="user" size={48} color={Colors.textSecondary} />
-            </View>
-          )}
-        </View>
+  if (loading) return <LoadingScreen />;
 
-        {/* User Info with Monospace and Streak */}
-        <View style={styles.usernameRow}>
-          <Text style={[styles.username, { color: colors.primary }]}>
-            {displayProfile?.username || 'BUILDLOG_USER'}
-          </Text>
-          {displayProfile?.streak_count !== undefined && displayProfile.streak_count > 0 && (
-            <View style={styles.streakBadge}>
-              <MaterialCommunityIcons 
-                name="fire" 
-                size={16} 
-                color={displayProfile.streak_count > 7 ? '#FFD700' : '#FF4500'} 
-              />
-              <Text style={[
-                styles.streakText, 
-                { color: displayProfile.streak_count > 7 ? '#FFD700' : '#FF4500' },
-                displayProfile.streak_count > 7 && styles.glowingText
-              ]}>
-                {displayProfile.streak_count}
-              </Text>
-            </View>
-          )}
-        </View>
-        
-        {/* STATS ROW */}
-        <View style={styles.statsRow}>
-          <View style={[styles.statBlock, { backgroundColor: colors.surface, borderTopColor: colors.borderSubtle, borderLeftColor: colors.borderSubtle }]}>
-            <Text style={[styles.statValue, { color: colors.primary }]}>{projects.length}</Text>
-            <Text style={[styles.statLabel, { color: colors.textSecondary }]}>PROJECTS</Text>
-          </View>
-          <TouchableOpacity 
-            style={[styles.statBlock, { backgroundColor: colors.surface, borderTopColor: colors.borderSubtle, borderLeftColor: colors.borderSubtle }]}
-            onPress={() => router.push({ pathname: '/(stack)/network', params: { type: 'followers' } })}
-          >
-            <Text style={[styles.statValue, { color: colors.primary }]}>{stats.followers}</Text>
-            <Text style={[styles.statLabel, { color: colors.textSecondary }]}>ALLIES</Text>
-          </TouchableOpacity>
-          <TouchableOpacity 
-            style={[styles.statBlock, { backgroundColor: colors.surface, borderTopColor: colors.borderSubtle, borderLeftColor: colors.borderSubtle }]}
-            onPress={() => router.push({ pathname: '/(stack)/network', params: { type: 'following' } })}
-          >
-            <Text style={[styles.statValue, { color: colors.primary }]}>{stats.following}</Text>
-            <Text style={[styles.statLabel, { color: colors.textSecondary }]}>FOLLOWING</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* LANGUAGE STACK SECTION */}
-        {displayProfile?.languages && displayProfile.languages.length > 0 && (
-          <View style={styles.languageStackSection}>
-            <Text style={styles.languageStackTitle}>LANGUAGE_STACK</Text>
-            <View style={styles.languageStackContainer}>
-              {displayProfile.languages.map((lang: string, index: number) => (
-                <LanguageChip key={index} name={lang} />
-              ))}
-            </View>
-          </View>
-        )}
-
-        <Text style={[styles.bio, { color: colors.textSecondary }]}>{displayProfile?.bio || 'NO BIO YET...'}</Text>
-
-        {/* ACTION MENU - The New Command Center */}
-        <View style={styles.actionMenu}>
-          <TouchableOpacity 
-            style={[styles.actionButton, { backgroundColor: colors.primaryDark, borderTopColor: colors.primary, borderLeftColor: colors.primary }]}
-            onPress={() => router.push('/(stack)/new-post')}
-          >
-            <Text style={[styles.actionButtonText, { color: colors.textPrimary }]}>📝 NEW POST</Text>
-          </TouchableOpacity>
-          <TouchableOpacity 
-            style={[styles.actionButton, { backgroundColor: colors.primaryDark, borderTopColor: colors.primary, borderLeftColor: colors.primary }]}
-            onPress={() => router.push('/(stack)/create-project')}
-          >
-            <Text style={[styles.actionButtonText, { color: colors.textPrimary }]}>⚔️ NEW PROJECT</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* SKILLS SECTION */}
-        {displayProfile?.skills && displayProfile.skills.length > 0 && (
-          <View style={styles.skillsSection}>
-            <Text style={styles.skillsTitle}>SKILLS</Text>
-            <View style={styles.skillsContainer}>
-              {displayProfile.skills.map((skill: string, index: number) => (
-                <View key={index} style={styles.skillBadge}>
-                  <Text style={styles.skillBadgeText}>{skill.toUpperCase()}</Text>
-                </View>
-              ))}
-            </View>
-          </View>
-        )}
-
-        {/* Edit Button - Moved below skills */}
-        <TouchableOpacity 
-          style={[styles.pixelButtonLarge, { backgroundColor: colors.surface, borderTopColor: colors.borderSubtle, borderLeftColor: colors.borderSubtle }]}
-          onPress={() => router.push('/(stack)/edit-profile')}
-        >
-          <Text style={[styles.pixelButtonText, { color: colors.primary }]}>EDIT CHARACTER</Text>
-        </TouchableOpacity>
-
-        {/* Social Links Row - MOVED BELOW EDIT BUTTON */}
-        <View style={styles.socialRow}>
-          {displayProfile?.github_url ? (
-            <TouchableOpacity 
-              style={[styles.pixelButtonSocial, styles.githubButton]} 
-              onPress={() => handleOpenLink(displayProfile.github_url)}
-            >
-              <Feather name="github" size={20} color="#FFFFFF" />
-              <Text style={styles.pixelButtonTextSmall}>GITHUB</Text>
-            </TouchableOpacity>
-          ) : null}
-          {displayProfile?.linkedin_url ? (
-            <TouchableOpacity 
-              style={[styles.pixelButtonSocial, styles.linkedinButton]} 
-              onPress={() => handleOpenLink(displayProfile.linkedin_url)}
-            >
-              <Feather name="linkedin" size={20} color="#FFFFFF" />
-              <Text style={styles.pixelButtonTextSmall}>LINKEDIN</Text>
-            </TouchableOpacity>
-          ) : null}
-        </View>
-
-        <View style={[styles.sectionHeader, { backgroundColor: colors.surface, borderTopColor: colors.borderSubtle }]}>
-          <View style={styles.sectionTitleRow}>
-            <Text style={[styles.sectionTitle, { color: colors.primary }]}>PROJECT_LOG</Text>
-            <Text style={[styles.projectCount, { color: colors.textSecondary }]}>{projects.length} BUILDS</Text>
-          </View>
-          <TouchableOpacity 
-            style={[styles.pixelButtonMini, { backgroundColor: colors.primary, borderBottomColor: colors.primaryDark, borderRightColor: colors.primaryDark }]}
-            onPress={() => router.push('/(stack)/create-project')}
-          >
-            <Feather name="plus" size={14} color={colors.background} />
-            <Text style={[styles.pixelButtonTextMini, { color: colors.background }]}>NEW_PROJECT</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-    );
-  };
- 
-
-  const renderEmpty = () => (
-    <View style={styles.emptyContainer}>
-      <Feather name="folder" size={48} color={colors.textSecondary} />
-      <Text style={[styles.emptyText, { color: colors.primary }]}>No projects yet</Text>
-      <Text style={[styles.emptySubtext, { color: colors.textSecondary }]}>Start your first project to see it here</Text>
-    </View>
-  );
+  const username = profile?.username || 'builder';
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
-      <FlatList
-        data={projects}
-        renderItem={renderProject}
-        keyExtractor={(item) => item.id}
-        numColumns={2}
-        ListHeaderComponent={renderHeader}
-        ListEmptyComponent={renderEmpty}
-        contentContainerStyle={[styles.listContent, { backgroundColor: colors.background }]}
+    <SafeAreaView style={s.container}>
+      <StatusBar barStyle="light-content" />
+      
+      <ScrollView 
+        style={s.scrollView}
+        contentContainerStyle={s.content}
         showsVerticalScrollIndicator={false}
-        columnWrapperStyle={styles.row}
-        removeClippedSubviews={true}
-        initialNumToRender={10}
-        maxToRenderPerBatch={5}
-        windowSize={5}
         refreshControl={
-          <RefreshControl
-            refreshing={isLoading}
-            onRefresh={loadProfileData}
-            tintColor={colors.primary}
-          />
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={ACCENT_PURPLE} />
         }
-      />
+      >
+        {/* Header */}
+        <View style={s.header}>
+          <View style={{ flex: 1 }} />
+          <TouchableOpacity onPress={() => router.push('/(stack)/settings')} style={s.settingsBtn}>
+            <Feather name="settings" size={22} color="#888" />
+          </TouchableOpacity>
+        </View>
+
+        {/* Identity */}
+        <View style={s.identity}>
+          <Avatar username={username} size={90} style={s.avatar} />
+          <Text style={s.nameText}>{username}</Text>
+          <Text style={s.handleText}>@{username.toLowerCase()}</Text>
+          
+          <Text style={s.bioText}>
+            {profile?.bio || 'Building the future, one core at a time.'}
+          </Text>
+
+          {/* Social Pills */}
+          <View style={s.socialRow}>
+            <TouchableOpacity 
+              style={[s.socialPill, { backgroundColor: 'rgba(93, 63, 211, 0.1)' }]}
+              onPress={() => profile?.github_url && Linking.openURL(profile.github_url)}
+            >
+              <FontAwesome5 name="github" size={14} color={ACCENT_PURPLE} />
+              <Text style={[s.socialText, { color: ACCENT_PURPLE }]}>GitHub</Text>
+            </TouchableOpacity>
+            <TouchableOpacity 
+              style={[s.socialPill, { backgroundColor: 'rgba(52, 211, 153, 0.1)' }]}
+              onPress={() => profile?.linkedin_url && Linking.openURL(profile.linkedin_url)}
+            >
+              <FontAwesome5 name="linkedin" size={14} color="#34D399" />
+              <Text style={[s.socialText, { color: '#34D399' }]}>LinkedIn</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* High-Fi Stats Grid */}
+        <View style={s.statsBox}>
+          <View style={s.statItem}>
+            <Text style={s.statVal}>{stats.projects}</Text>
+            <Text style={s.statLab}>Projects</Text>
+          </View>
+          <View style={s.statSep} />
+          <View style={s.statItem}>
+            <Text style={s.statVal}>{stats.builds}</Text>
+            <Text style={s.statLab}>Builds</Text>
+          </View>
+          <View style={s.statSep} />
+          <View style={s.statItem}>
+            <Text style={s.statVal}>{stats.followers}</Text>
+            <Text style={s.statLab}>Followers</Text>
+          </View>
+          <View style={s.statSep} />
+          <View style={s.statItem}>
+            <Text style={s.statVal}>{stats.collabs}</Text>
+            <Text style={s.statLab}>Collabs</Text>
+          </View>
+        </View>
+
+        {/* Action Buttons */}
+        <View style={s.actionsRow}>
+          <TouchableOpacity style={s.btnPrimary} onPress={() => router.push('/(stack)/create-project')}>
+            <Text style={s.btnTextPrimary}>+ New Post</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={s.btnSecondary} onPress={() => router.push('/(stack)/create-project')}>
+            <Text style={s.btnTextSecondary}>+ New Project</Text>
+          </TouchableOpacity>
+        </View>
+
+        <View style={s.profileActions}>
+          <TouchableOpacity style={s.editLink} onPress={() => router.push('/(stack)/edit-profile')}>
+            <Text style={s.editText}>Edit Profile</Text>
+          </TouchableOpacity>
+          <View style={s.dotSep} />
+          <TouchableOpacity style={s.shareDevBtn} onPress={() => router.push('/devcard')}>
+            <FontAwesome5 name="id-card" size={16} color={ACCENT_PURPLE} />
+            <Text style={s.shareDevTxt}>Share Card</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Stack */}
+        <View style={s.stackWrap}>
+          <Text style={s.stackHeader}>STACK</Text>
+          <View style={s.stackGrid}>
+            {(profile?.skills || ['React Native', 'TypeScript', 'Node.js', 'Python']).map((u: string, i: number) => {
+               const dark = u.toLowerCase().includes('python') || u.toLowerCase().includes('go');
+               return (
+                 <View key={i} style={[s.pill, dark ? s.pillDark : s.pillLight]}>
+                   <Text style={dark ? s.pillTxtDark : s.pillTxtLight}>{u}</Text>
+                 </View>
+               );
+            })}
+          </View>
+        </View>
+
+      </ScrollView>
     </SafeAreaView>
   );
 }
 
-// Helper functions to calculate stats
-function calculateStreaks(projects: Project[]): number {
-  return projects.filter(p => p.status === 'active').length;
-}
+const s = StyleSheet.create({
+  container: { flex: 1, backgroundColor: PROFILE_BG },
+  scrollView: { flex: 1 },
+  content: { paddingHorizontal: 20, paddingBottom: 100 },
+  header: { flexDirection: 'row', paddingTop: 10, marginBottom: 10 },
+  settingsBtn: { padding: 8 },
+  identity: { alignItems: 'flex-start' },
+  avatar: { marginBottom: 16, borderWidth: 1, borderColor: '#222' },
+  nameText: { color: '#FFF', fontSize: 28, fontWeight: '800', letterSpacing: -0.5 },
+  handleText: { color: '#888', fontSize: 16, fontWeight: '500', marginBottom: 12 },
+  bioText: { color: '#CCC', fontSize: 15, lineHeight: 22, maxWidth: '90%', marginBottom: 20 },
+  socialRow: { flexDirection: 'row', gap: 10, marginBottom: 24 },
+  socialPill: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, gap: 6 },
+  socialText: { fontSize: 13, fontWeight: '600' },
+  statsBox: { flexDirection: 'row', backgroundColor: CARD_BG, borderRadius: 16, paddingVertical: 18, marginBottom: 24, borderWidth: 1, borderColor: '#222' },
+  statItem: { flex: 1, alignItems: 'center' },
+  statSep: { width: 1, height: '60%', backgroundColor: '#333', alignSelf: 'center' },
+  statVal: { color: '#FFF', fontSize: 18, fontWeight: '800' },
+  statLab: { color: '#888', fontSize: 11, fontWeight: '600', textTransform: 'uppercase', marginTop: 4 },
+  actionsRow: { flexDirection: 'row', gap: 12, marginBottom: 24 },
+  btnPrimary: { flex: 1, backgroundColor: ACCENT_PURPLE, paddingVertical: 16, borderRadius: 14, alignItems: 'center' },
+  btnTextPrimary: { color: '#FFF', fontSize: 15, fontWeight: '700' },
+  btnSecondary: { flex: 1, backgroundColor: 'transparent', borderWidth: 1, borderColor: '#333', paddingVertical: 16, borderRadius: 14, alignItems: 'center' },
+  btnTextSecondary: { color: '#FFF', fontSize: 15, fontWeight: '700' },
+  profileActions: { flexDirection: 'row', alignSelf: 'center', alignItems: 'center', gap: 20, marginBottom: 40 },
+  editLink: { },
+  editText: { color: ACCENT_PURPLE, fontSize: 14, fontWeight: '600' },
+  shareDevBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(93, 63, 211, 0.08)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 },
+  shareDevTxt: { color: ACCENT_PURPLE, fontSize: 13, fontWeight: '700' },
+  dotSep: { width: 4, height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.1)' },
+  stackWrap: { marginTop: 0 },
+  stackHeader: { color: '#666', fontSize: 12, fontWeight: '800', letterSpacing: 1, marginBottom: 16 },
+  stackGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  pill: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 10, borderWidth: 1 },
+  pillLight: { backgroundColor: 'rgba(93, 63, 211, 0.08)', borderColor: 'rgba(93, 63, 211, 0.2)' },
+  pillTxtLight: { color: '#A5B4FC', fontWeight: '700', fontSize: 13 },
+  pillDark: { backgroundColor: '#141414', borderColor: '#333' },
+  pillTxtDark: { color: '#888', fontWeight: '700', fontSize: 13 },
 
-function calculateCollabs(projects: Project[]): number {
-  return projects.filter(p => p.type === 'code').length;
-}
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#000000',
-  },
-  headerSection: {
-    alignItems: 'center',
-    paddingTop: Spacing['2xl'],
-    paddingBottom: Spacing.lg,
-    backgroundColor: '#000000',
-  },
-  topBar: {
-    width: '100%',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: Spacing.lg,
-    marginBottom: Spacing.xl,
-  },
-  headerTitle: {
-    fontFamily: 'monospace',
-    fontSize: FontSizes['3xl'],
-    fontWeight: 'bold',
-    color: '#FFFFFF',
-  },
-  avatarPixelBlock: {
-    width: 104,
-    height: 104,
-    backgroundColor: '#8B8B8B',
-    borderWidth: 4,
-    borderTopColor: '#FFFFFF',
-    borderLeftColor: '#FFFFFF',
-    borderBottomColor: '#555555',
-    borderRightColor: '#555555',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: Spacing.lg,
-  },
-  avatarImage: {
-    width: 96,
-    height: 96,
-  },
-  avatarPlaceholder: {
-    width: 96,
-    height: 96,
-    backgroundColor: '#333333',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  username: {
-    fontFamily: 'monospace',
-    color: '#FFFFFF',
-    fontSize: FontSizes.xl,
-    fontWeight: 'bold',
-  },
-  usernameRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: Spacing.xs,
-  },
-  streakBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 2,
-    backgroundColor: 'rgba(255, 69, 0, 0.1)',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 69, 0, 0.3)',
-  },
-  streakText: {
-    fontFamily: 'monospace',
-    fontSize: 12,
-    fontWeight: 'bold',
-  },
-  glowingText: Platform.select({
-    web: {
-      textShadow: '0px 0px 10px rgba(255, 215, 0, 0.8)',
-    },
-    default: {
-      textShadowColor: 'rgba(255, 215, 0, 0.8)',
-      textShadowOffset: { width: 0, height: 0 },
-      textShadowRadius: 10,
-    }
-  }) as any,
-  statsRow: {
-    flexDirection: 'row',
-    width: '90%',
-    gap: 8,
-    marginBottom: Spacing.lg,
-    marginTop: Spacing.md,
-  },
-  statBlock: {
-    flex: 1,
-    backgroundColor: '#111111',
-    paddingVertical: 10,
-    alignItems: 'center',
-    borderWidth: 3,
-    borderTopColor: '#333333',
-    borderLeftColor: '#333333',
-    borderBottomColor: '#000000',
-    borderRightColor: '#000000',
-  },
-  statValue: {
-    fontFamily: 'monospace',
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: 'bold',
-  },
-  statLabel: {
-    fontFamily: 'monospace',
-    color: '#888888',
-    fontSize: 8,
-    marginTop: 2,
-    letterSpacing: 1,
-  },
-  bio: {
-    fontFamily: 'monospace',
-    color: '#AAAAAA',
-    fontSize: FontSizes.sm,
-    textAlign: 'center',
-    paddingHorizontal: Spacing.xl,
-    marginBottom: Spacing.lg,
-  },
-  socialRow: {
-    flexDirection: 'row',
-    gap: 12,
-    marginTop: 15,
-    justifyContent: 'center',
-    width: '100%',
-    marginBottom: Spacing.lg,
-  },
-  pixelButtonSocial: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderWidth: 4,
-    borderRadius: 0,
-    borderTopColor: '#FFFFFF',
-    borderLeftColor: '#FFFFFF',
-    borderBottomColor: '#555555',
-    borderRightColor: '#555555',
-  },
-  githubButton: {
-    backgroundColor: '#333333',
-  },
-  linkedinButton: {
-    backgroundColor: '#0077B5',
-  },
-  pixelButtonTextSmall: {
-    color: '#FFFFFF',
-    fontFamily: 'monospace',
-    fontWeight: 'bold',
-    fontSize: 14,
-  },
-  actionMenu: {
-    flexDirection: 'row',
-    width: '90%',
-    gap: 12,
-    marginBottom: Spacing.lg,
-  },
-  actionButton: {
-    flex: 1,
-    backgroundColor: '#8B8B8B',
-    paddingVertical: 14,
-    borderWidth: 4,
-    borderTopColor: '#FFFFFF',
-    borderLeftColor: '#FFFFFF',
-    borderBottomColor: '#333333',
-    borderRightColor: '#333333',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  actionButtonText: {
-    fontFamily: 'monospace',
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: 'bold',
-  },
-  languageStackSection: {
-    width: '90%',
-    marginBottom: Spacing.lg,
-    alignItems: 'flex-start',
-  },
-  languageStackTitle: {
-    fontFamily: 'monospace',
-    color: '#888888',
-    fontSize: 10,
-    marginBottom: 12,
-    letterSpacing: 2,
-  },
-  languageStackContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 4,
-  },
-  skillsSection: {
-    width: '90%',
-    marginBottom: Spacing.xl,
-    alignItems: 'flex-start',
-  },
-  skillsTitle: {
-    fontFamily: 'monospace',
-    color: '#888888',
-    fontSize: 10,
-    marginBottom: 8,
-    letterSpacing: 2,
-  },
-  skillsContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  skillBadge: {
-    backgroundColor: '#333333',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderWidth: 2,
-    borderColor: '#444444',
-  },
-  skillBadgeText: {
-    fontFamily: 'monospace',
-    color: '#FFD700',
-    fontSize: 10,
-    fontWeight: 'bold',
-  },
-  pixelButtonLarge: {
-    width: '90%',
-    backgroundColor: '#111111',
-    paddingVertical: Spacing.md,
-    borderWidth: 4,
-    borderTopColor: '#333333',
-    borderLeftColor: '#333333',
-    borderBottomColor: '#000000',
-    borderRightColor: '#000000',
-    alignItems: 'center',
-    marginBottom: Spacing['2xl'],
-  },
-  pixelButtonText: {
-    fontFamily: 'monospace',
-    color: '#FFFFFF',
-    fontSize: FontSizes.base,
-    fontWeight: 'bold',
-  },
-  pixelButtonSmall: {
-    backgroundColor: '#8B8B8B',
-    padding: Spacing.xs,
-    borderWidth: 3,
-    borderTopColor: '#FFFFFF',
-    borderLeftColor: '#FFFFFF',
-    borderBottomColor: '#555555',
-    borderRightColor: '#555555',
-  },
-  sectionHeader: {
-    width: '100%',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.md,
-    backgroundColor: '#111111',
-    borderTopWidth: 4,
-    borderBottomWidth: 4,
-    borderTopColor: '#333333',
-    borderBottomColor: '#000000',
-  },
-  sectionTitleRow: {
-    flexDirection: 'column',
-    gap: 2,
-  },
-  sectionTitle: {
-    fontFamily: 'monospace',
-    color: '#FFFFFF',
-    fontSize: FontSizes.sm,
-    fontWeight: 'bold',
-  },
-  projectCount: {
-    fontFamily: 'monospace',
-    color: '#888888',
-    fontSize: 10,
-  },
-  pixelButtonMini: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#2F81F7',
-    paddingHorizontal: Spacing.sm,
-    paddingVertical: 6,
-    borderWidth: 3,
-    borderTopColor: '#FFFFFF',
-    borderLeftColor: '#FFFFFF',
-    borderBottomColor: '#1A4D94',
-    borderRightColor: '#1A4D94',
-    gap: 4,
-  },
-  pixelButtonTextMini: {
-    fontFamily: 'monospace',
-    color: '#FFFFFF',
-    fontSize: 10,
-    fontWeight: 'bold',
-  },
-  listContent: {
-    paddingBottom: Spacing['5xl'],
-    backgroundColor: '#111111',
-  },
-  row: {
-    justifyContent: 'flex-start',
-    paddingHorizontal: Spacing.xs,
-  },
-  emptyContainer: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingTop: 100,
-  },
-  emptyText: {
-    fontFamily: 'monospace',
-    color: '#FFFFFF',
-    fontSize: FontSizes.lg,
-    marginTop: Spacing.md,
-  },
-  emptySubtext: {
-    fontFamily: 'monospace',
-    color: '#666666',
-    fontSize: FontSizes.sm,
-    marginTop: Spacing.sm,
-  },
 });

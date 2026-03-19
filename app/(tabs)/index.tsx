@@ -1,716 +1,383 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  FlatList, 
-  RefreshControl, 
-  TouchableOpacity, 
-  ActivityIndicator,
-  Alert,
-  Modal,
-  Pressable
+import React, { useEffect, useState, useCallback } from 'react';
+import {
+  View, Text, FlatList, TouchableOpacity,
+  StyleSheet, RefreshControl, useWindowDimensions,
+  SafeAreaView, StatusBar, ActivityIndicator
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { Image } from 'expo-image';
-import { useRouter, useFocusEffect } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { supabase } from '@/lib/supabase';
-import { useUserStore } from '@/store/userStore';
-import { getThemeColors, FontSizes, Spacing } from '@/constants/theme';
+import { Colors, Typography, Spacing, Radius } from '@/constants/theme';
+import { FeedPostCard as PostCard, FeedPost as Post } from '@/components/FeedPostCard';
+import { LoadingScreen, EmptyState } from '@/components/ui/UI';
 import { Feather } from '@expo/vector-icons';
-import { getRelativeTime } from '@/lib/utils';
-import { AvatarBlock } from '@/components/AvatarBlock';
 
-export default function GlobalProjectFeed() {
+export default function FeedScreen() {
   const router = useRouter();
-  const [projects, setProjects] = useState<any[]>([]);
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
-  const { userProfile, isEnderMode } = useUserStore();
-  const colors = getThemeColors(isEnderMode);
-  const currentUserId = userProfile?.id || null;
+  const { width } = useWindowDimensions();
+  const isWeb = width > 768;
 
-  const [previewImage, setPreviewImage] = useState<string | null>(null);
+  const [posts, setPosts] = useState<Post[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [user, setUser] = useState<any>(null);
+  
+  const [page, setPage] = useState(0);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+  const PAGE_SIZE = 3;
 
-  // No longer need local session tracking here as it's handled by RootLayout -> UserStore
-
-  const fetchQuests = useCallback(async () => {
-    try {
-      const { data, error } = await supabase
-        .from('projects')
-        .select(`
-          *,
-          profiles:user_id (
-            username,
-            avatar_url
-          ),
-          project_comments(count)
-        `)
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-      setProjects(data || []);
-    } catch (error) {
-      console.error('Error fetching projects:', error);
-    } finally {
-      setIsLoading(false);
-      setIsRefreshing(false);
-    }
+  useEffect(() => {
+    fetchUser();
+    fetchPosts(true);
   }, []);
 
-  const handleCollab = async (projectId: string, projectTitle: string, creatorId: string) => {
-    if (!currentUserId) {
-      Alert.alert('ERROR', 'PLEASE_LOGIN_TO_JOIN_PROJECTS');
-      return;
+  async function fetchUser() {
+    const { data: { user } } = await supabase.auth.getUser();
+    setUser(user);
+  }
+
+  async function fetchPosts(reset = false) {
+    if (reset) {
+      setLoading(true);
+      setPage(0);
+      setHasMore(true);
+    } else {
+      if (!hasMore || loadingMore) return;
+      setLoadingMore(true);
     }
+    
+    const currentPage = reset ? 0 : page;
 
     try {
-      const { error } = await supabase
-        .from('discussions')
-        .insert({ 
-          project_id: projectId, 
-          user_id: currentUserId, 
-          message: `Hey! I'd love to collaborate on ${projectTitle}. Let's team up!` 
-        });
+      const { data, error } = await supabase
+        .from('posts')
+        .select('*, profiles:author_id(username, avatar_url)')
+        .order('gravity_score', { ascending: false })
+        .range(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE - 1);
 
       if (error) throw error;
       
-      await handleCollabNotification(projectId, projectTitle, creatorId); 
-      
-      Alert.alert("PROJECT ACCEPTED!", "Your collab request has been sent to the creator.");
-    } catch (error: any) {
-      console.error('Collab error:', error);
-      Alert.alert("QUEST_FAILED", error.message || "COULD_NOT_SEND_REQUEST");
-    }
-  };
-
-  const handleHype = async (item: any) => {
-    if (!currentUserId) {
-      Alert.alert('ERROR', 'PLEASE_LOGIN_TP_HYPE_PROJECTS');
-      return;
-    }
-
-    try {
-      console.log('⚡ HYPING_QUEST:', item.title);
-      
-      // 1. Check if already hyped (this is a simplified check for now)
-      // In a real app, you'd check a project_hypes table.
-      // For this demo, we'll just send the notification to the creator.
-      
-      const creatorId = item.user_id;
-      if (creatorId === currentUserId) return; // Don't hype yourself
-
-      // 2. Insert into notifications table
-      const { error: notifError } = await supabase
-        .from('notifications')
-        .insert({
-          user_id: creatorId,
-          type: 'hype',
-          sender_id: currentUserId,
-          project_id: item.id,
-          content: `NEW_TRANSMISSION: @${userProfile?.username || 'SYSTEM'} just HYPED your Project: ${item.title}!`
-        });
-
-      if (notifError) throw notifError;
-
-      // 3. Send Push Notification
-      const { data: creatorProfile } = await supabase
-        .from('profiles')
-        .select('expo_push_token')
-        .eq('id', creatorId)
-        .single();
-
-      if (creatorProfile?.expo_push_token) {
-        const { sendPushNotification } = require('@/lib/utils');
-        await sendPushNotification(
-          creatorProfile.expo_push_token,
-          '[ SYSTEM_ALERT ]',
-          `NEW_TRANSMISSION: @${userProfile?.username || 'builder'} just HYPED your Quest!`
-        );
+      if (data) {
+        const mapped = data.map((p: any) => ({
+          ...p,
+          username: p.profiles?.username || 'builder',
+          userAvatar: p.profiles?.avatar_url,
+        }));
+        setPosts(prev => reset ? mapped : [...prev, ...mapped]);
+        setHasMore(data.length === PAGE_SIZE);
+        setPage(currentPage + 1);
       }
-+
-      Alert.alert("PROJECT HYPED!", "Your enthusiasm has been transmitted to the builder.");
-    } catch (error: any) {
-      console.error('Hype error:', error);
-      Alert.alert("HYPER_SPACE_FAILURE", error.message || "COULD_NOT_PROCESS_HYPE");
+    } catch (err) {
+      console.error('fetchPosts error:', err);
+    } finally {
+      if (reset) setLoading(false);
+      setLoadingMore(false);
     }
-  };
+  }
 
-  const handleCollabNotification = async (projectId: string, projectTitle: string, creatorId: string) => {
-     try {
-       // 1. Notify creator in DB
-       await supabase.from('notifications').insert({
-         user_id: creatorId,
-         type: 'join_request',
-         sender_id: currentUserId,
-         project_id: projectId,
-         content: `NEW_TRANSMISSION: @${userProfile?.username || 'SYSTEM'} wants to JOIN your Quest: ${projectTitle}!`
-       });
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await fetchPosts(true);
+    setRefreshing(false);
+  }, []);
 
-       // 2. Push Notification
-       const { data: creatorProfile } = await supabase
-         .from('profiles')
-         .select('expo_push_token')
-         .eq('id', creatorId)
-         .single();
+  async function handleLike(postId: string) {
+    if (!user) return;
+    const post = posts.find(p => p.id === postId) as any;
+    if (!post) return;
 
-       if (creatorProfile?.expo_push_token) {
-         const { sendPushNotification } = require('@/lib/utils');
-         await sendPushNotification(
-           creatorProfile.expo_push_token,
-           '[ SYSTEM_ALERT ]',
-           `NEW_TRANSMISSION: @${userProfile?.username || 'builder'} wants to JOIN your Project!`
-         );
-       }
-     } catch (e) {
-       console.error('Notification error:', e);
-     }
-  };
+    const alreadyLiked = post.liked_by_user;
 
-  const hasFetched = useRef(false);
-  useEffect(() => {
-    if (!hasFetched.current) {
-      fetchQuests();
-      hasFetched.current = true;
+    setPosts(prev => prev.map(p => {
+      if (p.id === postId) {
+        return { 
+          ...p, 
+          liked_by_user: !alreadyLiked, 
+          cheers: (p.cheers ?? 0) + (alreadyLiked ? -1 : 1) 
+        } as any;
+      }
+      return p;
+    }));
+
+    if (alreadyLiked) {
+      await supabase
+        .from('likes')
+        .delete()
+        .match({ post_id: postId, user_id: user.id });
+    } else {
+      await supabase
+        .from('likes')
+        .insert({ post_id: postId, user_id: user.id });
     }
-  }, [fetchQuests]);
+  }
 
-  const onRefresh = () => {
-    setIsRefreshing(true);
-    fetchQuests();
-  };
+  function handleComment(postId: string) {
+    router.push(`/post/${postId}` as any);
+  }
 
-  const renderProjectCard = ({ item }: { item: any }) => {
-    const creator = item.profiles;
-    const progress = item.progress || 0;
-    const relativeTime = getRelativeTime(item.created_at);
-    
-    // Mock LVL badge logic
-    const lvl = Math.floor((item.id.charCodeAt(0) % 20) + 1);
+  if (loading) return <LoadingScreen />;
 
-    return (
-      <View 
-        style={[
-          styles.projectCard, 
-          { 
-            backgroundColor: '#1A1A1A', // Fixed dark gray for projects
-          }
-        ]}
-      >
-        {/* Top Right: Timestamp Badge */}
-        <View style={styles.timestampBadge}>
-          <Text style={styles.timestampText}>[ {relativeTime} ]</Text>
-        </View>
-
-        {/* 1. The Gamer Tag Header */}
-        <Pressable 
-          style={styles.gamerTagRow}
-          onPress={() => router.push({ pathname: '/user/[id]', params: { id: item.user_id } })}
-        >
-          <AvatarBlock 
-            url={creator?.avatar_url && !creator.avatar_url.startsWith('blob:') ? `${creator.avatar_url}?cb=${new Date().getTime()}` : null} 
-            username={creator?.username} 
-            size={40}
-            tier={item.profiles?.level || 'Default'}
-          />
-          <View>
-            <Text style={[styles.usernameText, { color: colors.accentGold }]}>
-              {creator?.username?.toUpperCase() || 'UNKNOWN_BUILDER'}
-            </Text>
-            <View style={styles.lvlBadge}>
-               <Text style={styles.lvlText}>LVL {lvl} ARCHITECT</Text>
-            </View>
-          </View>
-        </Pressable>
-
-        {/* 2. The Project Details */}
-        <TouchableOpacity 
-          activeOpacity={0.8}
-          onPress={() => router.push(`/project/${item.id}`)}
-          style={styles.projectBody}
-        >
-          <Text style={[styles.projectBranding, { color: '#FFFFFF' }]}>
-            [ PROJECT: {item.title?.toUpperCase()} ]
-          </Text>
-
-          {/* Project Image Capture Slot */}
-          <View style={styles.projectImageFrame}>
-            {item.image_url && !item.image_url.startsWith('blob:') ? (
-              <>
-                <Image source={{ uri: `${item.image_url}?cb=${new Date().getTime()}` }} style={styles.projectImage} />
-                <View style={styles.feedCrtOverlay}>
-                   {Array.from({ length: 20 }).map((_, i) => (
-                      <View key={i} style={styles.feedScanline} />
-                    ))}
-                </View>
-                <TouchableOpacity 
-                  style={styles.fullScreenBadge}
-                  onPress={() => setPreviewImage(item.image_url)}
-                >
-                  <Text style={styles.fullScreenText}>[ FULL_SCREEN ]</Text>
+  const renderFeed = () => (
+    <FlatList
+      data={posts}
+      keyExtractor={item => item.id}
+      showsVerticalScrollIndicator={false}
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={onRefresh}
+          tintColor={Colors.accent.primary}
+          colors={[Colors.accent.primary]}
+        />
+      }
+      ListHeaderComponent={() => (
+        <View>
+          {/* Trending Challenges Strip */}
+          <View style={s.challengeStrip}>
+            <Text style={s.stripTitle}>TRENDING CHALLENGES</Text>
+            <View style={s.challengeCards}>
+              {[
+                { title: 'Build REST API', count: 142, level: 'Beginner', color: Colors.pills.campus },
+                { title: 'Clone Netflix', count: 89, level: 'Mid', color: Colors.pills.challenge },
+                { title: 'E2EE Chat', count: 34, level: 'Hard', color: Colors.pills.building },
+              ].map((ch, i) => (
+                <TouchableOpacity key={i} style={s.challengeCard} activeOpacity={0.75}>
+                  <Text style={s.challengeTitle} numberOfLines={1}>{ch.title}</Text>
+                  <Text style={s.challengeCount}>{ch.count} building</Text>
+                  <View style={[s.levelPill, { backgroundColor: ch.color.bg, borderColor: ch.color.border }]}>
+                    <Text style={[s.levelText, { color: ch.color.text }]}>{ch.level}</Text>
+                  </View>
                 </TouchableOpacity>
-              </>
-            ) : (
-              <View style={styles.imagePlaceholder}>
-                 <Feather name="camera" size={32} color="#333" />
-                 <Text style={styles.placeholderLabel}>NO_SCAN_DATA</Text>
-              </View>
-            )}
-          </View>
-
-          <Text style={styles.descriptionText} numberOfLines={3}>
-            {item.description || 'NO_DETAILS_PROVIDED_BY_BUILDER...'}
-          </Text>
-
-          {/* Loot Box Tags */}
-          {item.needed_skills && item.needed_skills.length > 0 && (
-            <View style={styles.lootBoxContainer}>
-              {item.needed_skills.map((skill: string, index: number) => (
-                <View key={index} style={styles.lootBox}>
-                  <Text style={styles.lootText}>{skill.toUpperCase()}</Text>
-                </View>
               ))}
             </View>
-          )}
-        </TouchableOpacity>
-
-        {/* 3. The Health Bar (Progress) */}
-        <View style={styles.progressSection}>
-          <View style={styles.progressLabels}>
-             <Text style={styles.progressLabelText}>PROGRESS</Text>
-             <Text style={styles.progressLabelText}>{progress}%</Text>
-          </View>
-          <View style={styles.healthBarTrack}>
-             <View style={[styles.healthBarFill, { width: `${progress}%`, backgroundColor: colors.primary }]} />
           </View>
         </View>
-
-        {/* 4. The Action Buttons */}
-        <View style={styles.actionRow}>
-          <TouchableOpacity 
-            style={[styles.actionBtn, styles.hypeBtn, { borderColor: colors.surface }]}
-            onPress={() => handleHype(item)}
-          >
-            <Text style={styles.actionBtnText}>⚡ HYPE</Text>
-          </TouchableOpacity>
-
-          <View style={styles.commentCountBadge}>
-             <Feather name="message-square" size={12} color="#888" />
-             <Text style={styles.commentCountText}>
-               {item.project_comments?.[0]?.count || 0} COMMENTS
-             </Text>
-          </View>
-
-          {item.looking_for_collabs !== false && (
-            <TouchableOpacity 
-              style={[styles.actionBtn, styles.joinBtn, { backgroundColor: colors.accentEmerald, borderColor: colors.primary }]}
-              onPress={() => handleCollab(item.id, item.title, item.user_id)}
-            >
-              <Text style={[styles.actionBtnText, { color: colors.background }]}>⚔️ JOIN PROJECT</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-      </View>
-    );
-  };
-
-  return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-      <View style={[styles.header, { borderBottomColor: colors.surface, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }]}>
-        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-          <Image 
-            source={require('../../assets/developer_emblem.png')}
-            style={{ width: 16, height: 16, marginRight: 8 }}
-          />
-          <View>
-            <Text style={[styles.screenTitle, { color: colors.primary }]}>GLOBAL_PROJECTS</Text>
-            <Text style={[styles.subtitle, { color: colors.textSecondary }]}>WORLD_DISCOVERY_FEED</Text>
-          </View>
-        </View>
-        <TouchableOpacity 
-          onPress={() => router.push('/(tabs)/inbox')}
-          style={styles.headerActionBtn}
-        >
-          <Feather name="message-circle" size={28} color={colors.primary} />
-        </TouchableOpacity>
-      </View>
-
-      {isLoading && !isRefreshing ? (
-        <View style={styles.loadingCenter}>
-          <ActivityIndicator size="large" color="#FFFFFF" />
-          <Text style={styles.loadingText}>SCANNING_REALM...</Text>
-        </View>
-      ) : (
-        <FlatList
-          data={projects}
-          renderItem={renderProjectCard}
-          keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.listContent}
-          removeClippedSubviews={true}
-          initialNumToRender={10}
-          maxToRenderPerBatch={5}
-          windowSize={5}
-          refreshControl={
-            <RefreshControl
-              refreshing={isRefreshing}
-              onRefresh={onRefresh}
-              tintColor={colors.primary}
-            />
-          }
-          ListEmptyComponent={
-            <View style={styles.emptyState}>
-              <Feather name="package" size={48} color="#333333" />
-              <Text style={styles.emptyText}>NO_PROJECTS_FOUND</Text>
-            </View>
-          }
+      )}
+      ListEmptyComponent={
+        <EmptyState
+          title="No posts yet"
+          subtitle="Be the first to share what you're building"
+        />
+      }
+      renderItem={({ item }) => (
+        <PostCard
+          post={item}
+          onLikePress={handleLike}
+          onCommentPress={handleComment}
         />
       )}
+      onEndReached={() => fetchPosts()}
+      onEndReachedThreshold={0.5}
+      ListFooterComponent={
+        loadingMore ? (
+          <View style={{ padding: 20, alignItems: 'center' }}>
+            <ActivityIndicator color={Colors.accent.primary} />
+          </View>
+        ) : null
+      }
+    />
+  );
 
-      {/* Retro Image Preview Modal */}
-      <Modal
-        visible={!!previewImage}
-        transparent={true}
-        animationType="fade"
-        onRequestClose={() => setPreviewImage(null)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>[ HI_RES_CAPTURE_DATA ]</Text>
-              <TouchableOpacity onPress={() => setPreviewImage(null)} style={styles.closeBtn}>
-                <Text style={styles.closeBtnText}>[ X ]</Text>
-              </TouchableOpacity>
-            </View>
-            <Image 
-              source={{ uri: previewImage || undefined }} 
-              style={styles.modalImage}
-              resizeMode="contain"
-            />
-            <TouchableOpacity 
-              style={styles.footerClose} 
-              onPress={() => setPreviewImage(null)}
+  return (
+    <SafeAreaView style={s.container}>
+      <StatusBar barStyle="light-content" backgroundColor={Colors.bg.primary} />
+
+      {!isWeb && (
+        <View style={s.topBar}>
+          <Text style={s.logo}>build<Text style={{ color: Colors.accent.primary }}>log</Text></Text>
+          <View style={s.topBarRight}>
+            <TouchableOpacity
+              style={s.iconBtn}
+              onPress={() => router.push('/search' as any)}
             >
-              <Text style={styles.footerCloseText}>CLOSE_TERMINAL</Text>
+              <Feather name="search" size={18} color={Colors.text.secondary} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={s.iconBtn}
+              onPress={() => router.push('/(stack)/messages' as any)}
+            >
+              <Feather name="message-square" size={18} color={Colors.text.secondary} />
             </TouchableOpacity>
           </View>
         </View>
-      </Modal>
+      )}
+
+      {renderFeed()}
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
+const s = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: Colors.bg.primary,
   },
-  header: {
-    padding: Spacing.xl,
-    borderBottomWidth: 4,
+  topBar: {
     flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.md,
+    borderBottomWidth: 0.5,
+    borderBottomColor: Colors.border.subtle,
+    backgroundColor: Colors.bg.primary,
   },
-  headerActionBtn: {
-    padding: 10,
-    backgroundColor: '#111',
-    borderWidth: 3,
-    borderTopColor: '#555',
-    borderLeftColor: '#555',
-    borderBottomColor: '#000',
-    borderRightColor: '#000',
+  logo: {
+    fontSize: Typography.sizes.xl,
+    fontWeight: '600',
+    color: Colors.text.primary,
+    letterSpacing: -0.5,
   },
-  screenTitle: {
-    fontFamily: 'monospace',
-    fontSize: FontSizes['3xl'],
-    fontWeight: 'bold',
-    letterSpacing: 2,
-  },
-  subtitle: {
-    fontFamily: 'monospace',
-    fontSize: 10,
-    marginTop: 4,
-  },
-  listContent: {
-    padding: Spacing.xl,
-    paddingBottom: Spacing['5xl'],
-  },
-  projectCard: {
-    padding: 20,
-    borderWidth: 4,
-    borderTopColor: '#555555',
-    borderLeftColor: '#555555',
-    borderBottomColor: '#FFFFFF',
-    borderRightColor: '#FFFFFF',
-    marginBottom: 24,
-    position: 'relative',
-  },
-  timestampBadge: {
-    position: 'absolute',
-    top: 12,
-    right: 12,
-  },
-  timestampText: {
-    fontFamily: 'monospace',
-    fontSize: 8,
-    color: '#888',
-  },
-  gamerTagRow: {
+  topBarRight: {
     flexDirection: 'row',
+    gap: Spacing.sm,
+  },
+  iconBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: Colors.bg.secondary,
+    borderWidth: 0.5,
+    borderColor: Colors.border.default,
     alignItems: 'center',
-    marginBottom: 16,
-    gap: 12,
+    justifyContent: 'center',
   },
 
-  usernameText: {
-    fontFamily: 'monospace',
-    fontWeight: 'bold',
-    fontSize: 14,
+  // Stories
+  storiesContainer: {
+    borderBottomWidth: 0.5,
+    borderBottomColor: Colors.border.subtle,
+    backgroundColor: Colors.bg.primary,
   },
-  lvlBadge: {
-    marginTop: 2,
+  storiesList: {
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.md,
+    gap: Spacing.md,
   },
-  lvlText: {
-    fontFamily: 'monospace',
-    fontSize: 8,
-    color: '#888',
+  storyItem: {
+    alignItems: 'center',
+    gap: 5,
+    width: 52,
   },
-  projectBody: {
-    marginBottom: 20,
-  },
-  projectBranding: {
-    fontFamily: 'monospace',
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 8,
-  },
-  descriptionText: {
-    fontFamily: 'monospace',
-    fontSize: 12,
-    color: '#BBBBBB',
-    lineHeight: 20,
-    marginTop: 12,
-  },
-  projectImageFrame: {
-    width: '100%',
-    aspectRatio: 16 / 9,
-    backgroundColor: '#0A0A0A',
-    borderWidth: 4,
-    borderTopColor: '#333',
-    borderLeftColor: '#333',
-    borderBottomColor: '#555',
-    borderRightColor: '#555',
-    marginVertical: 12,
-    overflow: 'hidden',
+  storyRing: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    padding: 2,
+    backgroundColor: Colors.bg.tertiary,
+    borderWidth: 1.5,
+    borderColor: Colors.border.default,
+    alignItems: 'center',
     justifyContent: 'center',
-    alignItems: 'center',
   },
-  projectImage: {
-    width: '100%',
-    height: '100%',
+  storyRingActive: {
+    borderColor: Colors.accent.primary,
   },
-  feedCrtOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.03)',
+  storyName: {
+    color: Colors.text.tertiary,
+    fontSize: Typography.sizes.xs,
+    textAlign: 'center',
   },
-  feedScanline: {
-    height: 1,
-    width: '100%',
-    backgroundColor: '#000',
-    opacity: 0.1,
-    marginBottom: 8,
-  },
-  imagePlaceholder: {
-    alignItems: 'center',
-    gap: 8,
-  },
-  placeholderLabel: {
-    fontFamily: 'monospace',
-    fontSize: 8,
-    color: '#333',
-    letterSpacing: 1,
-  },
-  lootBoxContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginTop: 12,
-  },
-  lootBox: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderWidth: 2,
-    borderColor: '#333',
-    backgroundColor: '#000',
-    borderTopColor: '#555',
-    borderLeftColor: '#555',
-    borderBottomColor: '#222',
-    borderRightColor: '#222',
-  },
-  lootText: {
-    fontFamily: 'monospace',
-    fontSize: 8,
-    color: '#00FFFF',
-  },
-  progressSection: {
-    marginBottom: 20,
-  },
-  progressLabels: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+
+  // Challenge strip
+  challengeStrip: {
+    padding: Spacing.lg,
+    backgroundColor: Colors.bg.primary,
+    borderBottomWidth: 0.5,
+    borderBottomColor: Colors.border.subtle,
     marginBottom: 6,
   },
-  progressLabelText: {
-    fontFamily: 'monospace',
-    fontSize: 10,
-    color: '#888',
-    fontWeight: 'bold',
+  stripTitle: {
+    color: Colors.text.tertiary,
+    fontSize: Typography.sizes.xs,
+    fontWeight: '500',
+    letterSpacing: 0.8,
+    marginBottom: Spacing.sm,
   },
-  healthBarTrack: {
-    height: 12,
-    backgroundColor: '#000',
-    borderWidth: 2,
-    borderColor: '#333',
-  },
-  healthBarFill: {
-    height: '100%',
-  },
-  actionRow: {
+  challengeCards: {
     flexDirection: 'row',
-    gap: 12,
+    gap: 8,
   },
-  actionBtn: {
+  challengeCard: {
     flex: 1,
-    height: 48,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 4,
-    borderTopColor: '#FFF',
-    borderLeftColor: '#FFF',
-    borderBottomColor: '#000',
-    borderRightColor: '#000',
+    backgroundColor: Colors.bg.secondary,
+    borderWidth: 0.5,
+    borderColor: Colors.border.subtle,
+    borderRadius: Radius.md,
+    padding: Spacing.md,
   },
-  hypeBtn: {
-    backgroundColor: '#000',
+  challengeTitle: {
+    color: Colors.text.primary,
+    fontSize: Typography.sizes.sm,
+    fontWeight: '500',
+    marginBottom: 3,
   },
-  joinBtn: {
-    // Colors applied dynamically
+  challengeCount: {
+    color: Colors.text.tertiary,
+    fontSize: Typography.sizes.xs,
+    marginBottom: 6,
   },
-  actionBtnText: {
-    fontFamily: 'monospace',
-    fontSize: 12,
-    fontWeight: 'bold',
-    color: '#FFF',
+  levelPill: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: Radius.full,
+    borderWidth: 0.5,
   },
-  commentCountBadge: {
+  levelText: {
+    fontSize: Typography.sizes.xs,
+    fontWeight: '500',
+  },
+
+  // Web layout
+  webContainer: {
+    flex: 1,
+    flexDirection: 'row',
+    backgroundColor: Colors.bg.primary,
+  },
+  sidebar: {
+    width: 220,
+    backgroundColor: Colors.bg.primary,
+    borderRightWidth: 0.5,
+    borderRightColor: Colors.border.subtle,
+    padding: Spacing.xl,
+    paddingTop: 48,
+  },
+  sidebarItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 8,
+    gap: Spacing.md,
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.sm,
+    borderRadius: Radius.md,
+    marginBottom: 4,
   },
-  commentCountText: {
-    fontFamily: 'monospace',
-    fontSize: 8,
-    color: '#888',
-    fontWeight: 'bold',
+  sidebarIcon: {
+    fontSize: 18,
+    color: Colors.text.secondary,
+    width: 24,
+    textAlign: 'center',
   },
-  loadingCenter: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 12,
+  sidebarLabel: {
+    color: Colors.text.secondary,
+    fontSize: Typography.sizes.base,
   },
-  loadingText: {
-    fontFamily: 'monospace',
-    color: '#FFFFFF',
-    fontSize: 12,
-  },
-  emptyState: {
-    alignItems: 'center',
-    marginTop: 100,
-    gap: 16,
-  },
-  emptyText: {
-    fontFamily: 'monospace',
-    color: '#333333',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  fullScreenBadge: {
-    position: 'absolute',
-    bottom: 8,
-    right: 8,
-    backgroundColor: 'rgba(0,0,0,0.8)',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderWidth: 1,
-    borderColor: '#FFF',
-  },
-  fullScreenText: {
-    fontFamily: 'monospace',
-    fontSize: 8,
-    color: '#FFF',
-    fontWeight: 'bold',
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.95)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-  modalContent: {
-    width: '100%',
-    backgroundColor: '#1A1A1A',
-    borderWidth: 6,
-    borderTopColor: '#555',
-    borderLeftColor: '#555',
-    borderBottomColor: '#FFF',
-    borderRightColor: '#FFF',
-    padding: 10,
-  },
-  modalHeader: {
+  sidebarUser: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 10,
-    borderBottomWidth: 2,
-    borderBottomColor: '#333',
-    paddingBottom: 8,
+    gap: Spacing.sm,
+    marginTop: 'auto',
+    paddingTop: Spacing.xl,
+    borderTopWidth: 0.5,
+    borderTopColor: Colors.border.subtle,
   },
-  modalTitle: {
-    fontFamily: 'monospace',
-    fontSize: 10,
-    color: '#FFD700',
-    fontWeight: 'bold',
+  sidebarUserName: {
+    color: Colors.text.secondary,
+    fontSize: Typography.sizes.sm,
+    flex: 1,
   },
-  closeBtn: {
-    padding: 4,
-  },
-  closeBtnText: {
-    fontFamily: 'monospace',
-    color: '#FF5555',
-    fontWeight: 'bold',
-  },
-  modalImage: {
-    width: '100%',
-    aspectRatio: 16 / 9,
-    backgroundColor: '#000',
-  },
-  footerClose: {
-    marginTop: 15,
-    backgroundColor: '#333',
-    paddingVertical: 12,
-    alignItems: 'center',
-    borderWidth: 4,
-    borderTopColor: '#555',
-    borderLeftColor: '#555',
-    borderBottomColor: '#000',
-    borderRightColor: '#000',
-  },
-  footerCloseText: {
-    fontFamily: 'monospace',
-    color: '#FFF',
-    fontSize: 12,
-    fontWeight: 'bold',
+  webMain: {
+    flex: 1,
+    maxWidth: 680,
   },
 });

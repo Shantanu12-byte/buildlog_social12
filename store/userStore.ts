@@ -82,6 +82,7 @@ export const useUserStore = create<UserState>((set, get) => ({
       if (error) throw error;
     } catch (error) {
       console.error("updateUserProfile Error:", error);
+      throw error; // Re-throw for UI error handling
     }
   },
 

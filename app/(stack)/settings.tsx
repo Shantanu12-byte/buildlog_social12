@@ -22,8 +22,8 @@ export default function SettingsScreen() {
           Alert.alert('Error signing out', error.message);
         } else {
           clearUser();
-          // The onAuthStateChange listener in root _layout.tsx 
-          // will detect the session is null and auto-redirect to /login
+          // Force redirect to login to ensure the UI updates immediately
+          router.replace('/(auth)/login');
         }
       } catch (err: any) {
         Alert.alert('Error', 'An unexpected error occurred during sign out.');
@@ -76,7 +76,7 @@ export default function SettingsScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+        <TouchableOpacity style={styles.backButton} onPress={() => router.replace('/(tabs)/profile' as any)}>
           <Feather name="arrow-left" size={24} color={Colors.textPrimary} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Settings</Text>

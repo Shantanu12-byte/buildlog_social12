@@ -1,465 +1,372 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  FlatList, 
-  TouchableOpacity, 
-  ActivityIndicator, 
-  RefreshControl,
-  Pressable,
-  useWindowDimensions,
-  Platform,
-  ScrollView
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { router } from 'expo-router';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
+import { View, Text, StyleSheet, SafeAreaView, StatusBar, FlatList, TouchableOpacity, RefreshControl, TextInput, KeyboardAvoidingView, Platform, ActivityIndicator } from 'react-native';
+import { Colors, Spacing, Typography, Radius } from '@/constants/theme';
+import { Feather } from '@expo/vector-icons';
 import { supabase } from '@/lib/supabase';
-import { useUserStore } from '@/store/userStore';
-import { useChatStore } from '@/store/chatStore';
-import { Colors } from '@/constants/theme';
-import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
-import { Image } from 'expo-image';
+import { LoadingScreen, EmptyState, Avatar } from '@/components/ui/UI';
+import { useLocalSearchParams } from 'expo-router';
 
-// --- Sub-components ---
+interface SecretScroll {
+  id: string;
+  title: string;
+  content: string;
+  created_at: string;
+  is_read: boolean;
+  type: string;
+}
 
-const CyberAvatar = ({ url, username, size = 56, unread = false }: any) => {
-  const initials = username?.charAt(0).toUpperCase() || '?';
-  
-  return (
-    <View style={[styles.avatarContainer, { width: size, height: size }]}>
-      <View style={[styles.avatarBorder, { borderRadius: size / 2 }]}>
-        {url ? (
-          <Image 
-            source={{ uri: url }} 
-            style={[styles.avatarImage, { borderRadius: size / 2 - 2 }]} 
-            contentFit="cover"
-            transition={200}
-          />
-        ) : (
-          <View style={[styles.avatarPlaceholder, { borderRadius: size / 2 - 2 }]}>
-            <Text style={styles.avatarInitials}>{initials}</Text>
-          </View>
-        )}
-      </View>
-      {unread && <View style={styles.unreadPulse} />}
-    </View>
-  );
-};
+interface DMRoom {
+  id: string;
+  user1_id: string;
+  user2_id: string;
+  last_message?: string;
+  updated_at: string;
+  other_user?: {
+    id: string;
+    username: string;
+  };
+}
 
-const EmptyInbox = () => (
-  <View style={styles.emptyContainer}>
-    <View style={styles.scrollIconContainer}>
-      <MaterialCommunityIcons name="script-text-outline" size={100} color="#1A1A1A" />
-      <View style={styles.scrollLock}>
-        <Feather name="lock" size={32} color="#55FF55" />
-      </View>
-    </View>
-    <Text style={styles.emptyTitle}>THE_SECRET_SCROLL_IS_CLOSED</Text>
-    <Text style={styles.emptySub}>No encrypted transmissions found in the current sector.</Text>
-    <TouchableOpacity 
-      style={styles.whisperBtn}
-      onPress={() => router.push('/search')}
-    >
-      <Text style={styles.whisperBtnText}>[ START_A_SECRET_WHISPER ]</Text>
-    </TouchableOpacity>
-  </View>
-);
-
-// --- Main Component ---
+interface Message {
+  id: string;
+  room_id: string;
+  sender_id: string;
+  recipient_id?: string;
+  content: string;
+  created_at: string;
+}
 
 export default function InboxScreen() {
-  const { width } = useWindowDimensions();
-  const { userProfile } = useUserStore();
-  const { inbox, isLoading, fetchInbox, subscribeToMessages } = useChatStore();
-  const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
+  const { roomId, targetUserId } = useLocalSearchParams<{ roomId?: string, targetUserId?: string }>();
+  
+  const [activeTab, setActiveTab] = useState<'scrolls' | 'whispers'>('scrolls');
+  const [scrolls, setScrolls] = useState<SecretScroll[]>([]);
+  const [rooms, setRooms] = useState<DMRoom[]>([]);
+  const [selectedRoom, setSelectedRoom] = useState<DMRoom | null>(null);
+  const [messages, setMessages] = useState<Message[]>([]);
+  
+  const [loading, setLoading] = useState(true);
+  const [chatLoading, setChatLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [user, setUser] = useState<any>(null);
+  const [text, setText] = useState('');
 
-  const isDesktop = Platform.OS === 'web' && width > 768;
+  const channelRef = useRef<any>(null);
+  const flatRef = useRef<FlatList>(null);
+
+  const fetchUser = async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    setUser(user);
+    return user;
+  };
+
+  const fetchScrolls = async () => {
+    if (!user) return;
+    const { data, error } = await supabase
+      .from('notifications')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false });
+    if (!error) setScrolls(data || []);
+  };
+
+  const fetchRooms = async () => {
+    if (!user) return;
+    // Fetch DM rooms where user is either user1 or user2
+    const { data, error } = await supabase
+      .from('dm_rooms')
+      .select(`
+        *,
+        user1:profiles!user1_id(id, username),
+        user2:profiles!user2_id(id, username)
+      `)
+      .or(`user1_id.eq.${user.id},user2_id.eq.${user.id}`)
+      .order('updated_at', { ascending: false });
+
+    if (!error && data) {
+      const processedRooms = data.map((r: any) => ({
+        ...r,
+        other_user: r.user1_id === user.id ? r.user2 : r.user1
+      }));
+      setRooms(processedRooms);
+    }
+  };
+
+  const findOrCreateRoom = async (otherUserId: string) => {
+    if (!user) return null;
+    
+    // 1. Check if room exists
+    const { data: existing, error: checkError } = await supabase
+      .from('dm_rooms')
+      .select(`
+        *,
+        user1:profiles!user1_id(id, username),
+        user2:profiles!user2_id(id, username)
+      `)
+      .or(`and(user1_id.eq.${user.id},user2_id.eq.${otherUserId}),and(user1_id.eq.${otherUserId},user2_id.eq.${user.id})`)
+      .maybeSingle();
+
+    if (existing) {
+      const room = { ...existing, other_user: existing.user1_id === user.id ? existing.user2 : existing.user1 };
+      return room;
+    }
+
+    // 2. Create room
+    const { data: created, error: createError } = await supabase
+      .from('dm_rooms')
+      .insert({ user1_id: user.id, user2_id: otherUserId })
+      .select(`
+        *,
+        user1:profiles!user1_id(id, username),
+        user2:profiles!user2_id(id, username)
+      `)
+      .single();
+
+    if (created) {
+      return { ...created, other_user: created.user1_id === user.id ? created.user2 : created.user1 };
+    }
+    return null;
+  };
+
+  const init = async () => {
+    const u = await fetchUser();
+    if (u) {
+      await Promise.all([fetchScrolls(), fetchRooms()]);
+      
+      
+      if (roomId) {
+        setActiveTab('whispers');
+        // Find the room in the fetched list or fetch it specifically
+        const room = (await fetchRoomsAndReturn())?.find(r => r.id === roomId);
+        if (room) openRoom(room);
+      } else if (targetUserId) {
+        setActiveTab('whispers');
+        const room = await findOrCreateRoom(targetUserId);
+        if (room) openRoom(room);
+      }
+    }
+    setLoading(false);
+  };
+
+  const fetchRoomsAndReturn = async () => {
+    if (!user) return [];
+    const { data } = await supabase
+      .from('dm_rooms')
+      .select('*, user1:profiles!user1_id(id, username), user2:profiles!user2_id(id, username)')
+      .or(`user1_id.eq.${user.id},user2_id.eq.${user.id}`);
+    
+    if (data) {
+      const processed = data.map((r: any) => ({ ...r, other_user: r.user1_id === user.id ? r.user2 : r.user1 }));
+      setRooms(processed);
+      return processed;
+    }
+    return [];
+  };
 
   useEffect(() => {
-    if (userProfile?.id) {
-      fetchInbox(userProfile.id);
-      
-      const unsubscribe = subscribeToMessages(userProfile.id, () => {
-        fetchInbox(userProfile.id);
-      });
-      return unsubscribe;
-    }
-  }, [userProfile?.id]);
+    init();
+    return () => { if (channelRef.current) supabase.removeChannel(channelRef.current); };
+  }, [roomId]);
 
   const onRefresh = async () => {
-    if (userProfile?.id) {
-      setRefreshing(true);
-      await fetchInbox(userProfile.id);
-      setRefreshing(false);
-    }
+    setRefreshing(true);
+    await (activeTab === 'scrolls' ? fetchScrolls() : fetchRooms());
+    setRefreshing(false);
   };
 
-  const handleChatPress = (chat: any) => {
-    if (isDesktop) {
-      setSelectedChatId(chat.id);
-    } else {
-      router.push(`/(stack)/chat/${chat.id}`);
-    }
-  };
+  const openRoom = useCallback(async (room: DMRoom) => {
+    setSelectedRoom(room);
+    setChatLoading(true);
+    if (channelRef.current) supabase.removeChannel(channelRef.current);
 
-  const renderChatCard = ({ item }: { item: any }) => {
-    const isSelected = selectedChatId === item.id;
-    const date = new Date(item.timestamp);
-    const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const { data } = await supabase
+      .from('messages')
+      .select('*')
+      .eq('room_id', room.id)
+      .order('created_at', { ascending: true })
+      .limit(50);
+
+    setMessages(data || []);
+    setChatLoading(false);
+
+    channelRef.current = supabase
+      .channel(`dm:${room.id}`)
+      .on('postgres_changes', { 
+        event: 'INSERT', 
+        schema: 'public', 
+        table: 'messages', 
+        filter: `room_id=eq.${room.id}` 
+      },
+        payload => setMessages(prev => [...prev, payload.new as Message])
+      ).subscribe();
+  }, []);
+
+  const handleSend = async () => {
+    if (!text.trim() || !user || !selectedRoom) return;
     
-    // In a real app, unread status would come from the messages table
-    const isUnread = item.unread_count > 0;
+    const recipientId = selectedRoom.other_user?.id;
+    const newMsg = {
+      room_id: selectedRoom.id,
+      sender_id: user.id,
+      recipient_id: recipientId,
+      content: text.trim(),
+    };
 
-    return (
-      <Pressable 
-        style={({ pressed }) => [
-          styles.card, 
-          isSelected && styles.cardSelected,
-          pressed && styles.cardPressed
-        ]}
-        onPress={() => handleChatPress(item)}
-      >
-        {isUnread && <View style={styles.unreadNeon} />}
-        
-        <CyberAvatar url={item.avatar_url} username={item.username} unread={isUnread} />
-        
-        <View style={styles.cardContent}>
-          <View style={styles.cardHeader}>
-            <View style={styles.nameRow}>
-              <Text style={styles.usernameText}>{item.username?.toUpperCase() || 'UNKNOWN'}</Text>
-              <MaterialCommunityIcons name="shield-check" size={14} color="#55FF55" style={styles.lockIcon} />
-            </View>
-            <Text style={styles.timeText}>{timeStr}</Text>
-          </View>
-          
-          <Text style={styles.previewText} numberOfLines={1}>
-            {item.lastMessage || 'NO_RECENT_WHISPERS...'}
-          </Text>
-        </View>
-        <Feather name="chevron-right" size={20} color="#333" style={styles.chevron} />
-      </Pressable>
-    );
+    setText('');
+    const { data, error } = await supabase.from('messages').insert(newMsg).select().single();
+    if (!error && data) {
+      // Local update normally handled by subscription, but can also optimistic update
+      await supabase.from('dm_rooms').update({ last_message: text.trim(), updated_at: new Date().toISOString() }).eq('id', selectedRoom.id);
+    }
   };
 
-  const ListHeader = () => (
-    <View style={styles.listHeader}>
-      <View style={styles.headerTop}>
-        <Text style={styles.headerTitle}>SECRET_SCROLL</Text>
-        <MaterialCommunityIcons name="eye-off-outline" size={20} color="#55FF55" />
-      </View>
-      <Text style={styles.headerSub}>SECURE_VOICE_INBOX</Text>
-      <View style={styles.headerLine} />
-    </View>
-  );
+  if (loading) return <LoadingScreen />;
+
+  if (selectedRoom) {
+    return (
+      <SafeAreaView style={s.container}>
+        <View style={s.chatHeader}>
+          <TouchableOpacity onPress={() => setSelectedRoom(null)}>
+            <Feather name="chevron-left" size={24} color={Colors.cyber.accent} />
+          </TouchableOpacity>
+          <Avatar username={selectedRoom.other_user?.username || 'user'} size={32} style={{ marginHorizontal: 10 }} />
+          <Text style={s.headerTitle}>{selectedRoom.other_user?.username.toUpperCase()}</Text>
+        </View>
+
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={100}>
+          {chatLoading ? (
+            <ActivityIndicator style={{ flex: 1 }} color={Colors.cyber.accent} />
+          ) : (
+            <FlatList
+              ref={flatRef}
+              data={messages}
+              keyExtractor={item => item.id}
+              contentContainerStyle={{ padding: 20 }}
+              renderItem={({ item }) => (
+                <View style={[s.msgBubble, item.sender_id === user.id ? s.msgMe : s.msgThem]}>
+                  <Text style={[s.msgText, item.sender_id === user.id && { color: '#000' }]}>{item.content}</Text>
+                </View>
+              )}
+              onContentSizeChange={() => flatRef.current?.scrollToEnd()}
+            />
+          )}
+
+          <View style={s.inputBar}>
+            <TextInput
+              style={s.input}
+              value={text}
+              onChangeText={setText}
+              placeholder="Broadcast whisper..."
+              placeholderTextColor="#444"
+              multiline
+            />
+            <TouchableOpacity onPress={handleSend} disabled={!text.trim()}>
+              <Feather name="send" size={20} color={text.trim() ? Colors.cyber.accent : '#333'} />
+            </TouchableOpacity>
+          </View>
+        </KeyboardAvoidingView>
+      </SafeAreaView>
+    );
+  }
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      <View style={styles.mainWrapper}>
-        {/* Left Side: Inbox List */}
-        <View style={[styles.sidebar, isDesktop ? styles.desktopSidebar : styles.fullWidth]}>
-          <FlatList
-            data={inbox}
-            renderItem={renderChatCard}
-            keyExtractor={item => item.id}
-            ListHeaderComponent={ListHeader}
-            contentContainerStyle={styles.listContent}
-            refreshControl={
-              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#55FF55" />
-            }
-            ListEmptyComponent={isLoading ? <ActivityIndicator color="#55FF55" style={{marginTop: 40}} /> : <EmptyInbox />}
-          />
+    <SafeAreaView style={s.container}>
+      <StatusBar barStyle="light-content" />
+      <View style={s.header}>
+        <View style={s.tabRow}>
+          <TouchableOpacity onPress={() => setActiveTab('scrolls')} style={[s.tab, activeTab === 'scrolls' && s.tabActive]}>
+            <Text style={[s.tabText, activeTab === 'scrolls' && s.tabTextActive]}>SCROLLS</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => setActiveTab('whispers')} style={[s.tab, activeTab === 'whispers' && s.tabActive]}>
+            <Text style={[s.tabText, activeTab === 'whispers' && s.tabTextActive]}>WHISPERS</Text>
+          </TouchableOpacity>
         </View>
-
-        {/* Right Side: Detail Pane (Desktop only) */}
-        {isDesktop && (
-          <View style={styles.detailPane}>
-            {selectedChatId ? (
-              <View style={styles.chatPlaceholder}>
-                <MaterialCommunityIcons name="shield-lock-outline" size={64} color="#1A1A1A" />
-                <Text style={styles.placeholderText}>WHISPER_CHANNEL_ESTABLISHED</Text>
-                <TouchableOpacity 
-                   style={styles.openDetailBtn}
-                   onPress={() => router.push(`/(stack)/chat/${selectedChatId}`)}
-                >
-                   <MaterialCommunityIcons name="run-fast" size={20} color="#000" style={{marginRight: 10}} />
-                   <Text style={styles.openDetailBtnText}>ENTER_DEEP_LINK</Text>
-                </TouchableOpacity>
-              </View>
-            ) : (
-              <View style={styles.chatPlaceholder}>
-                <Feather name="message-square" size={64} color="#111" />
-                <Text style={styles.placeholderText}>SELECT_A_TRANSMISSION_TO_DECRYPT</Text>
-              </View>
-            )}
-          </View>
-        )}
+        <TouchableOpacity onPress={onRefresh} style={s.refreshBtn}>
+          <Feather name="refresh-cw" size={18} color={Colors.cyber.accent} />
+        </TouchableOpacity>
       </View>
+
+      <FlatList
+        data={activeTab === 'scrolls' ? scrolls : rooms}
+        keyExtractor={item => item.id}
+        contentContainerStyle={s.listContent}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.cyber.accent} />
+        }
+        ListEmptyComponent={
+          <EmptyState 
+            title={activeTab === 'scrolls' ? "NO_SCROLLS_DETECTED" : "NO_WHISPERS_FOUND"} 
+            subtitle="Secure channel is quiet. Stay alert for incoming data."
+          />
+        }
+        renderItem={({ item }: { item: any }) => (
+          activeTab === 'scrolls' ? (
+            <TouchableOpacity style={[s.card, !item.is_read && s.cardUnread]} onPress={() => {}}>
+              <View style={s.cardHeader}>
+                <View style={[s.indicator, item.is_read ? s.indicatorRead : s.indicatorUnread]} />
+                <Text style={s.cardTitle}>{item.title.toUpperCase()}</Text>
+                <Text style={s.time}>{new Date(item.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</Text>
+              </View>
+              <Text style={s.cardContent}>{item.content}</Text>
+              <View style={s.cardFooter}><Text style={s.typeTag}>// {item.type.toUpperCase()}</Text></View>
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity style={s.roomCard} onPress={() => openRoom(item)}>
+              <Avatar username={item.other_user?.username || 'u'} size={40} />
+              <View style={{ flex: 1, marginLeft: 15 }}>
+                <Text style={s.roomTitle}>{item.other_user?.username.toUpperCase()}</Text>
+                <Text style={s.roomLastMsg} numberOfLines={1}>{item.last_message || 'SECURE_CHANNEL_READY'}</Text>
+              </View>
+              <Feather name="chevron-right" size={16} color="#333" />
+            </TouchableOpacity>
+          )
+        )}
+      />
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#000',
-  },
-  mainWrapper: {
-    flex: 1,
-    flexDirection: 'row',
-  },
-  sidebar: {
-    backgroundColor: '#000',
-    borderRightWidth: Platform.OS === 'web' ? 1 : 0,
-    borderRightColor: '#1A1A1A',
-  },
-  desktopSidebar: {
-    width: '30%',
-    maxWidth: 450,
-    minWidth: 350,
-  },
-  fullWidth: {
-    flex: 1,
-  },
-  detailPane: {
-    flex: 1,
-    backgroundColor: '#050505',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  listHeader: {
-    padding: 24,
-    paddingTop: 32,
-    paddingBottom: 24,
-  },
-  headerTop: {
+const s = StyleSheet.create({
+  container: { flex: 1, backgroundColor: Colors.cyber.bg },
+  header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 4,
+    paddingHorizontal: Spacing.xl,
+    paddingVertical: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.cyber.border,
   },
-  headerTitle: {
-    fontFamily: 'monospace',
-    color: '#FFF',
-    fontSize: 28,
-    fontWeight: '900',
-    letterSpacing: 4,
-  },
-  headerSub: {
-    fontFamily: 'monospace',
-    color: '#55FF55',
-    fontSize: 10,
-    letterSpacing: 2,
-    opacity: 0.7,
-  },
-  headerLine: {
-    height: 4,
-    backgroundColor: '#1A1A1A',
-    marginTop: 20,
-    width: '40%',
-  },
-  listContent: {
-    paddingHorizontal: 16,
-    paddingBottom: 40,
-  },
-  card: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#0A0A0A',
-    borderRadius: 20,
-    padding: 16,
-    marginBottom: 12,
-    position: 'relative',
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: '#1A1A1A',
-  },
-  cardSelected: {
-    backgroundColor: '#111',
-    borderColor: '#333',
-  },
-  cardPressed: {
-    backgroundColor: '#151515',
-    opacity: 0.9,
-  },
-  unreadNeon: {
-    position: 'absolute',
-    left: 0,
-    top: '20%',
-    bottom: '20%',
-    width: 3,
-    backgroundColor: '#55FF55',
-    ...Platform.select({
-      web: {
-        // @ts-ignore
-        boxShadow: '0px 0px 12px #55FF55',
-      },
-      default: {
-        shadowColor: '#55FF55',
-        shadowOffset: { width: 0, height: 0 },
-        shadowOpacity: 1,
-        shadowRadius: 10,
-      }
-    })
-  },
-  avatarContainer: {
-    position: 'relative',
-  },
-  avatarBorder: {
-    flex: 1,
-    padding: 2,
-    backgroundColor: '#1A1A1A',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  avatarImage: {
-    width: '100%',
-    height: '100%',
-    backgroundColor: '#000',
-  },
-  avatarPlaceholder: {
-    width: '100%',
-    height: '100%',
-    backgroundColor: '#1A1A1A',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  avatarInitials: {
-    fontFamily: 'monospace',
-    color: '#55FF55',
-    fontWeight: 'bold',
-    fontSize: 20,
-  },
-  unreadPulse: {
-    position: 'absolute',
-    top: 0,
-    right: 0,
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-    backgroundColor: '#55FF55',
-    borderWidth: 3,
-    borderColor: '#0A0A0A',
-  },
-  cardContent: {
-    flex: 1,
-    marginLeft: 16,
-  },
-  cardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 6,
-  },
-  nameRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  usernameText: {
-    fontFamily: 'monospace',
-    color: '#FFF',
-    fontSize: 15,
-    fontWeight: '800',
-    letterSpacing: 1,
-  },
-  lockIcon: {
-    marginLeft: 6,
-    opacity: 0.8,
-  },
-  timeText: {
-    fontFamily: 'monospace',
-    color: '#444',
-    fontSize: 10,
-    fontWeight: 'bold',
-  },
-  previewText: {
-    fontFamily: 'monospace',
-    color: '#888',
-    fontSize: 12,
-    lineHeight: 16,
-  },
-  chevron: {
-    marginLeft: 8,
-    opacity: 0.3,
-  },
-  emptyContainer: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 100,
-    paddingHorizontal: 40,
-  },
-  scrollIconContainer: {
-    position: 'relative',
-    marginBottom: 32,
-  },
-  scrollLock: {
-    position: 'absolute',
-    bottom: -10,
-    right: -10,
-    backgroundColor: '#000',
-    borderRadius: 20,
-    padding: 8,
-    borderWidth: 2,
-    borderColor: '#1A1A1A',
-  },
-  emptyTitle: {
-    fontFamily: 'monospace',
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '900',
-    textAlign: 'center',
-    marginBottom: 12,
-    letterSpacing: 2,
-  },
-  emptySub: {
-    fontFamily: 'monospace',
-    color: '#555555',
-    fontSize: 11,
-    textAlign: 'center',
-    marginBottom: 40,
-    lineHeight: 18,
-  },
-  whisperBtn: {
-    backgroundColor: '#55FF55',
-    paddingVertical: 16,
-    paddingHorizontal: 32,
-    borderRadius: 0, // Keep it sharp
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  whisperBtnText: {
-    fontFamily: 'monospace',
-    color: '#000',
-    fontWeight: '900',
-    fontSize: 13,
-  },
-  chatPlaceholder: {
-    alignItems: 'center',
-    padding: 40,
-  },
-  placeholderText: {
-    fontFamily: 'monospace',
-    color: '#1A1A1A',
-    fontSize: 16,
-    marginTop: 24,
-    fontWeight: '900',
-    textAlign: 'center',
-    letterSpacing: 2,
-  },
-  openDetailBtn: {
-    marginTop: 40,
-    backgroundColor: '#55FF55',
-    paddingVertical: 14,
-    paddingHorizontal: 28,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  openDetailBtnText: {
-    fontFamily: 'monospace',
-    color: '#000000',
-    fontSize: 13,
-    fontWeight: '900',
-  }
+  tabRow: { flexDirection: 'row', gap: 20 },
+  tab: { paddingVertical: 5 },
+  tabActive: { borderBottomWidth: 2, borderBottomColor: Colors.cyber.accent },
+  tabText: { color: '#444', fontSize: 13, fontWeight: '900', letterSpacing: 1, fontFamily: 'monospace' },
+  tabTextActive: { color: Colors.cyber.accent },
+  headerTitle: { color: Colors.cyber.accent, fontSize: 16, fontWeight: '900', letterSpacing: 2, fontFamily: 'monospace' },
+  refreshBtn: { padding: 8 },
+  listContent: { padding: Spacing.lg, paddingBottom: 100 },
+  card: { backgroundColor: Colors.cyber.card, borderWidth: 1, borderColor: Colors.cyber.border, borderRadius: 4, padding: 20, marginBottom: 15 },
+  cardUnread: { borderColor: 'rgba(0, 255, 65, 0.3)' },
+  cardHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
+  indicator: { width: 6, height: 6, borderRadius: 3, marginRight: 10 },
+  indicatorUnread: { backgroundColor: Colors.cyber.accent },
+  indicatorRead: { backgroundColor: '#333' },
+  cardTitle: { flex: 1, color: '#FFF', fontSize: 13, fontWeight: '700', fontFamily: 'monospace' },
+  time: { color: '#444', fontSize: 10, fontFamily: 'monospace' },
+  cardContent: { color: '#888', fontSize: 12, lineHeight: 18, fontFamily: 'monospace', marginBottom: 10 },
+  cardFooter: { borderTopWidth: 1, borderTopColor: '#111', paddingTop: 10 },
+  typeTag: { color: '#333', fontSize: 9, fontFamily: 'monospace' },
+  
+  roomCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.cyber.card, padding: 15, borderRadius: 4, marginBottom: 10, borderWidth: 1, borderColor: Colors.cyber.border },
+  roomTitle: { color: '#FFF', fontSize: 14, fontWeight: '800', fontFamily: 'monospace' },
+  roomLastMsg: { color: '#666', fontSize: 12, marginTop: 4, fontFamily: 'monospace' },
+
+  chatHeader: { flexDirection: 'row', alignItems: 'center', padding: 20, borderBottomWidth: 1, borderBottomColor: Colors.cyber.border },
+  msgBubble: { maxWidth: '80%', padding: 12, borderRadius: Radius.md, marginBottom: 10 },
+  msgMe: { alignSelf: 'flex-end', backgroundColor: Colors.cyber.accent, borderBottomRightRadius: 2 },
+  msgThem: { alignSelf: 'flex-start', backgroundColor: '#1A1A1A', borderBottomLeftRadius: 2 },
+  msgText: { color: '#FFF', fontSize: 14, fontFamily: 'monospace' },
+  inputBar: { flexDirection: 'row', alignItems: 'center', padding: 15, borderTopWidth: 1, borderTopColor: Colors.cyber.border, gap: 10 },
+  input: { flex: 1, backgroundColor: '#0A0A0A', color: '#FFF', paddingHorizontal: 15, paddingVertical: 10, borderRadius: 4, fontFamily: 'monospace' },
 });
+

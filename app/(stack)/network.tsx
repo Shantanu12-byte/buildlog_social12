@@ -14,7 +14,7 @@ import { Feather } from '@expo/vector-icons';
 import { supabase } from '@/lib/supabase';
 import { useUserStore } from '@/store/userStore';
 import { AvatarBlock } from '@/components/AvatarBlock';
-import { getThemeColors } from '@/constants/theme';
+import { Colors, Typography, Spacing, Radius, FontSizes, getThemeColors } from '@/constants/theme';
 
 type NetworkUser = {
   id: string;

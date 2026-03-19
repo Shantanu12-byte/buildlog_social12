@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { supabase, getValidSession } from '@/lib/supabase';
-import { Colors, FontSizes, Spacing } from '@/constants/theme';
+import { Colors, Typography, Spacing, Radius } from '@/constants/theme';
 import { Feather } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
+import { Input, Button } from '@/components/ui/UI';
 
 export default function CreateProjectScreen() {
   const router = useRouter();
@@ -40,13 +41,13 @@ export default function CreateProjectScreen() {
     });
 
     return () => subscription.unsubscribe();
-  }, []);
+  }, [router]);
 
   const handlePickImage = async () => {
     try {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('PERMISSION_DENIED', 'Media library access is required for quest capture.');
+        Alert.alert('PERMISSION_DENIED', 'Media library access is required for project capture.');
         return;
       }
 
@@ -68,7 +69,7 @@ export default function CreateProjectScreen() {
 
   const handleCreate = async () => {
     if (!title.trim() || !description.trim()) {
-      Alert.alert('Incomplete Quest', 'Please enter a title and description for your project.');
+      Alert.alert('Incomplete Project', 'Please enter a title and description for your project.');
       return;
     }
 
@@ -128,11 +129,22 @@ export default function CreateProjectScreen() {
 
       if (error) throw error;
 
-      Alert.alert('Quest Accepted!', 'Your new project has been created.');
+      // Announce on Feed
+      await supabase.from('posts').insert({
+        user_id: finalUserId,
+        username: session.user.user_metadata?.username || session.user.email?.split('@')[0] || 'Builder',
+        projectTitle: title.trim(),
+        caption: description.trim(),
+        imageUrl: publicUrl,
+        cheers: 0,
+        comments: 0
+      });
+
+      Alert.alert('Success', 'Your new project has been created.');
       router.replace('/(tabs)/profile');
     } catch (error: any) {
       console.error('Error creating project:', error);
-      Alert.alert('Quest Failed', error.message || 'An error occurred during creation.');
+      Alert.alert('Error', error.message || 'An error occurred during creation.');
     } finally {
       setIsSubmitting(false);
     }
@@ -140,132 +152,101 @@ export default function CreateProjectScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scrollContent}>
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-            <Feather name="arrow-left" size={24} color="#FFFFFF" />
-          </TouchableOpacity>
-          <Text style={styles.title}>NEW_QUEST</Text>
-        </View>
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backButton} activeOpacity={0.75}>
+          <Feather name="chevron-left" size={24} color={Colors.text.primary} />
+        </TouchableOpacity>
+        <Text style={styles.title}>New Project</Text>
+      </View>
 
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <View style={styles.form}>
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>TITLE</Text>
-            <TextInput
-              style={styles.pixelInput}
-              value={title}
-              onChangeText={setTitle}
-              placeholder="Project Name..."
-              placeholderTextColor="#555555"
-            />
-          </View>
+          <Input
+            label="Title"
+            value={title}
+            onChangeText={setTitle}
+            placeholder="Project Name..."
+          />
 
-          {/* Quest Capture Section */}
+          {/* Project Preview Image */}
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>QUEST_CAPTURE (16:9_PREVIEW)</Text>
+            <Text style={styles.label}>PREVIEW IMAGE (16:9)</Text>
             <TouchableOpacity 
               style={styles.captureFrame} 
               onPress={handlePickImage}
-              activeOpacity={0.9}
+              activeOpacity={0.8}
             >
               {imageUri ? (
-                <View style={styles.previewContainer}>
-                  <Image source={{ uri: imageUri }} style={styles.previewImage} />
-                  {/* CRT Scanline Overlay */}
-                  <View style={styles.crtOverlay}>
-                    {Array.from({ length: 40 }).map((_, i) => (
-                      <View key={i} style={styles.scanline} />
-                    ))}
-                  </View>
-                  <View style={styles.dataLabel}>
-                    <Text style={styles.dataLabelText}>[ DATA_CAPTURED ]</Text>
-                  </View>
-                </View>
+                <Image source={{ uri: imageUri }} style={styles.previewImage} contentFit="cover" />
               ) : (
                 <View style={styles.placeholderBox}>
-                  <Feather name="camera" size={32} color="#444" />
-                  <Text style={styles.placeholderText}>TAP_TO_CAPTURE_PREVIEW</Text>
+                  <Feather name="image" size={32} color={Colors.text.tertiary} />
+                  <Text style={styles.placeholderText}>Tap to upload preview</Text>
                 </View>
               )}
             </TouchableOpacity>
           </View>
 
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>DESCRIPTION</Text>
-            <TextInput
-              style={[styles.pixelInput, styles.multilineInput]}
-              value={description}
-              onChangeText={setDescription}
-              placeholder="What are you building?..."
-              placeholderTextColor="#555555"
-              multiline
-              numberOfLines={4}
-            />
-          </View>
+          <Input
+            label="Description"
+            value={description}
+            onChangeText={setDescription}
+            placeholder="What are you building?..."
+            multiline
+          />
 
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>SKILLS (COMMA_SEPARATED)</Text>
-            <TextInput
-              style={styles.pixelInput}
-              value={skills}
-              onChangeText={setSkills}
-              placeholder="React, TypeScript, Node..."
-              placeholderTextColor="#555555"
-              autoCapitalize="none"
-            />
-          </View>
+          <Input
+            label="Skills (Comma_Separated)"
+            value={skills}
+            onChangeText={setSkills}
+            placeholder="React, TypeScript, Node..."
+          />
 
-          <View style={styles.toggleRow}>
-            <Text style={styles.toggleLabel}>COLLABORATORS_WANTED?</Text>
-            <TouchableOpacity
-              style={[
-                styles.pixelToggle,
-                lookingForCollabs ? styles.toggleOn : styles.toggleOff
-              ]}
-              onPress={() => setLookingForCollabs(!lookingForCollabs)}
-            >
-              <Text style={styles.toggleText}>{lookingForCollabs ? 'YES' : 'NO'}</Text>
-            </TouchableOpacity>
-          </View>
+          {/* Toggles */}
+          <View style={styles.togglesSection}>
+            <View style={styles.toggleRow}>
+              <Text style={styles.toggleLabel}>Open for Collaborators?</Text>
+              <TouchableOpacity
+                style={[styles.toggleBtn, lookingForCollabs ? styles.toggleOn : styles.toggleOff]}
+                onPress={() => setLookingForCollabs(!lookingForCollabs)}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.toggleText, lookingForCollabs && styles.toggleTextActive]}>
+                  {lookingForCollabs ? 'Yes' : 'No'}
+                </Text>
+              </TouchableOpacity>
+            </View>
 
-          <View style={styles.toggleRow}>
-            <Text style={styles.toggleLabel}>ENABLE_CHALLENGE_MODE?</Text>
-            <TouchableOpacity
-              style={[
-                styles.pixelToggle,
-                isChallenge ? styles.toggleOn : styles.toggleOff
-              ]}
-              onPress={() => setIsChallenge(!isChallenge)}
-            >
-              <Text style={styles.toggleText}>{isChallenge ? 'ON' : 'OFF'}</Text>
-            </TouchableOpacity>
+            <View style={styles.toggleRow}>
+              <Text style={styles.toggleLabel}>Enable Challenge Mode?</Text>
+              <TouchableOpacity
+                style={[styles.toggleBtn, isChallenge ? styles.toggleOn : styles.toggleOff]}
+                onPress={() => setIsChallenge(!isChallenge)}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.toggleText, isChallenge && styles.toggleTextActive]}>
+                  {isChallenge ? 'On' : 'Off'}
+                </Text>
+              </TouchableOpacity>
+            </View>
           </View>
 
           {isChallenge && (
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>DURATION (DAYS)</Text>
-              <TextInput
-                style={styles.pixelInput}
-                value={duration}
-                onChangeText={setDuration}
-                keyboardType="numeric"
-                placeholder="30"
-                placeholderTextColor="#555555"
-              />
-            </View>
+            <Input
+              label="Duration (Days)"
+              value={duration}
+              onChangeText={setDuration}
+              placeholder="30"
+            />
           )}
 
-          <TouchableOpacity
-            style={[styles.submitButton, isSubmitting && styles.disabledButton]}
+          <Button
+            label="Start Project"
             onPress={handleCreate}
-            disabled={isSubmitting}
-          >
-            {isSubmitting ? (
-              <ActivityIndicator color="#FFFFFF" />
-            ) : (
-              <Text style={styles.submitButtonText}>START_PROJECT</Text>
-            )}
-          </TouchableOpacity>
+            loading={isSubmitting}
+            style={{ marginTop: Spacing.xl }}
+            variant="primary"
+          />
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -275,174 +256,106 @@ export default function CreateProjectScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000000',
-  },
-  scrollContent: {
-    paddingBottom: Spacing['5xl'],
+    backgroundColor: Colors.bg.primary,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: Spacing.xl,
-    paddingTop: Spacing.xl,
-    marginBottom: Spacing.xl,
-    gap: Spacing.md,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.md,
+    borderBottomWidth: 0.5,
+    borderBottomColor: Colors.border.subtle,
   },
   backButton: {
-    padding: Spacing.xs,
+    marginRight: Spacing.sm,
+    padding: 4,
   },
   title: {
-    fontFamily: 'monospace',
-    fontSize: FontSizes['3xl'],
-    fontWeight: 'bold',
-    color: '#FFFFFF',
-    letterSpacing: 2,
+    color: Colors.text.primary,
+    fontSize: Typography.sizes.xl,
+    fontWeight: '600',
+    letterSpacing: -0.3,
+  },
+  scrollContent: {
+    paddingBottom: Spacing['4xl'],
   },
   form: {
-    paddingHorizontal: Spacing.xl,
+    padding: Spacing.lg,
     gap: Spacing.md,
   },
   inputGroup: {
-    gap: Spacing.xs,
+    marginBottom: Spacing.md,
   },
   label: {
-    fontFamily: 'monospace',
-    fontSize: 10,
-    color: '#888888',
-    letterSpacing: 1,
-  },
-  pixelInput: {
-    borderWidth: 4,
-    borderRadius: 0,
-    borderTopColor: '#555555',
-    borderLeftColor: '#555555',
-    borderBottomColor: '#FFFFFF',
-    borderRightColor: '#FFFFFF',
-    backgroundColor: '#1A1A1A',
-    color: '#FFFFFF',
-    fontFamily: 'monospace',
-    padding: 12,
-    marginBottom: 20,
-  },
-  multilineInput: {
-    minHeight: 100,
-    textAlignVertical: 'top',
-  },
-  toggleRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: Spacing.xl,
-    paddingVertical: Spacing.sm,
-  },
-  toggleLabel: {
-    fontFamily: 'monospace',
-    fontSize: 12,
-    color: '#FFFFFF',
-    fontWeight: 'bold',
-  },
-  pixelToggle: {
-    width: 80,
-    height: 40,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 4,
-    borderTopColor: '#FFFFFF',
-    borderLeftColor: '#FFFFFF',
-    borderBottomColor: '#555555',
-    borderRightColor: '#555555',
-  },
-  toggleOn: {
-    backgroundColor: '#4CAF50',
-  },
-  toggleOff: {
-    backgroundColor: '#F44336',
-  },
-  toggleText: {
-    fontFamily: 'monospace',
-    color: '#FFFFFF',
-    fontWeight: 'bold',
-    fontSize: 14,
-  },
-  submitButton: {
-    marginTop: Spacing.xl,
-    backgroundColor: '#2F81F7', // Blue for "POST" (START_PROJECT)
-    paddingVertical: Spacing.lg,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 4,
-    borderTopColor: '#FFFFFF',
-    borderLeftColor: '#FFFFFF',
-    borderBottomColor: '#1A4D94',
-    borderRightColor: '#1A4D94',
-    borderRadius: 0,
-  },
-  submitButtonText: {
-    fontFamily: 'monospace',
-    color: '#FFFFFF',
-    fontSize: FontSizes.lg,
-    fontWeight: 'bold',
-    letterSpacing: 1,
-  },
-  disabledButton: {
-    opacity: 0.6,
+    fontSize: Typography.sizes.xs,
+    color: Colors.text.tertiary,
+    letterSpacing: 0.5,
+    marginBottom: 5,
+    textTransform: 'uppercase',
   },
   captureFrame: {
     width: '100%',
     aspectRatio: 16 / 9,
-    backgroundColor: '#0A0A0A',
-    borderWidth: 4,
-    borderTopColor: '#555555',
-    borderLeftColor: '#555555',
-    borderBottomColor: '#FFFFFF',
-    borderRightColor: '#FFFFFF',
-    marginBottom: 20,
+    backgroundColor: Colors.bg.secondary,
+    borderWidth: 0.5,
+    borderColor: Colors.border.default,
+    borderRadius: Radius.md,
     overflow: 'hidden',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  previewContainer: {
-    width: '100%',
-    height: '100%',
-  },
   previewImage: {
     width: '100%',
     height: '100%',
-  },
-  crtOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.05)',
-  },
-  scanline: {
-    height: 1,
-    width: '100%',
-    backgroundColor: '#000',
-    opacity: 0.1,
-    marginBottom: 2,
-  },
-  dataLabel: {
-    position: 'absolute',
-    top: 8,
-    right: 8,
-    backgroundColor: 'rgba(0,0,0,0.7)',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderWidth: 1,
-    borderColor: '#00FFFF',
-  },
-  dataLabelText: {
-    fontFamily: 'monospace',
-    fontSize: 8,
-    color: '#00FFFF',
-    fontWeight: 'bold',
   },
   placeholderBox: {
     alignItems: 'center',
     gap: 8,
   },
   placeholderText: {
-    fontFamily: 'monospace',
-    fontSize: 10,
-    color: '#444',
+    fontSize: Typography.sizes.sm,
+    color: Colors.text.tertiary,
+  },
+  togglesSection: {
+    backgroundColor: Colors.bg.secondary,
+    borderWidth: 0.5,
+    borderColor: Colors.border.subtle,
+    borderRadius: Radius.lg,
+    padding: Spacing.md,
+    gap: Spacing.md,
+    marginBottom: Spacing.sm,
+  },
+  toggleRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  toggleLabel: {
+    fontSize: Typography.sizes.base,
+    color: Colors.text.secondary,
+  },
+  toggleBtn: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: Radius.full,
+    borderWidth: 0.5,
+    minWidth: 80,
+    alignItems: 'center',
+  },
+  toggleOff: {
+    backgroundColor: Colors.bg.tertiary,
+    borderColor: Colors.border.default,
+  },
+  toggleOn: {
+    backgroundColor: 'rgba(46,160,67,0.15)',
+    borderColor: 'rgba(46,160,67,0.3)',
+  },
+  toggleText: {
+    fontSize: Typography.sizes.sm,
+    fontWeight: '500',
+    color: Colors.text.tertiary,
+  },
+  toggleTextActive: {
+    color: '#2EA043', // Colors.success
   },
 });

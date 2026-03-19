@@ -1,179 +1,107 @@
-import { Tabs } from 'expo-router';
 import React from 'react';
-import { View, StyleSheet, Text, Platform } from 'react-native';
-import { Feather } from '@expo/vector-icons';
-import { supabase } from '@/lib/supabase';
-import { useUserStore } from '@/store/userStore';
-import { useEffect, useState } from 'react';
-import { useWindowDimensions } from 'react-native';
-
-import { HapticTab } from '@/components/haptic-tab';
+import { Tabs, Slot } from 'expo-router';
+import { View, useWindowDimensions, StyleSheet } from 'react-native';
 import { Colors } from '@/constants/theme';
+import { Feather } from '@expo/vector-icons';
+
+import { supabase } from '@/lib/supabase';
 
 export default function TabLayout() {
-  const { userProfile } = useUserStore();
-  const [unreadCount, setUnreadCount] = useState(0);
-  
   const { width } = useWindowDimensions();
-  const isDesktop = Platform.OS === 'web' && width > 768;
+  const isWeb = width > 768;
+  const [unreadCount, setUnreadCount] = React.useState(0);
 
-  useEffect(() => {
-    if (!userProfile?.id) return;
-
-    const fetchUnreadCount = async () => {
-      const { count } = await supabase
-        .from('notifications')
-        .select('*', { count: 'exact', head: true })
-        .eq('user_id', userProfile.id)
-        .eq('is_read', false);
-      
-      setUnreadCount(count || 0);
-    };
-
+  React.useEffect(() => {
     fetchUnreadCount();
-
+    
+    // Real-time listener for new notifications
     const channel = supabase
-      .channel(`unread_notifications:${userProfile.id}`)
+      .channel('schema-db-changes')
       .on(
         'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'notifications',
-          filter: `user_id=eq.${userProfile.id}`,
-        },
-        () => {
-          fetchUnreadCount();
-        }
+        { event: '*', schema: 'public', table: 'notifications' },
+        () => fetchUnreadCount()
       )
       .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [userProfile?.id]);
+  }, []);
 
+  const fetchUnreadCount = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const { count } = await supabase
+        .from('notifications')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', user.id)
+        .eq('is_read', false);
+      setUnreadCount(count || 0);
+    } catch (e) {
+      console.error('FETCH_UNREAD_ERROR:', e);
+    }
+  };
+
+  // ── WEB LAYOUT: Sidebar + Content ──────────────────────────
+  if (isWeb) {
+    return (
+      <View style={s.webRoot}>
+        <Slot /> 
+      </View>
+    );
+  }
+
+  // ── MOBILE LAYOUT: Bottom Tab Bar ──────────────────────────
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: '#FFFFFF',
-        tabBarInactiveTintColor: '#888888',
-        tabBarStyle: isDesktop ? { display: 'none' } : [
-          styles.tabBar,
-          Platform.OS === 'web' && {
-            maxWidth: 600,
-            width: '100%',
-            alignSelf: 'center',
-            borderLeftWidth: 1,
-            borderRightWidth: 1,
-            borderColor: '#333333',
-            left: 'auto',
-            right: 'auto',
-          }
-        ],
-        tabBarLabelStyle: { fontFamily: 'monospace', fontSize: 10, fontWeight: 'bold' },
         headerShown: false,
-        tabBarButton: HapticTab,
-      }}>
-      <Tabs.Screen
-        name="index"
-        options={{
-          title: 'Feed',
-          tabBarIcon: ({ color, size }) => (
-            <Feather name="home" size={size} color={color} />
-          ),
-        }}
+        tabBarStyle: s.tabBar,
+        tabBarActiveTintColor: Colors.accent.primary,
+        tabBarInactiveTintColor: Colors.text.tertiary,
+      }}
+    >
+      <Tabs.Screen 
+        name="index" 
+        options={{ title: 'Feed', tabBarIcon: ({ color }) => <Feather name="home" size={24} color={color} /> }} 
       />
-      <Tabs.Screen
-        name="search"
-        options={{
-          title: 'Search',
-          tabBarIcon: ({ color, size }) => (
-            <Feather name="search" size={size} color={color} />
-          ),
-        }}
+      <Tabs.Screen 
+        name="search" 
+        options={{ href: null }} 
       />
-      <Tabs.Screen
-        name="tavern"
-        options={{
-          title: 'Chat',
-          tabBarIcon: ({ color, size }) => (
-            <Feather name="message-square" size={size} color={color} />
-          ),
-        }}
+      <Tabs.Screen 
+        name="tavern" 
+        options={{ title: 'Campus', tabBarIcon: ({ color }) => <Feather name="message-circle" size={24} color={color} /> }} 
       />
-      <Tabs.Screen
-        name="inbox"
-        options={{
-          title: 'Inbox',
-          tabBarIcon: ({ color, size }) => (
-            <View>
-              <Feather name="mail" size={size} color={color} />
-              {unreadCount > 0 && (
-                <View style={styles.unreadBadge} />
-              )}
-            </View>
-          ),
-        }}
+      <Tabs.Screen 
+        name="inbox" 
+        options={{ 
+          title: 'Challenges', 
+          tabBarIcon: ({ color }) => <Feather name="star" size={24} color={color} />,
+          tabBarBadge: unreadCount > 0 ? unreadCount : undefined,
+          tabBarBadgeStyle: { backgroundColor: Colors.cyber.accent, color: '#000', fontSize: 10, fontWeight: 'bold' }
+        }} 
       />
-      <Tabs.Screen
-        name="profile"
-        options={{
-          title: 'Profile',
-          tabBarIcon: ({ color, size }) => (
-            <Feather name="user" size={size} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="chat"
-        options={{
-          href: null,
-        }}
+      <Tabs.Screen 
+        name="profile" 
+        options={{ title: 'Profile', tabBarIcon: ({ color }) => <Feather name="user" size={24} color={color} /> }} 
       />
     </Tabs>
   );
 }
 
-const styles = StyleSheet.create({
+const s = StyleSheet.create({
+  webRoot: {
+    flex: 1,
+    backgroundColor: Colors.bg.primary,
+  },
   tabBar: {
-    backgroundColor: '#000000',
-    borderTopWidth: 4,
-    borderTopColor: '#FFFFFF',
-    borderLeftColor: '#FFFFFF',
-    borderRightColor: '#555555',
-    borderBottomColor: '#555555',
-    height: 85,
-    paddingBottom: 20,
-    paddingTop: 10,
+    backgroundColor: Colors.bg.primary,
+    borderTopWidth: 0.5,
+    borderTopColor: Colors.border.subtle,
+    height: 60,
+    paddingBottom: 8,
   },
-  newPostIcon: {
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginTop: -8,
-    backgroundColor: '#8B8B8B',
-    borderWidth: 2,
-    borderTopColor: '#FFFFFF',
-    borderLeftColor: '#FFFFFF',
-    borderBottomColor: '#333333',
-    borderRightColor: '#333333',
-    width: 48,
-    height: 48,
-  },
-  newPostLabel: {
-    fontFamily: 'monospace',
-    color: '#888888',
-    fontSize: 10,
-    marginTop: -4,
-  },
-  unreadBadge: {
-    position: 'absolute',
-    top: -2,
-    right: -4,
-    width: 6,
-    height: 6,
-    backgroundColor: '#FF0000',
-    borderWidth: 1,
-    borderColor: '#FFF',
-  },
-});
+});
