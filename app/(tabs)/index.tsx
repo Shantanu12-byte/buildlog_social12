@@ -235,7 +235,7 @@ export default function GlobalQuestFeed() {
 
           {/* Quest Image Capture Slot */}
           <View style={styles.questImageFrame}>
-            {item.image_url ? (
+            {item.image_url && !item.image_url.startsWith('blob:') ? (
               <>
                 <Image source={{ uri: item.image_url }} style={styles.questImage} />
                 <View style={styles.feedCrtOverlay}>

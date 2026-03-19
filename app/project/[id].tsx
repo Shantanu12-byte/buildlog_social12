@@ -308,7 +308,7 @@ export default function ProjectDetailScreen() {
           <Text style={styles.shareButtonText}>SHARE_TO_ALLY</Text>
         </TouchableOpacity>
       </View>
-      {item.image_url && (
+      {item.image_url && !item.image_url.startsWith('blob:') && (
         <View style={styles.logImageFrame}>
           <Image source={{ uri: item.image_url }} style={styles.logImage} />
         </View>
@@ -450,7 +450,7 @@ export default function ProjectDetailScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView style={styles.container} edges={['top']} importantForAccessibility="no-hide-descendants">
       <KeyboardAvoidingView 
         style={{ flex: 1 }} 
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
