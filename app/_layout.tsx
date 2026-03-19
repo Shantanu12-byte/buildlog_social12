@@ -2,7 +2,7 @@ import { Stack, router, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import React, { useEffect, useState, useRef } from 'react';
 import 'react-native-reanimated';
-import { View, ActivityIndicator, Animated, Platform, StyleSheet } from 'react-native';
+import { View, ActivityIndicator, Animated, Platform, StyleSheet, useWindowDimensions } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
 import Constants from 'expo-constants';
@@ -12,6 +12,7 @@ import { Colors } from '@/constants/theme';
 import { supabase } from '@/lib/supabase';
 import { useUserStore } from '@/store/userStore';
 import { MinecraftLoader } from '@/components/MinecraftLoader';
+import { WebSidebar } from '@/components/WebSidebar';
 
 // 🛡️ SECURITY: Strip logs in production
 if (!__DEV__) {
@@ -95,6 +96,9 @@ export default function RootLayout() {
   const [expoPushToken, setExpoPushToken] = useState('');
   const notificationListener = useRef<Notifications.Subscription | null>(null);
   const responseListener = useRef<Notifications.Subscription | null>(null);
+  
+  const { width } = useWindowDimensions();
+  const isDesktop = Platform.OS === 'web' && width > 768;
 
   if (Platform.OS !== 'web') {
     Notifications.setNotificationHandler({
@@ -342,22 +346,26 @@ export default function RootLayout() {
 
   return (
     <SafeAreaProvider style={Platform.OS === 'web' ? { backgroundColor: '#0A0A0A' } : undefined}>
-      <View style={[
-        { flex: 1, backgroundColor: '#000000' },
-        Platform.OS === 'web' && {
-          maxWidth: 600,
-          width: '100%',
-          alignSelf: 'center',
-          borderLeftWidth: 1,
-          borderRightWidth: 1,
-          borderColor: '#333333',
-          shadowColor: '#000',
-          shadowOffset: { width: 0, height: 0 },
-          shadowOpacity: 0.5,
-          shadowRadius: 20,
-        }
-      ]} importantForAccessibility="no-hide-descendants">
-        <ErrorBoundary>
+      <View style={{ flex: 1, flexDirection: isDesktop ? 'row' : 'column' }}>
+        
+        {isDesktop && <WebSidebar />}
+
+        <View style={[
+          { flex: 1, backgroundColor: '#000000' },
+          Platform.OS === 'web' && {
+            maxWidth: 600,
+            width: '100%',
+            alignSelf: 'center',
+            borderLeftWidth: 1,
+            borderRightWidth: 1,
+            borderColor: '#333333',
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 0 },
+            shadowOpacity: 0.5,
+            shadowRadius: 20,
+          }
+        ]} importantForAccessibility="no-hide-descendants">
+          <ErrorBoundary>
           <PixelFade>
             <Stack
               screenOptions={{
@@ -420,9 +428,10 @@ export default function RootLayout() {
                 {'> INITIALIZING_PLAYER_BADGE...'}
               </Text>
             </View>
-          </Animated.View>
-        )}
-      </View>
-    </SafeAreaProvider>
-  );
-}
+              </Animated.View>
+            )}
+          </View>
+        </View>
+      </SafeAreaProvider>
+    );
+  }

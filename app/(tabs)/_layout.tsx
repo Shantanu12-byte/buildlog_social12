@@ -5,6 +5,7 @@ import { Feather } from '@expo/vector-icons';
 import { supabase } from '@/lib/supabase';
 import { useUserStore } from '@/store/userStore';
 import { useEffect, useState } from 'react';
+import { useWindowDimensions } from 'react-native';
 
 import { HapticTab } from '@/components/haptic-tab';
 import { Colors } from '@/constants/theme';
@@ -12,6 +13,9 @@ import { Colors } from '@/constants/theme';
 export default function TabLayout() {
   const { userProfile } = useUserStore();
   const [unreadCount, setUnreadCount] = useState(0);
+  
+  const { width } = useWindowDimensions();
+  const isDesktop = Platform.OS === 'web' && width > 768;
 
   useEffect(() => {
     if (!userProfile?.id) return;
@@ -54,7 +58,7 @@ export default function TabLayout() {
       screenOptions={{
         tabBarActiveTintColor: '#FFFFFF',
         tabBarInactiveTintColor: '#888888',
-        tabBarStyle: [
+        tabBarStyle: isDesktop ? { display: 'none' } : [
           styles.tabBar,
           Platform.OS === 'web' && {
             maxWidth: 600,
