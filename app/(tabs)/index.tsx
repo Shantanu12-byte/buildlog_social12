@@ -507,7 +507,6 @@ const styles = StyleSheet.create({
   questImage: {
     width: '100%',
     height: '100%',
-    resizeMode: 'cover',
   },
   feedCrtOverlay: {
     ...StyleSheet.absoluteFillObject,

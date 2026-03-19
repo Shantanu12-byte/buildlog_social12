@@ -288,7 +288,7 @@ export default function RootLayout() {
           // Check if not already on the setup screen to avoid loops
           const onSetupScreen = (segments as string[]).includes('CompleteProfileScreen');
           if (!onSetupScreen) {
-            router.replace('/(auth)/CompleteProfileScreen');
+            router.replace('/CompleteProfileScreen');
           }
         } else {
           // Session exists and profile is complete
@@ -360,7 +360,6 @@ export default function RootLayout() {
         {/* 🎮 Retro Boot Sequence Overlay */}
         {isBooting && (
           <Animated.View 
-            pointerEvents="none"
             style={[
               StyleSheet.absoluteFill, 
               { 
@@ -368,7 +367,8 @@ export default function RootLayout() {
                 zIndex: 999,
                 opacity: bootAnim,
                 justifyContent: 'center',
-                alignItems: 'center'
+                alignItems: 'center',
+                pointerEvents: 'none'
               }
             ]}
           >
@@ -376,11 +376,11 @@ export default function RootLayout() {
             <View style={{ position: 'absolute', width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center' }}>
               <Animated.Image 
                 source={require('../assets/developer_emblem.png')}
+                resizeMode="contain"
                 style={{
                   width: 200,
                   height: 200,
-                  opacity: blinkAnim,
-                  resizeMode: 'contain'
+                  opacity: blinkAnim
                 }}
               />
             </View>
