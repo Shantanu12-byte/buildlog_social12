@@ -9,6 +9,7 @@ import {
   Alert
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Feather } from '@expo/vector-icons';
 import { supabase } from '../lib/supabase';
 
 export default function MainFeed() {
@@ -35,10 +36,11 @@ export default function MainFeed() {
       const interests = profileData?.interests || [];
 
       // 3 & 5. Build posts query, order by newest first
+      // 3 & 5. Build posts query, fetching from trending_posts view
       let query = supabase
-        .from('posts')
+        .from('trending_posts')
         .select('*')
-        .order('created_at', { ascending: false });
+        .order('score', { ascending: false });
 
       // 4. Algorithm Logic: Apply category filter if interests exist
       if (interests.length > 0) {
@@ -74,14 +76,55 @@ export default function MainFeed() {
     setRefreshing(false);
   }, []);
 
+  const handleLike = async (postId) => {
+    try {
+      // Optimistic UI update
+      setPosts(currentPosts => 
+        currentPosts.map(p => 
+          p.id === postId ? { ...p, likes_count: (p.likes_count || 0) + 1 } : p
+        )
+      );
+
+      // We'll try to use an RPC if available, otherwise direct update
+      // It's safer to use RPC for atomic increments, but for now we'll do a simple update
+      // based on the current post's known likes if RPC is not defined by user
+      const post = posts.find(p => p.id === postId);
+      const newLikes = (post?.likes_count || 0) + 1;
+
+      const { error } = await supabase
+        .from('posts')
+        .update({ likes_count: newLikes })
+        .eq('id', postId);
+
+      if (error) throw error;
+      
+    } catch (error) {
+      console.error('Error liking post:', error);
+      // Revert optimistic update on error
+      fetchFeed();
+    }
+  };
+
   const renderPost = ({ item }) => (
     <View style={styles.postCard}>
       <Text style={styles.postCategory}>{item.category || 'Uncategorized'}</Text>
       <Text style={styles.postTitle}>{item.title || 'Untitled Post'}</Text>
       {item.content ? <Text style={styles.postContent}>{item.content}</Text> : null}
-      <Text style={styles.postDate}>
-        {new Date(item.created_at).toLocaleDateString()}
-      </Text>
+      
+      <View style={styles.postFooter}>
+        <Text style={styles.postDate}>
+          {new Date(item.created_at).toLocaleDateString()}
+        </Text>
+        
+        <TouchableOpacity 
+          style={styles.likeButton}
+          onPress={() => handleLike(item.id)}
+          activeOpacity={0.7}
+        >
+          <Feather name="arrow-up" size={16} color="#007AFF" />
+          <Text style={styles.likeText}>{item.likes_count || 0}</Text>
+        </TouchableOpacity>
+      </View>
     </View>
   );
 
@@ -184,6 +227,28 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#999',
     fontWeight: '500',
+  },
+  postFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  likeButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F0F8FF', // Very light blue
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#D0E8FF',
+  },
+  likeText: {
+    marginLeft: 6,
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#007AFF',
   },
   emptyContainer: {
     padding: 40,
