@@ -78,28 +78,23 @@ export default function NewPostScreen() {
     setIsUploading(true);
 
     try {
-      console.log('🎁 SHARE_WORLD: Starting post process...');
       
       // 1. Get current user - with a small delay for session hydration
       let userId = '';
       let retries = 0;
       
       while (retries < 2) {
-        console.log(`🔍 AUTH CHECK (Attempt ${retries + 1}): Attempting getUser()...`);
         const { data: { user }, error: authError } = await supabase.auth.getUser();
         
         if (user) {
           userId = user.id;
-          console.log('✅ getUser success:', userId);
           break;
         }
 
-        console.log('⚠️ getUser fail. Checking getSession()...');
         const { data: { session } } = await supabase.auth.getSession();
         
         if (session) {
           userId = session.user.id;
-          console.log('✅ getSession success:', userId);
           break;
         }
 
@@ -109,12 +104,10 @@ export default function NewPostScreen() {
       }
 
       if (!userId) {
-        console.error('❌ AUTH CHECK FAILED: Final attempt failed.');
         throw new Error('You must be logged in to post. Please sign in again.');
       }
 
       // 2. Process and Upload Image
-      console.log('📸 IMAGE_UPLOAD: Compressing image...');
       const processedImage = await processImage(imageUri);
       
       const response = await fetch(processedImage.uri);

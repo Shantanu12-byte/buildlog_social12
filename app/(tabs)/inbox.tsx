@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { 
   View, 
   Text, 
@@ -7,240 +7,195 @@ import {
   TouchableOpacity, 
   ActivityIndicator, 
   RefreshControl,
-  Pressable
+  Pressable,
+  useWindowDimensions,
+  Platform,
+  ScrollView
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { useUserStore } from '@/store/userStore';
-import { AvatarBlock } from '@/components/AvatarBlock';
-import { getThemeColors } from '@/constants/theme';
+import { useChatStore } from '@/store/chatStore';
+import { Colors } from '@/constants/theme';
+import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
+import { Image } from 'expo-image';
 
-type Notification = {
-  id: string;
-  user_id: string;
-  sender_id: string;
-  type: 'follow' | 'comment' | 'hype' | 'join_request';
-  content: string;
-  project_id?: string;
-  is_read: boolean;
-  created_at: string;
-  sender?: {
-    username: string;
-    avatar_url: string | null;
-    level?: string;
-  };
+// --- Sub-components ---
+
+const CyberAvatar = ({ url, username, size = 56, unread = false }: any) => {
+  const initials = username?.charAt(0).toUpperCase() || '?';
+  
+  return (
+    <View style={[styles.avatarContainer, { width: size, height: size }]}>
+      <View style={[styles.avatarBorder, { borderRadius: size / 2 }]}>
+        {url ? (
+          <Image 
+            source={{ uri: url }} 
+            style={[styles.avatarImage, { borderRadius: size / 2 - 2 }]} 
+            contentFit="cover"
+            transition={200}
+          />
+        ) : (
+          <View style={[styles.avatarPlaceholder, { borderRadius: size / 2 - 2 }]}>
+            <Text style={styles.avatarInitials}>{initials}</Text>
+          </View>
+        )}
+      </View>
+      {unread && <View style={styles.unreadPulse} />}
+    </View>
+  );
 };
 
+const EmptyInbox = () => (
+  <View style={styles.emptyContainer}>
+    <View style={styles.scrollIconContainer}>
+      <MaterialCommunityIcons name="script-text-outline" size={100} color="#1A1A1A" />
+      <View style={styles.scrollLock}>
+        <Feather name="lock" size={32} color="#55FF55" />
+      </View>
+    </View>
+    <Text style={styles.emptyTitle}>THE_SECRET_SCROLL_IS_CLOSED</Text>
+    <Text style={styles.emptySub}>No encrypted transmissions found in the current sector.</Text>
+    <TouchableOpacity 
+      style={styles.whisperBtn}
+      onPress={() => router.push('/search')}
+    >
+      <Text style={styles.whisperBtnText}>[ START_A_SECRET_WHISPER ]</Text>
+    </TouchableOpacity>
+  </View>
+);
+
+// --- Main Component ---
+
 export default function InboxScreen() {
-  const { userProfile, isEnderMode } = useUserStore();
-  const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { width } = useWindowDimensions();
+  const { userProfile } = useUserStore();
+  const { inbox, isLoading, fetchInbox, subscribeToMessages } = useChatStore();
+  const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
-  const colors = getThemeColors(isEnderMode);
 
-  const fetchNotifications = useCallback(async () => {
-    if (!userProfile?.id) return;
-    
-    try {
-      console.log('📡 INBOX: Fetching historical transmissions...');
-      // 1. Fetch raw notifications
-      const { data: notifs, error } = await supabase
-        .from('notifications')
-        .select('*')
-        .eq('user_id', userProfile.id)
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-      if (!notifs || notifs.length === 0) {
-        setNotifications(prev => prev.length > 0 ? prev : []);
-        return;
-      }
-
-      // 2. Fetch profiles for all unique sender_ids
-      const senderIds = [...new Set(notifs.map(n => n.sender_id))];
-      const { data: profiles } = await supabase
-        .from('profiles')
-        .select('id, username, avatar_url, level')
-        .in('id', senderIds);
-
-      // 3. Manually join them
-      const enrichedNotifs = notifs.map(n => ({
-        ...n,
-        sender: profiles?.find(p => p.id === n.sender_id) || null
-      }));
-
-      // 4. Robust Merge Fix: Don't overwrite new realtime notifications
-      setNotifications(prev => {
-        const existingIds = new Set(prev.map(n => n.id));
-        const filteredNew = enrichedNotifs.filter(n => !existingIds.has(n.id));
-        const merged = [...prev, ...filteredNew].sort(
-          (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-        );
-        return merged as any;
-      });
-    } catch (error) {
-      console.error('📡 INBOX_ERROR:', error);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, [userProfile?.id]);
+  const isDesktop = Platform.OS === 'web' && width > 768;
 
   useEffect(() => {
-    if (!userProfile?.id) return;
-
-    fetchNotifications();
-
-    console.log('📡 INBOX: Opening real-time command channel for:', userProfile.id);
-    const channel = supabase
-      .channel(`inbox_realtime_${userProfile.id}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'notifications',
-          filter: `user_id=eq.${userProfile.id}`,
-        },
-        async (payload) => {
-          console.log('📡 INBOX: New payload received!', payload.new.id);
-          
-          // Fetch the sender info for the new notification
-          const { data: sender } = await supabase
-            .from('profiles')
-            .select('username, avatar_url, level')
-            .eq('id', payload.new.sender_id)
-            .single();
-            
-          const completeNotif: Notification = {
-            ...(payload.new as any),
-            sender: sender as any
-          };
-
-          setNotifications(prev => {
-            // Deduplicate just in case
-            if (prev.find(n => n.id === completeNotif.id)) return prev;
-            return [completeNotif, ...prev];
-          });
-        }
-      )
-      .subscribe((status) => {
-        console.log('📡 INBOX: Subscription status:', status);
+    if (userProfile?.id) {
+      fetchInbox(userProfile.id);
+      
+      const unsubscribe = subscribeToMessages(userProfile.id, () => {
+        fetchInbox(userProfile.id);
       });
-
-    return () => {
-      console.log('📡 INBOX: Closing channel.');
-      supabase.removeChannel(channel);
-    };
+      return unsubscribe;
+    }
   }, [userProfile?.id]);
 
-  const handleNotificationPress = async (item: Notification) => {
-    // 1. Mark as read in background
-    if (!item.is_read) {
-      setNotifications(prev => 
-        prev.map(n => n.id === item.id ? { ...n, is_read: true } : n)
-      );
-      await supabase
-        .from('notifications')
-        .update({ is_read: true })
-        .eq('id', item.id);
-    }
-
-    // 2. Route based on type
-    if (item.type === 'follow') {
-      router.push(`/user/${item.sender_id}`);
-    } else if (item.project_id) {
-      router.push(`/project/${item.project_id}`);
+  const onRefresh = async () => {
+    if (userProfile?.id) {
+      setRefreshing(true);
+      await fetchInbox(userProfile.id);
+      setRefreshing(false);
     }
   };
 
-  const getIcon = (type: string) => {
-    switch (type) {
-      case 'follow': return '⚔️';
-      case 'comment': return '🗨️';
-      case 'hype': return '⚡';
-      default: return '📡';
+  const handleChatPress = (chat: any) => {
+    if (isDesktop) {
+      setSelectedChatId(chat.id);
+    } else {
+      router.push(`/(stack)/chat/${chat.id}`);
     }
   };
 
-  const renderCard = ({ item }: { item: Notification }) => {
-    const isUnread = !item.is_read;
-    const actor = item.sender;
+  const renderChatCard = ({ item }: { item: any }) => {
+    const isSelected = selectedChatId === item.id;
+    const date = new Date(item.timestamp);
+    const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    
+    // In a real app, unread status would come from the messages table
+    const isUnread = item.unread_count > 0;
 
     return (
       <Pressable 
-        style={[
+        style={({ pressed }) => [
           styles.card, 
-          isUnread ? styles.unreadCard : styles.readCard
+          isSelected && styles.cardSelected,
+          pressed && styles.cardPressed
         ]}
-        onPress={() => handleNotificationPress(item)}
+        onPress={() => handleChatPress(item)}
       >
-        <AvatarBlock 
-          url={actor?.avatar_url} 
-          username={actor?.username} 
-          size={44}
-          tier={actor?.level || 'Default'}
-        />
+        {isUnread && <View style={styles.unreadNeon} />}
         
-        <View style={styles.cardMain}>
-          <Text style={styles.contentLabel}>
-            {'> '}
-            <Text style={styles.usernameText}>{actor?.username?.toUpperCase() || 'EXTERNAL_UNIT'}</Text>
-            {item.type === 'follow' && ' HAS_JOINED_YOUR_NETWORK.'}
-            {item.type === 'comment' && ` LEFT_A_LOG: "${item.content.split(':').pop()?.trim()}"`}
-            {item.type === 'hype' && ' HYPED_YOUR_QUEST.'}
-            {item.type === 'join_request' && ' WANTS_TO_JOIN_YOUR_QUEST.'}
+        <CyberAvatar url={item.avatar_url} username={item.username} unread={isUnread} />
+        
+        <View style={styles.cardContent}>
+          <View style={styles.cardHeader}>
+            <View style={styles.nameRow}>
+              <Text style={styles.usernameText}>{item.username?.toUpperCase() || 'UNKNOWN'}</Text>
+              <MaterialCommunityIcons name="shield-check" size={14} color="#55FF55" style={styles.lockIcon} />
+            </View>
+            <Text style={styles.timeText}>{timeStr}</Text>
+          </View>
+          
+          <Text style={styles.previewText} numberOfLines={1}>
+            {item.lastMessage || 'NO_RECENT_WHISPERS...'}
           </Text>
-          <Text style={styles.timeText}>{new Date(item.created_at).toLocaleTimeString()}</Text>
         </View>
-
-        <View style={styles.typeIndicator}>
-          <Text style={styles.indicatorIcon}>{getIcon(item.type)}</Text>
-        </View>
+        <Feather name="chevron-right" size={20} color="#333" style={styles.chevron} />
       </Pressable>
     );
   };
 
-  if (loading && !refreshing) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.center}>
-          <ActivityIndicator size="large" color="#55FF55" />
-          <Text style={styles.loadingText}>SYNCHRONIZING_LONG_RANGE_SENSORS...</Text>
-        </View>
-      </SafeAreaView>
-    );
-  }
+  const ListHeader = () => (
+    <View style={styles.listHeader}>
+      <View style={styles.headerTop}>
+        <Text style={styles.headerTitle}>SECRET_SCROLL</Text>
+        <MaterialCommunityIcons name="eye-off-outline" size={20} color="#55FF55" />
+      </View>
+      <Text style={styles.headerSub}>SECURE_VOICE_INBOX</Text>
+      <View style={styles.headerLine} />
+    </View>
+  );
 
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>[ INCOMING_TRANSMISSIONS ]</Text>
-        <View style={styles.scanline} />
-      </View>
-
-      <FlatList
-        data={notifications}
-        renderItem={renderCard}
-        keyExtractor={item => item.id}
-        contentContainerStyle={styles.listContent}
-        refreshControl={
-          <RefreshControl 
-            refreshing={refreshing} 
-            onRefresh={() => {
-              setRefreshing(true);
-              fetchNotifications();
-            }}
-            tintColor="#55FF55"
+    <SafeAreaView style={styles.container} edges={['top']}>
+      <View style={styles.mainWrapper}>
+        {/* Left Side: Inbox List */}
+        <View style={[styles.sidebar, isDesktop ? styles.desktopSidebar : styles.fullWidth]}>
+          <FlatList
+            data={inbox}
+            renderItem={renderChatCard}
+            keyExtractor={item => item.id}
+            ListHeaderComponent={ListHeader}
+            contentContainerStyle={styles.listContent}
+            refreshControl={
+              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#55FF55" />
+            }
+            ListEmptyComponent={isLoading ? <ActivityIndicator color="#55FF55" style={{marginTop: 40}} /> : <EmptyInbox />}
           />
-        }
-        ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            <Text style={styles.emptyText}>SIGNAL_LOST: NO_ACTIVITY_IN_THIS_SECTOR...</Text>
+        </View>
+
+        {/* Right Side: Detail Pane (Desktop only) */}
+        {isDesktop && (
+          <View style={styles.detailPane}>
+            {selectedChatId ? (
+              <View style={styles.chatPlaceholder}>
+                <MaterialCommunityIcons name="shield-lock-outline" size={64} color="#1A1A1A" />
+                <Text style={styles.placeholderText}>WHISPER_CHANNEL_ESTABLISHED</Text>
+                <TouchableOpacity 
+                   style={styles.openDetailBtn}
+                   onPress={() => router.push(`/(stack)/chat/${selectedChatId}`)}
+                >
+                   <MaterialCommunityIcons name="run-fast" size={20} color="#000" style={{marginRight: 10}} />
+                   <Text style={styles.openDetailBtnText}>ENTER_DEEP_LINK</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <View style={styles.chatPlaceholder}>
+                <Feather name="message-square" size={64} color="#111" />
+                <Text style={styles.placeholderText}>SELECT_A_TRANSMISSION_TO_DECRYPT</Text>
+              </View>
+            )}
           </View>
-        }
-      />
+        )}
+      </View>
     </SafeAreaView>
   );
 }
@@ -250,99 +205,261 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#000',
   },
-  center: {
+  mainWrapper: {
     flex: 1,
+    flexDirection: 'row',
+  },
+  sidebar: {
+    backgroundColor: '#000',
+    borderRightWidth: Platform.OS === 'web' ? 1 : 0,
+    borderRightColor: '#1A1A1A',
+  },
+  desktopSidebar: {
+    width: '30%',
+    maxWidth: 450,
+    minWidth: 350,
+  },
+  fullWidth: {
+    flex: 1,
+  },
+  detailPane: {
+    flex: 1,
+    backgroundColor: '#050505',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  header: {
+  listHeader: {
     padding: 24,
-    borderBottomWidth: 4,
-    borderBottomColor: '#222',
-    position: 'relative',
+    paddingTop: 32,
+    paddingBottom: 24,
+  },
+  headerTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 4,
   },
   headerTitle: {
     fontFamily: 'monospace',
-    color: '#55FF55',
-    fontSize: 18,
-    fontWeight: 'bold',
-    letterSpacing: 1,
+    color: '#FFF',
+    fontSize: 28,
+    fontWeight: '900',
+    letterSpacing: 4,
   },
-  scanline: {
-    position: 'absolute',
-    bottom: -2,
-    left: 0,
-    right: 0,
-    height: 2,
-    backgroundColor: 'rgba(85, 255, 85, 0.2)',
+  headerSub: {
+    fontFamily: 'monospace',
+    color: '#55FF55',
+    fontSize: 10,
+    letterSpacing: 2,
+    opacity: 0.7,
+  },
+  headerLine: {
+    height: 4,
+    backgroundColor: '#1A1A1A',
+    marginTop: 20,
+    width: '40%',
   },
   listContent: {
-    padding: 16,
+    paddingHorizontal: 16,
     paddingBottom: 40,
   },
   card: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 12,
-    borderWidth: 4,
+    backgroundColor: '#0A0A0A',
+    borderRadius: 20,
+    padding: 16,
     marginBottom: 12,
+    position: 'relative',
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#1A1A1A',
   },
-  unreadCard: {
-    backgroundColor: '#050505',
-    borderTopColor: '#555',
-    borderBottomColor: '#000',
-    borderRightColor: '#000',
-    borderLeftWidth: 8,
-    borderLeftColor: '#55FF55',
+  cardSelected: {
+    backgroundColor: '#111',
+    borderColor: '#333',
   },
-  readCard: {
-    backgroundColor: '#000',
-    borderTopColor: '#222',
-    borderLeftColor: '#222',
-    borderBottomColor: '#111',
-    borderRightColor: '#111',
-    opacity: 0.8,
+  cardPressed: {
+    backgroundColor: '#151515',
+    opacity: 0.9,
   },
-  cardMain: {
+  unreadNeon: {
+    position: 'absolute',
+    left: 0,
+    top: '20%',
+    bottom: '20%',
+    width: 3,
+    backgroundColor: '#55FF55',
+    ...Platform.select({
+      web: {
+        // @ts-ignore
+        boxShadow: '0px 0px 12px #55FF55',
+      },
+      default: {
+        shadowColor: '#55FF55',
+        shadowOffset: { width: 0, height: 0 },
+        shadowOpacity: 1,
+        shadowRadius: 10,
+      }
+    })
+  },
+  avatarContainer: {
+    position: 'relative',
+  },
+  avatarBorder: {
     flex: 1,
-    marginLeft: 12,
+    padding: 2,
+    backgroundColor: '#1A1A1A',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  avatarImage: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#000',
+  },
+  avatarPlaceholder: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#1A1A1A',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  avatarInitials: {
+    fontFamily: 'monospace',
+    color: '#55FF55',
+    fontWeight: 'bold',
+    fontSize: 20,
+  },
+  unreadPulse: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: '#55FF55',
+    borderWidth: 3,
+    borderColor: '#0A0A0A',
+  },
+  cardContent: {
+    flex: 1,
+    marginLeft: 16,
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  nameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   usernameText: {
-    color: '#00E5FF',
-    fontWeight: 'bold',
-  },
-  contentLabel: {
     fontFamily: 'monospace',
     color: '#FFF',
-    fontSize: 12,
-    lineHeight: 18,
+    fontSize: 15,
+    fontWeight: '800',
+    letterSpacing: 1,
+  },
+  lockIcon: {
+    marginLeft: 6,
+    opacity: 0.8,
   },
   timeText: {
     fontFamily: 'monospace',
     color: '#444',
-    fontSize: 8,
-    marginTop: 4,
-  },
-  typeIndicator: {
-    paddingLeft: 12,
-  },
-  indicatorIcon: {
-    fontSize: 18,
-  },
-  loadingText: {
-    fontFamily: 'monospace',
-    color: '#55FF55',
-    marginTop: 16,
     fontSize: 10,
+    fontWeight: 'bold',
+  },
+  previewText: {
+    fontFamily: 'monospace',
+    color: '#888',
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  chevron: {
+    marginLeft: 8,
+    opacity: 0.3,
   },
   emptyContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
     marginTop: 100,
+    paddingHorizontal: 40,
+  },
+  scrollIconContainer: {
+    position: 'relative',
+    marginBottom: 32,
+  },
+  scrollLock: {
+    position: 'absolute',
+    bottom: -10,
+    right: -10,
+    backgroundColor: '#000',
+    borderRadius: 20,
+    padding: 8,
+    borderWidth: 2,
+    borderColor: '#1A1A1A',
+  },
+  emptyTitle: {
+    fontFamily: 'monospace',
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '900',
+    textAlign: 'center',
+    marginBottom: 12,
+    letterSpacing: 2,
+  },
+  emptySub: {
+    fontFamily: 'monospace',
+    color: '#555555',
+    fontSize: 11,
+    textAlign: 'center',
+    marginBottom: 40,
+    lineHeight: 18,
+  },
+  whisperBtn: {
+    backgroundColor: '#55FF55',
+    paddingVertical: 16,
+    paddingHorizontal: 32,
+    borderRadius: 0, // Keep it sharp
+    flexDirection: 'row',
     alignItems: 'center',
   },
-  emptyText: {
+  whisperBtnText: {
     fontFamily: 'monospace',
-    color: '#333',
-    fontSize: 12,
-    textAlign: 'center',
+    color: '#000',
+    fontWeight: '900',
+    fontSize: 13,
   },
+  chatPlaceholder: {
+    alignItems: 'center',
+    padding: 40,
+  },
+  placeholderText: {
+    fontFamily: 'monospace',
+    color: '#1A1A1A',
+    fontSize: 16,
+    marginTop: 24,
+    fontWeight: '900',
+    textAlign: 'center',
+    letterSpacing: 2,
+  },
+  openDetailBtn: {
+    marginTop: 40,
+    backgroundColor: '#55FF55',
+    paddingVertical: 14,
+    paddingHorizontal: 28,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  openDetailBtnText: {
+    fontFamily: 'monospace',
+    color: '#000000',
+    fontSize: 13,
+    fontWeight: '900',
+  }
 });

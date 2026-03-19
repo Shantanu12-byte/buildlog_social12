@@ -76,7 +76,6 @@ export default function PublicPlayerCard() {
       if (!countError) setFollowersCount(count || 0);
 
     } catch (error) {
-      console.error('📡 PROFILE_FETCH_ERROR:', error);
       Alert.alert('DATABASE_ERROR', 'COULD_NOT_RETRIEVE_PLAYER_DATA');
     } finally {
       setLoading(false);
@@ -126,7 +125,6 @@ export default function PublicPlayerCard() {
         setFollowersCount(prev => prev + 1);
       }
     } catch (error) {
-      console.error('📡 FOLLOW_TOGGLE_ERROR:', error);
       Alert.alert('TRANSMISSION_FAILED', 'COULD_NOT_UPDATE_ALLY_STATUS');
     } finally {
       setActionLoading(false);

@@ -35,7 +35,6 @@ export default function NetworkRadarScreen() {
 
   const fetchNetwork = useCallback(async (uid: string) => {
     setLoading(true);
-    console.log(`📡 RADAR_DEBUG: Fetching ${activeTab} for UID: ${uid}`);
     try {
       if (activeTab === 'followers') {
         // 1. Get follower IDs
@@ -44,7 +43,6 @@ export default function NetworkRadarScreen() {
           .select('follower_id')
           .eq('following_id', uid);
 
-        console.log('📡 RADAR_DEBUG: Follower IDs:', followRecords);
         if (followError) throw followError;
 
         if (!followRecords || followRecords.length === 0) {
@@ -60,7 +58,6 @@ export default function NetworkRadarScreen() {
           .select('id, username, avatar_url')
           .in('id', ids);
 
-        console.log('📡 RADAR_DEBUG: Follower Profiles:', profiles);
         if (profileError) throw profileError;
 
         setNetworkList(profiles || []);
@@ -71,7 +68,6 @@ export default function NetworkRadarScreen() {
           .select('following_id')
           .eq('follower_id', uid);
 
-        console.log('📡 RADAR_DEBUG: Following IDs:', followRecords);
         if (followError) throw followError;
 
         if (!followRecords || followRecords.length === 0) {
@@ -87,13 +83,11 @@ export default function NetworkRadarScreen() {
           .select('id, username, avatar_url')
           .in('id', ids);
 
-        console.log('📡 RADAR_DEBUG: Following Profiles:', profiles);
         if (profileError) throw profileError;
 
         setNetworkList(profiles || []);
       }
     } catch (error) {
-      console.error('📡 RADAR_DEBUG: fetchNetwork Error:', error);
       Alert.alert('ERROR', 'FAILED_TO_LOAD_NETWORK_DATA');
     } finally {
       setLoading(false);

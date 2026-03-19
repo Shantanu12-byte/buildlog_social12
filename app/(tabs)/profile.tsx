@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, FlatList, Pressable, ActivityIndicator, TouchableOpacity, Linking, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, FlatList, Pressable, ActivityIndicator, TouchableOpacity, Linking, RefreshControl, Platform } from 'react-native';
 import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
@@ -15,7 +15,10 @@ import { LanguageChip } from '@/components/LanguageChip';
 import { useState, useEffect, useCallback } from 'react';
 
 const glassBorder = { borderWidth: 1, borderColor: Colors.border };
-const textGlow = { textShadowColor: 'rgba(255,255,255,0.35)', textShadowOffset: { width: 0, height: 0 }, textShadowRadius: 6 };
+const textGlow = Platform.select({
+  web: { textShadow: '0px 0px 6px rgba(255,255,255,0.35)' },
+  default: { textShadowColor: 'rgba(255,255,255,0.35)', textShadowOffset: { width: 0, height: 0 }, textShadowRadius: 6 }
+}) as any;
 
 export default function ProfileScreen() {
   const router = useRouter();
@@ -33,7 +36,7 @@ export default function ProfileScreen() {
   const [stats, setStats] = useState({ followers: 0, following: 0 });
 
   const handleSettingsPress = () => {
-    router.push('/settings');
+    router.push('/(stack)/settings');
   };
 
   const handleOpenLink = async (url: string | null | undefined) => {
@@ -479,11 +482,16 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: 'bold',
   },
-  glowingText: {
-    textShadowColor: 'rgba(255, 215, 0, 0.8)',
-    textShadowOffset: { width: 0, height: 0 },
-    textShadowRadius: 10,
-  },
+  glowingText: Platform.select({
+    web: {
+      textShadow: '0px 0px 10px rgba(255, 215, 0, 0.8)',
+    },
+    default: {
+      textShadowColor: 'rgba(255, 215, 0, 0.8)',
+      textShadowOffset: { width: 0, height: 0 },
+      textShadowRadius: 10,
+    }
+  }) as any,
   statsRow: {
     flexDirection: 'row',
     width: '90%',

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { 
   View, 
   Text, 
@@ -36,7 +36,6 @@ export default function GlobalQuestFeed() {
 
   const fetchQuests = useCallback(async () => {
     try {
-      console.log('📡 FETCHING_QUESTS: Global discovery started...');
       const { data, error } = await supabase
         .from('projects')
         .select(`
@@ -66,7 +65,6 @@ export default function GlobalQuestFeed() {
     }
 
     try {
-      console.log('⚔️ JOINING_QUEST:', projectTitle);
       const { error } = await supabase
         .from('discussions')
         .insert({ 
@@ -169,11 +167,13 @@ export default function GlobalQuestFeed() {
      }
   };
 
-  useFocusEffect(
-    useCallback(() => {
+  const hasFetched = useRef(false);
+  useEffect(() => {
+    if (!hasFetched.current) {
       fetchQuests();
-    }, [fetchQuests])
-  );
+      hasFetched.current = true;
+    }
+  }, [fetchQuests]);
 
   const onRefresh = () => {
     setIsRefreshing(true);
@@ -208,7 +208,7 @@ export default function GlobalQuestFeed() {
           onPress={() => router.push({ pathname: '/user/[id]', params: { id: item.user_id } })}
         >
           <AvatarBlock 
-            url={creator?.avatar_url} 
+            url={creator?.avatar_url && !creator.avatar_url.startsWith('blob:') ? `${creator.avatar_url}?cb=${new Date().getTime()}` : null} 
             username={creator?.username} 
             size={40}
             tier={item.profiles?.level || 'Default'}
@@ -237,7 +237,7 @@ export default function GlobalQuestFeed() {
           <View style={styles.questImageFrame}>
             {item.image_url && !item.image_url.startsWith('blob:') ? (
               <>
-                <Image source={{ uri: item.image_url }} style={styles.questImage} />
+                <Image source={{ uri: `${item.image_url}?cb=${new Date().getTime()}` }} style={styles.questImage} />
                 <View style={styles.feedCrtOverlay}>
                    {Array.from({ length: 20 }).map((_, i) => (
                       <View key={i} style={styles.feedScanline} />
@@ -328,7 +328,7 @@ export default function GlobalQuestFeed() {
           </View>
         </View>
         <TouchableOpacity 
-          onPress={() => router.push('/(tabs)/chat')}
+          onPress={() => router.push('/(tabs)/inbox')}
           style={styles.headerActionBtn}
         >
           <Feather name="message-circle" size={28} color={colors.primary} />

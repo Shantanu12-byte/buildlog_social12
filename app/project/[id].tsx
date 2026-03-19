@@ -169,7 +169,7 @@ export default function ProjectDetailScreen() {
 
       if (error) throw error;
       
-      // 📡 Trigger Notification for Creator
+      // Trigger Notification for Creator
       if (currentUserId !== project.user_id) {
         try {
           await supabase.from('notifications').insert({
@@ -220,8 +220,6 @@ export default function ProjectDetailScreen() {
       onPress: async () => {
         setIsDeleting(true);
         try {
-          console.log('🗑️ DEEP_CLEAN: Starting termination of quest:', id);
-
           // 1. Get all post IDs for this project to clear likes
           const { data: projectPosts, error: fetchPostsError } = await supabase
             .from('posts')
@@ -245,7 +243,6 @@ export default function ProjectDetailScreen() {
             }
 
             // 3. Clear all posts for this project
-            console.log('🧹 CLEARING_LOGS: Removing all logs for project');
             const { error: postsError } = await supabase
               .from('quest_logs')
               .delete()

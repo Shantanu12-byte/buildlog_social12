@@ -115,7 +115,7 @@ export default function TavernScreen() {
         }
       }
     } catch (err) {
-      console.error('📡 TAVERN_PAGINATION_ERROR:', err);
+      // Pagination error
     } finally {
       setLoadingMore(false);
     }
@@ -177,8 +177,8 @@ export default function TavernScreen() {
     // Blinking animation for typing indicator
     const blink = Animated.loop(
       Animated.sequence([
-        Animated.timing(blinkAnim, { toValue: 0.3, duration: 500, useNativeDriver: true }),
-        Animated.timing(blinkAnim, { toValue: 1, duration: 500, useNativeDriver: true }),
+        Animated.timing(blinkAnim, { toValue: 0.3, duration: 500, useNativeDriver: Platform.OS !== 'web' }),
+        Animated.timing(blinkAnim, { toValue: 1, duration: 500, useNativeDriver: Platform.OS !== 'web' }),
       ])
     );
     blink.start();
@@ -244,7 +244,7 @@ export default function TavernScreen() {
     const profile = Array.isArray(rawProfile) ? rawProfile[0] : rawProfile;
 
     if (!isMe && !profile) {
-      console.warn('⚠️ TAVERN_DEBUG: Missing profile for message:', item.id, 'from user:', item.user_id);
+      // Missing profile for message
     }
     
     return (

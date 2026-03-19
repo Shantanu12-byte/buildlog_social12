@@ -1,5 +1,5 @@
 import React, { useRef } from 'react';
-import { Text, StyleSheet, Animated, Pressable, View, ViewStyle } from 'react-native';
+import { Text, StyleSheet, Animated, Pressable, View, ViewStyle, Platform } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Colors, FontSizes, Spacing } from '@/constants/theme';
 
@@ -33,14 +33,14 @@ export const LanguageChip = ({ name, icon, style }: LanguageChipProps) => {
   const handlePressIn = () => {
     Animated.spring(scaleAnim, {
       toValue: 0.95,
-      useNativeDriver: true,
+      useNativeDriver: Platform.OS !== 'web',
     }).start();
   };
 
   const handlePressOut = () => {
     Animated.spring(scaleAnim, {
       toValue: 1,
-      useNativeDriver: true,
+      useNativeDriver: Platform.OS !== 'web',
     }).start();
   };
 

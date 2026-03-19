@@ -123,7 +123,7 @@ export default function OtherProfileScreen() {
 
   const handleMessage = () => {
       // Find a project to message about or go to inbox
-      router.push('/(tabs)/chat');
+      router.push('/(tabs)/inbox');
   };
 
   const renderHeader = () => (

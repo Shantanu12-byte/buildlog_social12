@@ -12,7 +12,6 @@ export function useEncryption() {
     async function init() {
       if (!userProfile?.id) return;
 
-      console.log("🎬 INITIALIZING_ENCRYPTION_LAYER...");
       const keyPair = await EncryptionUtils.getOrCreateKeys();
       
       if (keyPair) {
@@ -20,7 +19,6 @@ export function useEncryption() {
 
         // Sync public key to profile if missing
         if (!userProfile.public_key || userProfile.public_key !== keyPair.publicKey) {
-          console.log("📡 SYNCING_PUBLIC_KEY_TO_REALM...");
           try {
             await updateUserProfile({ public_key: keyPair.publicKey } as any);
           } catch (e) {

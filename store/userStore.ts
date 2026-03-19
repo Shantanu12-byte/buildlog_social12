@@ -15,6 +15,7 @@ interface UserProfile {
   linkedin_url: string;
   public_key: string | null;
   expo_push_token: string | null;
+  onboarding_complete: boolean;
 }
 
 interface UserState {
@@ -54,7 +55,6 @@ export const useUserStore = create<UserState>((set, get) => ({
       if (error) throw error;
       
       if (data) {
-        console.log("Global Store: Profile Hydrated", data.username);
         set({ userProfile: data });
       }
     } catch (error) {
@@ -80,7 +80,6 @@ export const useUserStore = create<UserState>((set, get) => ({
         });
 
       if (error) throw error;
-      console.log("Global Store: Profile Synced with DB");
     } catch (error) {
       console.error("updateUserProfile Error:", error);
     }
@@ -89,7 +88,6 @@ export const useUserStore = create<UserState>((set, get) => ({
   toggleEnderMode: async () => {
     const newMode = !get().isEnderMode;
     set({ isEnderMode: newMode });
-    console.log("Global Store: Toggle Ender Mode", newMode);
     try {
       await AsyncStorage.setItem('isEnderMode', JSON.stringify(newMode));
     } catch (e) {
@@ -102,7 +100,6 @@ export const useUserStore = create<UserState>((set, get) => ({
       const val = await AsyncStorage.getItem('isEnderMode');
       if (val !== null) {
         set({ isEnderMode: JSON.parse(val) });
-        console.log("Global Store: Ender Mode Initialized", JSON.parse(val));
       }
     } catch (e) {
       console.error("Store Initialization Error:", e);

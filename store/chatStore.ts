@@ -159,7 +159,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
         },
         (payload) => {
           const newMsg = payload.new as Message;
-          console.log("🔔 INCOMING_WHISPER");
           
           // Update local state if we are already in this chat
           // This avoids the need for every component to call fetchMessages separately
@@ -169,7 +168,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
       .subscribe();
 
     return () => {
-      console.log("🔕 UNSUBSCRIBING_FROM_WHISPERS");
       supabase.removeChannel(channel);
     };
   },

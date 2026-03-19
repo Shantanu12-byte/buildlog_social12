@@ -31,7 +31,7 @@ export default function SearchScreen() {
         setCurrentUserId(session.user.id);
         fetchFollowing(session.user.id);
       } else {
-        router.replace('/login');
+        router.replace('/(auth)/login');
       }
     };
     getInitData();
@@ -74,7 +74,7 @@ export default function SearchScreen() {
   const handleFollow = async (targetUserId: string) => {
     const session = await getValidSession();
     if (!session) {
-      router.replace('/login');
+      router.replace('/(auth)/login');
       return;
     }
 
