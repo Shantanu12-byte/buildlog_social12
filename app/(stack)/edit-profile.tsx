@@ -122,7 +122,8 @@ export default function EditProfileScreen() {
       let finalAvatarUrl = avatarUrl;
 
       // 1. Handle Avatar Upload if it's a new local image
-      if (avatarUrl && avatarUrl.startsWith('file://')) {
+      const isNewLocalImage = avatarUrl && (avatarUrl.startsWith('file://') || avatarUrl.startsWith('blob:') || avatarUrl.startsWith('data:'));
+      if (isNewLocalImage) {
         console.log('📸 AVATAR_UPLOAD: Compressing and processing image...');
         const processedImage = await processImage(avatarUrl);
         const response = await fetch(processedImage.uri);
