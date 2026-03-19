@@ -340,7 +340,7 @@ export default function RootLayout() {
 
   return (
     <SafeAreaProvider>
-      <View style={{ flex: 1, backgroundColor: '#000000' }}>
+      <View style={{ flex: 1, backgroundColor: '#000000' }} importantForAccessibility="no-hide-descendants">
         <ErrorBoundary>
           <PixelFade>
             <Stack

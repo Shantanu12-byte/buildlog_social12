@@ -16,10 +16,21 @@ export default function MainFeed() {
   const [posts, setPosts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [fetchError, setFetchError] = useState(null);
 
   const fetchFeed = async () => {
     try {
-      console.log("SUPABASE_URL:", process.env.EXPO_PUBLIC_SUPABASE_URL);
+      setFetchError(null);
+      const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+      console.log("SUPABASE_URL:", supabaseUrl);
+      
+      if (!supabaseUrl) {
+        if (typeof window !== 'undefined') {
+          window.alert('CRITICAL: Supabase URL is missing in Vercel Settings!');
+        } else {
+          Alert.alert('CRITICAL: Supabase URL is missing in Vercel Settings!');
+        }
+      }
 
       const { data, error } = await supabase
         .from('trending_posts')
@@ -35,7 +46,7 @@ export default function MainFeed() {
       setPosts(data || []);
     } catch (error) {
       console.error("DETAILED_ERROR:", error);
-      Alert.alert('Error loading feed', error.message);
+      setFetchError(error.message);
     }
   };
 
@@ -112,6 +123,14 @@ export default function MainFeed() {
     return (
       <View style={styles.centerContainer}>
         <ActivityIndicator size="large" color="#007AFF" />
+      </View>
+    );
+  }
+
+  if (fetchError) {
+    return (
+      <View style={styles.centerContainer}>
+        <Text style={{color: 'red', margin: 20, textAlign: 'center', fontSize: 16}}>{fetchError}</Text>
       </View>
     );
   }
