@@ -21,9 +21,9 @@ import { Feather } from '@expo/vector-icons';
 import { getRelativeTime } from '@/lib/utils';
 import { AvatarBlock } from '@/components/AvatarBlock';
 
-export default function GlobalQuestFeed() {
+export default function GlobalProjectFeed() {
   const router = useRouter();
-  const [quests, setQuests] = useState<any[]>([]);
+  const [projects, setProjects] = useState<any[]>([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const { userProfile, isEnderMode } = useUserStore();
@@ -49,9 +49,9 @@ export default function GlobalQuestFeed() {
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      setQuests(data || []);
+      setProjects(data || []);
     } catch (error) {
-      console.error('Error fetching quests:', error);
+      console.error('Error fetching projects:', error);
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
@@ -60,7 +60,7 @@ export default function GlobalQuestFeed() {
 
   const handleCollab = async (projectId: string, projectTitle: string, creatorId: string) => {
     if (!currentUserId) {
-      Alert.alert('ERROR', 'PLEASE_LOGIN_TO_JOIN_QUESTS');
+      Alert.alert('ERROR', 'PLEASE_LOGIN_TO_JOIN_PROJECTS');
       return;
     }
 
@@ -77,7 +77,7 @@ export default function GlobalQuestFeed() {
       
       await handleCollabNotification(projectId, projectTitle, creatorId); 
       
-      Alert.alert("QUEST ACCEPTED!", "Your collab request has been sent to the creator.");
+      Alert.alert("PROJECT ACCEPTED!", "Your collab request has been sent to the creator.");
     } catch (error: any) {
       console.error('Collab error:', error);
       Alert.alert("QUEST_FAILED", error.message || "COULD_NOT_SEND_REQUEST");
@@ -86,7 +86,7 @@ export default function GlobalQuestFeed() {
 
   const handleHype = async (item: any) => {
     if (!currentUserId) {
-      Alert.alert('ERROR', 'PLEASE_LOGIN_TP_HYPE_QUESTS');
+      Alert.alert('ERROR', 'PLEASE_LOGIN_TP_HYPE_PROJECTS');
       return;
     }
 
@@ -108,7 +108,7 @@ export default function GlobalQuestFeed() {
           type: 'hype',
           sender_id: currentUserId,
           project_id: item.id,
-          content: `NEW_TRANSMISSION: @${userProfile?.username || 'SYSTEM'} just HYPED your Quest: ${item.title}!`
+          content: `NEW_TRANSMISSION: @${userProfile?.username || 'SYSTEM'} just HYPED your Project: ${item.title}!`
         });
 
       if (notifError) throw notifError;
@@ -128,8 +128,8 @@ export default function GlobalQuestFeed() {
           `NEW_TRANSMISSION: @${userProfile?.username || 'builder'} just HYPED your Quest!`
         );
       }
-
-      Alert.alert("QUEST HYPED!", "Your enthusiasm has been transmitted to the builder.");
++
+      Alert.alert("PROJECT HYPED!", "Your enthusiasm has been transmitted to the builder.");
     } catch (error: any) {
       console.error('Hype error:', error);
       Alert.alert("HYPER_SPACE_FAILURE", error.message || "COULD_NOT_PROCESS_HYPE");
@@ -159,7 +159,7 @@ export default function GlobalQuestFeed() {
          await sendPushNotification(
            creatorProfile.expo_push_token,
            '[ SYSTEM_ALERT ]',
-           `NEW_TRANSMISSION: @${userProfile?.username || 'builder'} wants to JOIN your Quest!`
+           `NEW_TRANSMISSION: @${userProfile?.username || 'builder'} wants to JOIN your Project!`
          );
        }
      } catch (e) {
@@ -180,7 +180,7 @@ export default function GlobalQuestFeed() {
     fetchQuests();
   };
 
-  const renderQuestCard = ({ item }: { item: any }) => {
+  const renderProjectCard = ({ item }: { item: any }) => {
     const creator = item.profiles;
     const progress = item.progress || 0;
     const relativeTime = getRelativeTime(item.created_at);
@@ -191,9 +191,9 @@ export default function GlobalQuestFeed() {
     return (
       <View 
         style={[
-          styles.questCard, 
+          styles.projectCard, 
           { 
-            backgroundColor: '#1A1A1A', // Fixed dark gray for quests
+            backgroundColor: '#1A1A1A', // Fixed dark gray for projects
           }
         ]}
       >
@@ -223,21 +223,21 @@ export default function GlobalQuestFeed() {
           </View>
         </Pressable>
 
-        {/* 2. The Quest Details */}
+        {/* 2. The Project Details */}
         <TouchableOpacity 
           activeOpacity={0.8}
           onPress={() => router.push(`/project/${item.id}`)}
-          style={styles.questBody}
+          style={styles.projectBody}
         >
-          <Text style={[styles.questBranding, { color: '#FFFFFF' }]}>
-            [ QUEST: {item.title?.toUpperCase()} ]
+          <Text style={[styles.projectBranding, { color: '#FFFFFF' }]}>
+            [ PROJECT: {item.title?.toUpperCase()} ]
           </Text>
 
-          {/* Quest Image Capture Slot */}
-          <View style={styles.questImageFrame}>
+          {/* Project Image Capture Slot */}
+          <View style={styles.projectImageFrame}>
             {item.image_url && !item.image_url.startsWith('blob:') ? (
               <>
-                <Image source={{ uri: `${item.image_url}?cb=${new Date().getTime()}` }} style={styles.questImage} />
+                <Image source={{ uri: `${item.image_url}?cb=${new Date().getTime()}` }} style={styles.projectImage} />
                 <View style={styles.feedCrtOverlay}>
                    {Array.from({ length: 20 }).map((_, i) => (
                       <View key={i} style={styles.feedScanline} />
@@ -306,7 +306,7 @@ export default function GlobalQuestFeed() {
               style={[styles.actionBtn, styles.joinBtn, { backgroundColor: colors.accentEmerald, borderColor: colors.primary }]}
               onPress={() => handleCollab(item.id, item.title, item.user_id)}
             >
-              <Text style={[styles.actionBtnText, { color: colors.background }]}>⚔️ JOIN QUEST</Text>
+              <Text style={[styles.actionBtnText, { color: colors.background }]}>⚔️ JOIN PROJECT</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -323,7 +323,7 @@ export default function GlobalQuestFeed() {
             style={{ width: 16, height: 16, marginRight: 8 }}
           />
           <View>
-            <Text style={[styles.screenTitle, { color: colors.primary }]}>GLOBAL_QUESTS</Text>
+            <Text style={[styles.screenTitle, { color: colors.primary }]}>GLOBAL_PROJECTS</Text>
             <Text style={[styles.subtitle, { color: colors.textSecondary }]}>WORLD_DISCOVERY_FEED</Text>
           </View>
         </View>
@@ -342,8 +342,8 @@ export default function GlobalQuestFeed() {
         </View>
       ) : (
         <FlatList
-          data={quests}
-          renderItem={renderQuestCard}
+          data={projects}
+          renderItem={renderProjectCard}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.listContent}
           removeClippedSubviews={true}
@@ -360,7 +360,7 @@ export default function GlobalQuestFeed() {
           ListEmptyComponent={
             <View style={styles.emptyState}>
               <Feather name="package" size={48} color="#333333" />
-              <Text style={styles.emptyText}>NO_QUESTS_FOUND</Text>
+              <Text style={styles.emptyText}>NO_PROJECTS_FOUND</Text>
             </View>
           }
         />
@@ -434,7 +434,7 @@ const styles = StyleSheet.create({
     padding: Spacing.xl,
     paddingBottom: Spacing['5xl'],
   },
-  questCard: {
+  projectCard: {
     padding: 20,
     borderWidth: 4,
     borderTopColor: '#555555',
@@ -474,10 +474,10 @@ const styles = StyleSheet.create({
     fontSize: 8,
     color: '#888',
   },
-  questBody: {
+  projectBody: {
     marginBottom: 20,
   },
-  questBranding: {
+  projectBranding: {
     fontFamily: 'monospace',
     fontSize: 18,
     fontWeight: 'bold',
@@ -490,7 +490,7 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     marginTop: 12,
   },
-  questImageFrame: {
+  projectImageFrame: {
     width: '100%',
     aspectRatio: 16 / 9,
     backgroundColor: '#0A0A0A',
@@ -504,7 +504,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  questImage: {
+  projectImage: {
     width: '100%',
     height: '100%',
   },

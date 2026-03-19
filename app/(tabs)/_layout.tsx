@@ -96,9 +96,9 @@ export default function TabLayout() {
       <Tabs.Screen
         name="tavern"
         options={{
-          title: 'Tavern',
+          title: 'Chat',
           tabBarIcon: ({ color, size }) => (
-            <Feather name="coffee" size={size} color={color} />
+            <Feather name="message-square" size={size} color={color} />
           ),
         }}
       />

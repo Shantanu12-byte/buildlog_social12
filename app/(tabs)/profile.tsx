@@ -295,7 +295,7 @@ export default function ProfileScreen() {
             style={[styles.actionButton, { backgroundColor: colors.primaryDark, borderTopColor: colors.primary, borderLeftColor: colors.primary }]}
             onPress={() => router.push('/(stack)/create-project')}
           >
-            <Text style={[styles.actionButtonText, { color: colors.textPrimary }]}>⚔️ NEW QUEST</Text>
+            <Text style={[styles.actionButtonText, { color: colors.textPrimary }]}>⚔️ NEW PROJECT</Text>
           </TouchableOpacity>
         </View>
 
@@ -345,7 +345,7 @@ export default function ProfileScreen() {
 
         <View style={[styles.sectionHeader, { backgroundColor: colors.surface, borderTopColor: colors.borderSubtle }]}>
           <View style={styles.sectionTitleRow}>
-            <Text style={[styles.sectionTitle, { color: colors.primary }]}>QUEST_LOG</Text>
+            <Text style={[styles.sectionTitle, { color: colors.primary }]}>PROJECT_LOG</Text>
             <Text style={[styles.projectCount, { color: colors.textSecondary }]}>{projects.length} BUILDS</Text>
           </View>
           <TouchableOpacity 
@@ -353,7 +353,7 @@ export default function ProfileScreen() {
             onPress={() => router.push('/(stack)/create-project')}
           >
             <Feather name="plus" size={14} color={colors.background} />
-            <Text style={[styles.pixelButtonTextMini, { color: colors.background }]}>NEW_QUEST</Text>
+            <Text style={[styles.pixelButtonTextMini, { color: colors.background }]}>NEW_PROJECT</Text>
           </TouchableOpacity>
         </View>
       </View>

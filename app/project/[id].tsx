@@ -177,7 +177,7 @@ export default function ProjectDetailScreen() {
             type: 'comment',
             sender_id: currentUserId,
             project_id: id,
-            content: `NEW_TRANSMISSION: @${userProfile?.username || 'SYSTEM'} commented on your Quest: ${project.title}!`
+            content: `NEW_TRANSMISSION: @${userProfile?.username || 'SYSTEM'} commented on your Project: ${project.title}!`
           });
 
           const { data: creatorProfile } = await supabase
@@ -191,7 +191,7 @@ export default function ProjectDetailScreen() {
             await sendPushNotification(
               creatorProfile.expo_push_token,
               '[ SYSTEM_ALERT ]',
-              `NEW_TRANSMISSION: @${userProfile?.username || 'builder'} commented on your Quest!`
+              `NEW_TRANSMISSION: @${userProfile?.username || 'builder'} commented on your Project!`
             );
           }
         } catch (notifErr) {
@@ -202,7 +202,7 @@ export default function ProjectDetailScreen() {
       setNewComment('');
       Keyboard.dismiss();
     } catch (error: any) {
-      Alert.alert('QUEST_FAILED', error.message || 'COULD_NOT_SEND_COMMENT');
+      Alert.alert('PROJECT_ERROR', error.message || 'COULD_NOT_SEND_COMMENT');
     } finally {
       setIsSending(false);
     }
@@ -210,7 +210,7 @@ export default function ProjectDetailScreen() {
 
   const handleDeleteProject = async () => {
     Alert.alert(
-      'DELETE QUEST?',
+      'DELETE PROJECT?',
       'Careful! This will permanently delete your project and all its logs. This action cannot be undone.',
       [
         { text: 'ABORT', style: 'cancel' },
@@ -259,7 +259,7 @@ export default function ProjectDetailScreen() {
           
           if (projectError) throw projectError;
           
-          Alert.alert('Quest Terminated', 'Project and all its history have been permanently removed.');
+          Alert.alert('Project Terminated', 'Project and all its history have been permanently removed.');
           router.replace('/(tabs)/profile');
         } catch (error: any) {
           console.error('Critical Deletion Error:', error);
@@ -279,14 +279,14 @@ export default function ProjectDetailScreen() {
   const handleShareLog = (logContent: string, index: number) => {
     const totalLogs = logs.length;
     const dayNumber = totalLogs - index; // Correct day calculation for reversed list
-    const message = `[BUILDLOG]: Day ${dayNumber}/${project?.challenge_duration || 30} of my quest: ${logContent}. Join the tavern: https://buildlog.dev`;
+    const message = `[BUILDLOG]: Day ${dayNumber}/${project?.challenge_duration || 30} of my project: ${logContent}. Join the tavern: https://buildlog.dev`;
     const url = `whatsapp://send?text=${encodeURIComponent(message)}`;
     
     Linking.canOpenURL(url).then(supported => {
       if (supported) {
         Linking.openURL(url);
       } else {
-        Alert.alert('QUEST_ERROR', 'WHATSAPP_NOT_DETECTED: Please install WhatsApp to share your progress.');
+        Alert.alert('PROJECT_ERROR', 'WHATSAPP_NOT_DETECTED: Please install WhatsApp to share your progress.');
       }
     });
   };
@@ -418,7 +418,7 @@ export default function ProjectDetailScreen() {
           style={[styles.tab, activeTab === 'logs' && styles.activeTab]}
           onPress={() => setActiveTab('logs')}
         >
-          <Text style={[styles.tabText, activeTab === 'logs' && styles.activeTabText]}>QUEST_LOGS</Text>
+          <Text style={[styles.tabText, activeTab === 'logs' && styles.activeTabText]}>PROJECT_LOGS</Text>
         </TouchableOpacity>
         <TouchableOpacity 
           style={[styles.tab, activeTab === 'discussions' && styles.activeTab]}
@@ -431,7 +431,7 @@ export default function ProjectDetailScreen() {
 
       {activeTab === 'logs' && (
         <View style={styles.timelineDivider}>
-          <Text style={styles.timelineLabel}>QUEST_TIMELINE</Text>
+          <Text style={styles.timelineLabel}>PROJECT_TIMELINE</Text>
           <View style={styles.dividerLine} />
         </View>
       )}

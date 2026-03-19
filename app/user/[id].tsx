@@ -24,7 +24,7 @@ export default function PublicPlayerCard() {
   const { userProfile } = useUserStore();
   
   const [profile, setProfile] = useState<any>(null);
-  const [quests, setQuests] = useState<any[]>([]);
+  const [projects, setProjects] = useState<any[]>([]);
   const [isFollowing, setIsFollowing] = useState(false);
   const [followersCount, setFollowersCount] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -53,7 +53,7 @@ export default function PublicPlayerCard() {
         .order('created_at', { ascending: false });
       
       if (questsError) throw questsError;
-      setQuests(questsData || []);
+      setProjects(questsData || []);
 
       // 3. Fetch Follow Status
       if (userProfile?.id) {
@@ -154,7 +154,7 @@ export default function PublicPlayerCard() {
               <Text style={styles.usernameText}>{profile?.username?.toUpperCase() || 'UNKNOWN_UNIT'}</Text>
             </View>
             <Text style={styles.rankText}>LVL {profile?.level || '1'} {profile?.level === 'Architect' ? 'MASTER_BUILDER' : 'RECRUIT'}</Text>
-            <Text style={styles.statsText}>{followersCount} ALLIES // {quests.length} QUESTS</Text>
+            <Text style={styles.statsText}>{followersCount} ALLIES // {projects.length} PROJECTS</Text>
           </View>
         </View>
 
@@ -182,7 +182,7 @@ export default function PublicPlayerCard() {
           </TouchableOpacity>
         )}
 
-        <Text style={styles.sectionTitle}>{'> PUBLIC_QUESTS...'}</Text>
+        <Text style={styles.sectionTitle}>{'> PUBLIC_PROJECTS...'}</Text>
       </View>
     );
   };
@@ -205,7 +205,7 @@ export default function PublicPlayerCard() {
       </TouchableOpacity>
       
       <FlatList
-        data={quests}
+        data={projects}
         ListHeaderComponent={renderHeader}
         keyExtractor={item => item.id}
         renderItem={({ item }) => (
@@ -222,7 +222,7 @@ export default function PublicPlayerCard() {
         )}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
-            <Text style={styles.emptyText}>{'> THIS_PLAYER_HAS_NO_ACTIVE_QUESTS.'}</Text>
+            <Text style={styles.emptyText}>{'> THIS_PLAYER_HAS_NO_ACTIVE_PROJECTS.'}</Text>
           </View>
         }
         contentContainerStyle={styles.listContent}

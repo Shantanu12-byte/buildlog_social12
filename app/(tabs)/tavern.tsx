@@ -57,7 +57,9 @@ export default function TavernScreen() {
 
   const fetchMessages = useCallback(async () => {
     setLoading(true);
-    if (!currentUserId) {
+    // Use userId from store if available, otherwise fetch
+    const storeUserId = useUserStore.getState().userId;
+    if (!storeUserId) {
       await fetchUserProfile();
     }
     
@@ -68,12 +70,16 @@ export default function TavernScreen() {
         message, 
         created_at, 
         user_id, 
-        profiles:user_id(username, avatar_url, level)
+        profiles(username, avatar_url, level)
       `)
       .order('created_at', { ascending: false })
       .limit(50);
 
-    if (!error && data) {
+    if (error) {
+      console.error('TAVERN_FETCH_ERROR:', error);
+    }
+
+    if (data) {
       // Data is descending (latest first), reverse for chronological display
       setMessages(data.reverse() as any);
       setHasMore(data.length === 50);
@@ -136,11 +142,13 @@ export default function TavernScreen() {
     channel
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'campus_chat' }, async (payload) => {
         // Fetch profile for the new message
-        const { data: profile } = await supabase
+        const { data: profile, error: profileErr } = await supabase
           .from('profiles')
           .select('username, avatar_url, level')
           .eq('id', payload.new.user_id)
           .maybeSingle();
+
+        if (profileErr) console.error('REALTIME_PROFILE_FETCH_ERROR:', profileErr);
 
         const incoming: Message = { 
           id: payload.new.id,
@@ -220,13 +228,14 @@ export default function TavernScreen() {
 
   const sendMessage = async () => {
     const text = newMessage.trim();
-    if (!text || !currentUserId || sending) return;
+    const activeUserId = useUserStore.getState().userId;
+    if (!text || !activeUserId || sending) return;
 
     setSending(true);
     setNewMessage('');
 
     const { error } = await supabase.from('campus_chat').insert({
-      user_id: currentUserId,
+      user_id: activeUserId,
       message: text
     });
 
@@ -287,7 +296,7 @@ export default function TavernScreen() {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#55FF55" />
-        <Text style={styles.loadingText}> {'> RETRIEVING_CHAT_LOGS...'} </Text>
+        <Text style={styles.loadingText}> {'> RETRIEVING_CAMPUS_BROADCASTS...'} </Text>
       </View>
     );
   }
@@ -301,7 +310,7 @@ export default function TavernScreen() {
             source={require('../../assets/developer_emblem.png')}
             style={{ width: 16, height: 16, marginRight: 8 }}
           />
-          <Text style={styles.headerTitle}>{'< THE_TAVERN / GLOBAL_SERVER >'}</Text>
+          <Text style={styles.headerTitle}>{'< CAMPUS_CHAT / GLOBAL_SERVER >'}</Text>
         </View>
         <View style={styles.presenceBadge}>
           <Text style={styles.presenceText}>[ 🟢 ONLINE: {activeHackers} ]</Text>

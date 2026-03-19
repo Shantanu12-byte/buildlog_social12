@@ -168,7 +168,7 @@ export default function NewPostScreen() {
 
         {/* Project Selector */}
         <View style={styles.projectSelector}>
-          <Text style={styles.label}>SELECT_QUEST (PROJECT)</Text>
+          <Text style={styles.label}>SELECT_PROJECT</Text>
           {isLoadingProjects ? (
             <ActivityIndicator size="small" color="#FFFFFF" />
           ) : projects.length > 0 ? (
@@ -192,7 +192,7 @@ export default function NewPostScreen() {
               ))}
             </View>
           ) : (
-            <Text style={styles.noProjectsText}>NO_ACTIVE_QUESTS. CREATE_ONE_FIRST!</Text>
+            <Text style={styles.noProjectsText}>NO_ACTIVE_PROJECTS. CREATE_ONE_FIRST!</Text>
           )}
         </View>
 
