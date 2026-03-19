@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Alert, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../lib/supabase';
 
@@ -130,16 +130,21 @@ const styles = StyleSheet.create({
   },
   chip: {
     backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
     borderRadius: 24,
     paddingVertical: 12,
     paddingHorizontal: 18,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 2,
+    borderWidth: 1,
+    borderColor: '#e1e4e8',
+    ...(Platform.OS === 'web' 
+      ? { boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }
+      : {
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 1 },
+          shadowOpacity: 0.05,
+          shadowRadius: 3,
+        }
+    ),
+    elevation: 1,
   },
   chipSelected: {
     backgroundColor: '#007AFF', // Modern iOS Blue
@@ -165,10 +170,15 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
+    ...(Platform.OS === 'web' 
+      ? { boxShadow: '0 4px 12px rgba(0,0,0,0.15)' }
+      : {
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 4 },
+          shadowOpacity: 0.15,
+          shadowRadius: 8,
+        }
+    ),
     elevation: 4,
     flexDirection: 'row',
     minHeight: 56, // Fixed height to prevent jumping when ActivityIndicator shows

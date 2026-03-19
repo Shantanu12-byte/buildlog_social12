@@ -44,8 +44,8 @@ export default function ProfileScreen() {
       const [projRes, buildsRes, followingRes, followersRes] = await Promise.all([
         supabase.from('posts').select('id', { count: 'exact', head: true }).eq('user_id', user.id),
         supabase.from('quest_logs').select('id', { count: 'exact', head: true }).eq('user_id', user.id),
-        supabase.from('follows').select('id', { count: 'exact', head: true }).eq('follower_id', user.id),
-        supabase.from('follows').select('id', { count: 'exact', head: true }).eq('following_id', user.id),
+        supabase.from('followers').select('id', { count: 'exact', head: true }).eq('follower_id', user.id),
+        supabase.from('followers').select('id', { count: 'exact', head: true }).eq('following_id', user.id),
       ]);
 
       setStats({

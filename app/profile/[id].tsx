@@ -50,7 +50,7 @@ export default function OtherProfileScreen() {
 
   const checkFollow = async (uid: string) => {
     const { data } = await supabase
-      .from('follows')
+      .from('followers')
       .select('*')
       .eq('follower_id', uid)
       .eq('following_id', targetUserId)
@@ -70,8 +70,8 @@ export default function OtherProfileScreen() {
       setProfileData(profile);
 
       const [f1, f2, posts] = await Promise.all([
-        supabase.from('follows').select('*', { count: 'exact', head: true }).eq('following_id', targetUserId),
-        supabase.from('follows').select('*', { count: 'exact', head: true }).eq('follower_id', targetUserId),
+        supabase.from('followers').select('*', { count: 'exact', head: true }).eq('following_id', targetUserId),
+        supabase.from('followers').select('*', { count: 'exact', head: true }).eq('follower_id', targetUserId),
         supabase.from('posts').select('*', { count: 'exact', head: true }).eq('user_id', targetUserId),
       ]);
 
@@ -93,11 +93,11 @@ export default function OtherProfileScreen() {
 
     try {
       if (isFollowing) {
-        await supabase.from('follows').delete().eq('follower_id', currentUserId).eq('following_id', targetUserId);
+        await supabase.from('followers').delete().eq('follower_id', currentUserId).eq('following_id', targetUserId);
         setIsFollowing(false);
         setStats(prev => ({ ...prev, followerCount: prev.followerCount - 1 }));
       } else {
-        await supabase.from('follows').insert({ follower_id: currentUserId, following_id: targetUserId });
+        await supabase.from('followers').insert({ follower_id: currentUserId, following_id: targetUserId });
         setIsFollowing(true);
         setStats(prev => ({ ...prev, followerCount: prev.followerCount + 1 }));
         

@@ -192,7 +192,13 @@ export default function TavernScreen() {
 
   useEffect(() => {
     initScreen();
-    return () => { if (channelRef.current) supabase.removeChannel(channelRef.current); };
+    return () => { 
+      if (channelRef.current) {
+        supabase.removeChannel(channelRef.current).then(() => {
+          channelRef.current = null;
+        });
+      }
+    };
   }, []);
 
   async function initScreen() {

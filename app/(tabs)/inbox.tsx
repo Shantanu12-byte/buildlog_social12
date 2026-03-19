@@ -165,7 +165,13 @@ export default function InboxScreen() {
 
   useEffect(() => {
     init();
-    return () => { if (channelRef.current) supabase.removeChannel(channelRef.current); };
+    return () => { 
+      if (channelRef.current) {
+        supabase.removeChannel(channelRef.current).then(() => {
+          channelRef.current = null;
+        });
+      }
+    };
   }, [roomId]);
 
   const onRefresh = async () => {

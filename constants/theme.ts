@@ -73,6 +73,37 @@ export const Spacing = {
 };
 export const Radius = { sm: 4, md: 8, lg: 12, full: 9999 };
 
+import { Platform } from 'react-native';
+
+export const Shadows = {
+  soft: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  accent: {
+    shadowColor: '#00FF41',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.5,
+    shadowRadius: 10,
+    elevation: 5,
+  }
+};
+
+export const getShadow = (type: 'soft' | 'accent') => {
+  const s = Shadows[type];
+  if (Platform.OS === 'web') {
+    return {
+      boxShadow: type === 'soft' 
+        ? '0 2px 4px rgba(0,0,0,0.1)' 
+        : `0 0 10px ${s.shadowColor}80`
+    };
+  }
+  return s;
+};
+
 // Compatibility helper
 export const getThemeColors = (isEnderMode?: boolean) => ({
   primary: isEnderMode ? '#FFD700' : '#2F81F7',

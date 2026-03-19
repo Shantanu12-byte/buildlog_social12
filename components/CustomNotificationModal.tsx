@@ -1,5 +1,5 @@
 import React from 'react';
-import { Modal, View, Text, StyleSheet, TouchableOpacity, Animated } from 'react-native';
+import { Modal, View, Text, StyleSheet, TouchableOpacity, Animated, Platform } from 'react-native';
 import { Colors, Spacing, Typography, Radius } from '@/constants/theme';
 import { Feather } from '@expo/vector-icons';
 
@@ -78,10 +78,15 @@ const s = StyleSheet.create({
     borderColor: '#1A1A1A',
     borderRadius: 4,
     padding: 30,
-    shadowColor: Colors.cyber.accent,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.2,
-    shadowRadius: 15,
+    ...(Platform.OS === 'web' 
+      ? { boxShadow: `0 0 15px ${Colors.cyber.accent}33` } 
+      : {
+          shadowColor: Colors.cyber.accent,
+          shadowOffset: { width: 0, height: 0 },
+          shadowOpacity: 0.2,
+          shadowRadius: 15,
+        }
+    ),
   },
   header: {
     flexDirection: 'row',

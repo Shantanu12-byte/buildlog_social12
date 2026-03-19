@@ -1,8 +1,8 @@
-import { View, Text, Image, StyleSheet } from 'react-native';
+import { View, Text, Image, StyleSheet, Platform } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Feather } from '@expo/vector-icons';
-import { Colors, FontSizes, Spacing } from '@/constants/theme';
+import { Colors, Typography, Spacing } from '@/constants/theme';
 
 export interface TimelineEntry {
   id: string;
@@ -17,7 +17,7 @@ interface TimelineUpdateProps {
   isLast?: boolean;
 }
 
-const glassBorder = { borderWidth: 1, borderColor: Colors.border };
+const glassBorder = { borderWidth: 1, borderColor: Colors.border.default };
 
 export function TimelineUpdate({ entry, isLast = false }: TimelineUpdateProps) {
   return (
@@ -26,7 +26,7 @@ export function TimelineUpdate({ entry, isLast = false }: TimelineUpdateProps) {
         <View style={styles.dotContainer}>
           {entry.type === 'milestone' ? (
             <View style={styles.milestoneDot}>
-              <Feather name="flag" size={12} color={Colors.textPrimary} />
+              <Feather name="flag" size={12} color={Colors.text.primary} />
             </View>
           ) : (
             <View style={styles.dot} />
@@ -91,14 +91,18 @@ const styles = StyleSheet.create({
     width: 10,
     height: 10,
     borderRadius: 5,
-    backgroundColor: Colors.primary,
+    backgroundColor: Colors.cyber.accent,
     borderWidth: 1,
-    borderColor: 'rgba(0, 240, 255, 0.5)',
-    shadowColor: '#00F0FF',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.6,
-    shadowRadius: 4,
-    elevation: 3,
+    borderColor: '#00F0FF',
+    ...(Platform.OS === 'web'
+      ? { boxShadow: '0 0 10px rgba(0,240,255,0.3)' }
+      : {
+          shadowColor: '#00F0FF',
+          shadowOffset: { width: 0, height: 0 },
+          shadowOpacity: 0.3,
+          shadowRadius: 10,
+        }
+    ),
   },
   milestoneDot: {
     width: 24,
@@ -121,8 +125,8 @@ const styles = StyleSheet.create({
     paddingBottom: Spacing.sm,
   },
   timestamp: {
-    color: Colors.textSecondary,
-    fontSize: FontSizes.xs,
+    color: Colors.text.secondary,
+    fontSize: Typography.sizes.xs,
     marginBottom: Spacing.xs,
   },
   contentBox: {
@@ -147,8 +151,8 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   content: {
-    color: Colors.textPrimary,
-    fontSize: FontSizes.sm,
+    color: Colors.text.primary,
+    fontSize: Typography.sizes.sm,
     lineHeight: 20,
   },
 });

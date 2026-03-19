@@ -6,7 +6,8 @@ import {
   FlatList, 
   ActivityIndicator, 
   RefreshControl,
-  Alert
+  Alert,
+  Platform
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
@@ -196,10 +197,15 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 16,
     marginBottom: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 6,
+    ...(Platform.OS === 'web' 
+      ? { boxShadow: '0 2px 6px rgba(0,0,0,0.06)' }
+      : {
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 2 },
+          shadowOpacity: 0.06,
+          shadowRadius: 6,
+        }
+    ),
     elevation: 3,
   },
   postCategory: {

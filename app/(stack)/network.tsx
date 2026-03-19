@@ -39,7 +39,7 @@ export default function NetworkRadarScreen() {
       if (activeTab === 'followers') {
         // 1. Get follower IDs
         const { data: followRecords, error: followError } = await supabase
-          .from('follows')
+          .from('followers')
           .select('follower_id')
           .eq('following_id', uid);
 
@@ -64,7 +64,7 @@ export default function NetworkRadarScreen() {
       } else {
         // 1. Get following IDs
         const { data: followRecords, error: followError } = await supabase
-          .from('follows')
+          .from('followers')
           .select('following_id')
           .eq('follower_id', uid);
 
@@ -122,7 +122,7 @@ export default function NetworkRadarScreen() {
   const handleUnfollow = async (targetUserId: string, username: string) => {
     try {
       const { error } = await supabase
-        .from('follows')
+        .from('followers')
         .delete()
         .eq('follower_id', currentUserId)
         .eq('following_id', targetUserId);

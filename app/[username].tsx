@@ -57,7 +57,7 @@ export default function PublicProfileScreen() {
       const [projRes, buildsRes, followersRes, hypesRes] = await Promise.all([
         supabase.from('posts').select('id', { count: 'exact', head: true }).eq('user_id', prof.id),
         supabase.from('quest_logs').select('id', { count: 'exact', head: true }).eq('user_id', prof.id),
-        supabase.from('follows').select('id', { count: 'exact', head: true }).eq('following_id', prof.id),
+        supabase.from('followers').select('id', { count: 'exact', head: true }).eq('following_id', prof.id),
         supabase.from('likes').select('id', { count: 'exact', head: true }).eq('post_owner_id', prof.id),
       ]);
 

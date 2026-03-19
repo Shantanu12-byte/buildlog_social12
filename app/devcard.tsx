@@ -241,7 +241,7 @@ export default function DevCardScreen() {
       const [profileRes, projectsRes, alliesRes, buildsRes, hypesRes] = await Promise.all([
         supabase.from('profiles').select('*').eq('id', userId).single(),
         supabase.from('posts').select('id, title, progress').eq('user_id', userId).order('progress', { ascending: false }).limit(3),
-        supabase.from('follows').select('id', { count: 'exact' }).eq('following_id', userId),
+        supabase.from('followers').select('id', { count: 'exact' }).eq('following_id', userId),
         supabase.from('posts').select('id', { count: 'exact' }).eq('user_id', userId),
         supabase.from('likes').select('id', { count: 'exact' }).eq('post_owner_id', userId),
       ]);

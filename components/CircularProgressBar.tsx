@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, ActivityIndicator, Platform } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Colors, FontSizes, Spacing } from '@/constants/theme';
 
@@ -84,11 +84,16 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   segmentFilled: {
-    shadowColor: '#00F0FF',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.8,
-    shadowRadius: 4,
-    elevation: 4,
+    elevation: 5,
+    ...(Platform.OS === 'web'
+      ? { boxShadow: '0 0 10px rgba(0,240,255,0.4)' }
+      : {
+          shadowColor: '#00F0FF',
+          shadowOffset: { width: 0, height: 0 },
+          shadowOpacity: 0.4,
+          shadowRadius: 10,
+        }
+    ),
   },
   segmentEmpty: {
     backgroundColor: 'rgba(255,255,255,0.05)',
