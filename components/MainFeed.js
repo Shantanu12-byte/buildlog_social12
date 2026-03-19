@@ -19,42 +19,22 @@ export default function MainFeed() {
 
   const fetchFeed = async () => {
     try {
-      // 1. Fetch authenticated user
-      const { data: { user }, error: userError } = await supabase.auth.getUser();
-      if (userError) throw userError;
-      if (!user) throw new Error('No user found');
+      console.log("SUPABASE_URL:", process.env.EXPO_PUBLIC_SUPABASE_URL);
 
-      // 2. Fetch user profile for interests array
-      const { data: profileData, error: profileError } = await supabase
-        .from('profiles')
-        .select('interests')
-        .eq('id', user.id)
-        .single();
-
-      if (profileError) throw profileError;
-
-      const interests = profileData?.interests || [];
-
-      // 3 & 5. Build posts query, order by newest first
-      // 3 & 5. Build posts query, fetching from trending_posts view
-      let query = supabase
+      const { data, error } = await supabase
         .from('trending_posts')
         .select('*')
-        .order('score', { ascending: false });
+        .order('gravity_score', { ascending: false });
 
-      // 4. Algorithm Logic: Apply category filter if interests exist
-      if (interests.length > 0) {
-        query = query.in('category', interests);
+      if (error) {
+        console.error("DETAILED_ERROR:", error);
+        throw error;
       }
 
-      // Execute query
-      const { data: postsData, error: postsError } = await query;
-
-      if (postsError) throw postsError;
-
-      // 6. Store posts
-      setPosts(postsData || []);
+      console.log("RAW_DATA_FROM_SUPABASE:", data);
+      setPosts(data || []);
     } catch (error) {
+      console.error("DETAILED_ERROR:", error);
       Alert.alert('Error loading feed', error.message);
     }
   };
@@ -157,7 +137,7 @@ export default function MainFeed() {
         }
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
-            <Text style={styles.emptyText}>No posts found matching your interests.</Text>
+            <Text style={styles.emptyText}>No data found in trending_posts view</Text>
           </View>
         }
       />
