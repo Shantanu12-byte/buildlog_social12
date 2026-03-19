@@ -21,7 +21,6 @@ export const EncryptionUtils = {
       let pubKey = await AsyncStorage.getItem(PUBLIC_KEY_STORAGE_KEY);
 
       if (!privKey || !pubKey) {
-        console.log("🗝️ GENERATING_NEW_IDENTITY_SCROLL...");
         // Placeholder for real X25519 generation
         // In a real build, we'd use nacl.box.keyPair()
         privKey = Math.random().toString(36).substring(2) + Date.now().toString(36);
