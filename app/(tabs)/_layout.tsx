@@ -1,6 +1,6 @@
 import { Tabs } from 'expo-router';
 import React from 'react';
-import { View, StyleSheet, Text } from 'react-native';
+import { View, StyleSheet, Text, Platform } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { supabase } from '@/lib/supabase';
 import { useUserStore } from '@/store/userStore';
@@ -54,7 +54,19 @@ export default function TabLayout() {
       screenOptions={{
         tabBarActiveTintColor: '#FFFFFF',
         tabBarInactiveTintColor: '#888888',
-        tabBarStyle: styles.tabBar,
+        tabBarStyle: [
+          styles.tabBar,
+          Platform.OS === 'web' && {
+            maxWidth: 600,
+            width: '100%',
+            alignSelf: 'center',
+            borderLeftWidth: 1,
+            borderRightWidth: 1,
+            borderColor: '#333333',
+            left: 'auto',
+            right: 'auto',
+          }
+        ],
         tabBarLabelStyle: { fontFamily: 'monospace', fontSize: 10, fontWeight: 'bold' },
         headerShown: false,
         tabBarButton: HapticTab,

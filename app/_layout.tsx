@@ -341,8 +341,22 @@ export default function RootLayout() {
   }
 
   return (
-    <SafeAreaProvider>
-      <View style={{ flex: 1, backgroundColor: '#000000' }} importantForAccessibility="no-hide-descendants">
+    <SafeAreaProvider style={Platform.OS === 'web' ? { backgroundColor: '#0A0A0A' } : undefined}>
+      <View style={[
+        { flex: 1, backgroundColor: '#000000' },
+        Platform.OS === 'web' && {
+          maxWidth: 600,
+          width: '100%',
+          alignSelf: 'center',
+          borderLeftWidth: 1,
+          borderRightWidth: 1,
+          borderColor: '#333333',
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 0 },
+          shadowOpacity: 0.5,
+          shadowRadius: 20,
+        }
+      ]} importantForAccessibility="no-hide-descendants">
         <ErrorBoundary>
           <PixelFade>
             <Stack
