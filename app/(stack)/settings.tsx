@@ -1,5 +1,5 @@
 import React from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, Alert } from 'react-native';
+import { StyleSheet, View, Text, TouchableOpacity, Alert, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
@@ -8,33 +8,47 @@ import { Colors, FontSizes, Spacing } from '@/constants/theme';
 import Constants from 'expo-constants';
 import * as Updates from 'expo-updates';
 
+import { useUserStore } from '@/store/userStore';
+
 export default function SettingsScreen() {
   const router = useRouter();
+  const clearUser = useUserStore(state => state.clearUser);
 
   const handleLogout = async () => {
-    Alert.alert(
-      'Log Out',
-      'Are you sure you want to log out?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Log Out',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              const { error } = await supabase.auth.signOut();
-              if (error) {
-                Alert.alert('Error signing out', error.message);
-              } else {
-                router.replace('/(auth)/login');
-              }
-            } catch (err: any) {
-              Alert.alert('Error', 'An unexpected error occurred during sign out.');
-            }
+    const performLogout = async () => {
+      try {
+        const { error } = await supabase.auth.signOut();
+        if (error) {
+          Alert.alert('Error signing out', error.message);
+        } else {
+          clearUser();
+          // The onAuthStateChange listener in root _layout.tsx 
+          // will detect the session is null and auto-redirect to /login
+        }
+      } catch (err: any) {
+        Alert.alert('Error', 'An unexpected error occurred during sign out.');
+      }
+    };
+
+    if (Platform.OS === 'web') {
+      const confirmed = window.confirm('Are you sure you want to log out?');
+      if (confirmed) {
+        await performLogout();
+      }
+    } else {
+      Alert.alert(
+        'Log Out',
+        'Are you sure you want to log out?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Log Out',
+            style: 'destructive',
+            onPress: performLogout,
           },
-        },
-      ]
-    );
+        ]
+      );
+    }
   };
 
   const handleEditProfile = () => {
