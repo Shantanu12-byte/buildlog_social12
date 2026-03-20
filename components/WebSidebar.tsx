@@ -14,7 +14,7 @@ export function WebSidebar() {
   const navItems = [
     { name: 'Feed', route: '/(tabs)', icon: 'home' },
     { name: 'Campus', route: '/(tabs)/tavern', icon: 'message-circle' },
-    { name: 'Challenges', route: '/(tabs)/inbox', icon: 'star' },
+    { name: 'Challenges', route: '/(tabs)/challenges', icon: 'star' },
     { name: 'Profile', route: '/(tabs)/profile', icon: 'user' },
   ];
 
@@ -45,11 +45,7 @@ export function WebSidebar() {
               onMouseEnter={() => setHoveredRoute(item.route)}
               onMouseLeave={() => setHoveredRoute(null)}
               onPress={() => {
-                if (item.name === 'Challenges') {
-                  alert('the update will come soon');
-                } else {
-                  router.push(item.route as any);
-                }
+                router.push(item.route as any);
               }}
               activeOpacity={0.7}
               {...({} as any)} // Cast for RN Web props

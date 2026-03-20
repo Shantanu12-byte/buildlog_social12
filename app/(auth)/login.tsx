@@ -20,6 +20,7 @@ export default function LoginScreen() {
   const router = useRouter();
 
   // ── State (preserved) ─────────────────────────────────────
+  const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -28,7 +29,7 @@ export default function LoginScreen() {
 
   // ── Auth Logic (preserved) ─────────────────────────────────
   async function handleAuth() {
-    if (!email || !password) {
+    if (!email || !password || (mode === 'signup' && !username)) {
       setError('Please fill in all fields');
       return;
     }
@@ -62,12 +63,34 @@ export default function LoginScreen() {
           }
         }
       } else {
-        const { error } = await supabase.auth.signUp({ email, password });
+        const { data, error } = await supabase.auth.signUp({ 
+          email, 
+          password,
+          options: {
+            data: { username: username.toLowerCase().trim() } // Store in user metadata
+          }
+        });
         if (error) throw error;
+        
+        // Optionally create profile entry immediately if metadata-trigger is not set up
+        if (data.user) {
+          await supabase.from('profiles').insert({
+            id: data.user.id,
+            username: username.toLowerCase().trim(),
+          });
+        }
+
         router.replace('/(auth)/CompleteProfileScreen' as any);
       }
     } catch (err: any) {
-      setError(err.message ?? 'Something went wrong');
+      const msg = err.message || '';
+      if (msg.toLowerCase().includes('invalid login credentials') || msg.toLowerCase().includes('user not found')) {
+        setError('Invalid email or password');
+      } else if (msg.toLowerCase().includes('email not confirmed')) {
+        setError('Please verify your email before signing in');
+      } else {
+        setError('Authentication failed. Please try again.');
+      }
     } finally {
       setLoading(false);
     }
@@ -123,6 +146,15 @@ export default function LoginScreen() {
 
           {/* Form */}
           <View style={s.form}>
+            {mode === 'signup' && (
+              <Input
+                label="Username"
+                value={username}
+                onChangeText={setUsername}
+                placeholder="tripathi_dev"
+                autoCapitalize="none"
+              />
+            )}
             <Input
               label="Email"
               value={email}

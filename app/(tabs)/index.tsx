@@ -10,6 +10,7 @@ import { Colors, Typography, Spacing, Radius } from '@/constants/theme';
 import { FeedPostCard as PostCard, FeedPost as Post } from '@/components/FeedPostCard';
 import { LoadingScreen, EmptyState } from '@/components/ui/UI';
 import { Feather } from '@expo/vector-icons';
+import { checkRateLimit } from '@/lib/rateLimit';
 
 export default function FeedScreen() {
   const router = useRouter();
@@ -24,11 +25,39 @@ export default function FeedScreen() {
   const [page, setPage] = useState(0);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
-  const PAGE_SIZE = 3;
+  const PAGE_SIZE = 10;
 
   useEffect(() => {
     fetchUser();
     fetchPosts(true);
+
+    const channel = supabase
+      .channel('feed-updates')
+      .on('postgres_changes', { 
+        event: 'INSERT', 
+        schema: 'public', 
+        table: 'posts' 
+      }, async (payload) => {
+        // Fetch full profile info for the new post
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('username, avatar_url')
+          .eq('id', payload.new.user_id)
+          .single();
+          
+        const newPost = {
+          ...payload.new,
+          username: profile?.username || 'builder',
+          userAvatar: profile?.avatar_url,
+        } as Post;
+        
+        setPosts(prev => [newPost, ...prev]);
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   async function fetchUser() {
@@ -38,7 +67,7 @@ export default function FeedScreen() {
 
   async function fetchPosts(reset = false) {
     if (reset) {
-      setLoading(true);
+      if (!refreshing) setLoading(true); // Don't show full loading screen on pull-to-refresh
       setPage(0);
       setHasMore(true);
     } else {
@@ -51,8 +80,8 @@ export default function FeedScreen() {
     try {
       const { data, error } = await supabase
         .from('posts')
-        .select('*, profiles:author_id(username, avatar_url)')
-        .order('gravity_score', { ascending: false })
+        .select('*, profiles:user_id(username, avatar_url)')
+        .order('created_at', { ascending: false })
         .range(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE - 1);
 
       if (error) throw error;
@@ -83,6 +112,9 @@ export default function FeedScreen() {
 
   async function handleLike(postId: string) {
     if (!user) return;
+    if (!checkRateLimit('like', 5, 10000)) { // 5 likes per 10 seconds
+      return;
+    }
     const post = posts.find(p => p.id === postId) as any;
     if (!post) return;
 

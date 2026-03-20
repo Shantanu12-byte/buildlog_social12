@@ -1,9 +1,11 @@
+import { useState } from 'react';
 import { View, Text, StyleSheet, Pressable, TouchableOpacity } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { Colors, Typography, Spacing, Radius } from '@/constants/theme';
 import { AvatarBlock } from './AvatarBlock';
 import { router } from 'expo-router';
+import { VerifiedSkillChip, SkillLevel } from './VerifiedSkillChip';
 
 export interface FeedPost {
   id: string;
@@ -27,6 +29,7 @@ export interface FeedPost {
   status?: string;
   looking_for_collabs?: boolean;
   progress?: number;
+  author_verified_skills?: Record<string, SkillLevel>;
 }
 
 interface FeedPostCardProps {
@@ -42,10 +45,19 @@ interface FeedPostCardProps {
 const IMAGE_ASPECT_RATIO = 16 / 9;
 
 export function FeedPostCard({ post, likeCount, isLiked, onLikePress, onCheerPress, onCommentPress, onProfilePress }: FeedPostCardProps) {
+  const [isLiking, setIsLiking] = useState(false);
   const displayLikeCount = likeCount ?? (post.cheers || 0);
-  const handleLikePress = () => {
-    if (onLikePress) onLikePress(post.id);
-    else onCheerPress?.(post.id);
+  const handleLikePress = async () => {
+    if (isLiking) return;
+    setIsLiking(true);
+    try {
+      if (onLikePress) await onLikePress(post.id);
+      else if (onCheerPress) await onCheerPress(post.id);
+    } catch (e) {
+      console.error('LIKE_ERROR:', e);
+    } finally {
+      setIsLiking(false);
+    }
   };
   const handleProfilePress = () => {
     if (post.author_id) {
@@ -121,6 +133,8 @@ export function FeedPostCard({ post, likeCount, isLiked, onLikePress, onCheerPre
               source={{ uri: displayImage }}
               style={styles.image}
               contentFit="cover"
+              transition={200}
+              cachePolicy="memory-disk"
             />
           ) : (
             <View style={styles.imagePlaceholder}>
@@ -134,16 +148,23 @@ export function FeedPostCard({ post, likeCount, isLiked, onLikePress, onCheerPre
 
         {/* Content */}
         <View style={styles.content}>
-          <Text style={styles.title}>{displayTitle}</Text>
-          {!!displayDesc && <Text style={styles.description}>{displayDesc}</Text>}
+          <Text style={styles.title} numberOfLines={2}>{displayTitle}</Text>
+          {!!displayDesc && (
+            <Text style={styles.description} numberOfLines={3}>
+              {displayDesc}
+            </Text>
+          )}
 
           {/* Skills */}
           {skillsList.length > 0 && (
             <View style={styles.skillsRow}>
-              {skillsList.map((skill, i) => (
-                <View key={i} style={styles.skillPill}>
-                  <Text style={styles.skillText}>{skill}</Text>
-                </View>
+              {skillsList.slice(0, 5).map((skill, i) => (
+                <VerifiedSkillChip
+                  key={i}
+                  skill={skill}
+                  level={post.author_verified_skills?.[skill] ?? 'claimed'}
+                  size="sm"
+                />
               ))}
             </View>
           )}

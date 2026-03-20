@@ -142,12 +142,19 @@ export default function PublicProfileScreen() {
             <StatItem label="⚡ Hypes" value={stats.hypes} />
           </View>
 
-          {isOwner && (
+          {isOwner ? (
             <TouchableOpacity 
               style={s.editBtn} 
               onPress={() => router.push('/(stack)/edit-profile')}
             >
               <Text style={s.editBtnTxt}>Edit Profile</Text>
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity 
+              style={s.editBtn} 
+              onPress={() => router.push({ pathname: '/(stack)/messages', params: { targetUserId: profile.id } } as any)}
+            >
+              <Text style={s.editBtnTxt}>Message</Text>
             </TouchableOpacity>
           )}
         </View>

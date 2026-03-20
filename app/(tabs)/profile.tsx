@@ -9,6 +9,7 @@ import { supabase } from '@/lib/supabase';
 import { Colors, Typography, Spacing, Radius } from '@/constants/theme';
 import { Avatar, LoadingScreen } from '@/components/ui/UI';
 import { Feather, FontAwesome5 } from '@expo/vector-icons';
+import { VerifiedSkillsSection, SkillLevel } from '@/components/VerifiedSkillChip';
 
 // ─── Constants & Colors ─────────────────────────────────────────
 const PROFILE_BG = '#0F0F0B'; // Premium deep black/brown tint
@@ -22,6 +23,7 @@ export default function ProfileScreen() {
   const [stats, setStats] = useState({ projects: 0, builds: 0, followers: 0, collabs: 0 });
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [verifiedSkills, setVerifiedSkills] = useState<Record<string, SkillLevel>>({});
 
   const fetchProfileData = useCallback(async () => {
     try {
@@ -38,7 +40,12 @@ export default function ProfileScreen() {
         .eq('id', user.id)
         .single();
       
-      if (!pErr) setProfile(prof);
+      if (!pErr) {
+        setProfile(prof);
+        if (prof.verified_skills) {
+          setVerifiedSkills(prof.verified_skills);
+        }
+      }
 
       // 2. Fetch Stats
       const [projRes, buildsRes, followingRes, followersRes] = await Promise.all([
@@ -173,16 +180,23 @@ export default function ProfileScreen() {
         {/* Stack */}
         <View style={s.stackWrap}>
           <Text style={s.stackHeader}>STACK</Text>
-          <View style={s.stackGrid}>
-            {(profile?.skills || ['React Native', 'TypeScript', 'Node.js', 'Python']).map((u: string, i: number) => {
-               const dark = u.toLowerCase().includes('python') || u.toLowerCase().includes('go');
-               return (
-                 <View key={i} style={[s.pill, dark ? s.pillDark : s.pillLight]}>
-                   <Text style={dark ? s.pillTxtDark : s.pillTxtLight}>{u}</Text>
-                 </View>
-               );
-            })}
-          </View>
+          {profile?.skills && profile.skills.length > 0 ? (
+            <VerifiedSkillsSection
+              skills={profile.skills}
+              verifiedSkills={verifiedSkills}
+              onSkillPress={(skill: string) => {
+                router.push(`/skill/${skill}` as any);
+              }}
+            />
+          ) : (
+            <View style={s.stackGrid}>
+              {['React Native', 'TypeScript', 'Node.js', 'Python'].map((u: string, i: number) => (
+                <View key={i} style={[s.pill, s.pillDark]}>
+                  <Text style={s.pillTxtDark}>{u}</Text>
+                </View>
+              ))}
+            </View>
+          )}
         </View>
 
       </ScrollView>

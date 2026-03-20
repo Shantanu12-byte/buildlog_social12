@@ -270,7 +270,8 @@ export default function TavernScreen() {
       content: text,
       created_at: new Date().toISOString(),
     };
-    setMessages(prev => [...prev, { ...newMsg, id: `temp_${Date.now()}` }]);
+    // Removed optimistic update to prevent double-messaging when subscription is active
+    // setMessages(prev => [...prev, { ...newMsg, id: `temp_${Date.now()}` }]);
     await supabase.from('messages').insert(newMsg);
     setRooms(prev => prev.map(r => r.id === selectedRoom.id ? { ...r, last_message: text.slice(0, 50) } : r));
   }

@@ -15,6 +15,7 @@ import { supabase } from '../../lib/supabase';
 import { Colors, Typography, Spacing, Radius } from '../../constants/theme';
 import { FeedPostCard as PostCard, FeedPost as Post } from '../../components/FeedPostCard';
 import { EmptyState, Avatar, SectionHeader, LoadingScreen, Tag } from '../../components/ui/UI';
+import { Feather } from '@expo/vector-icons';
 
 interface Developer {
   id: string;
@@ -183,6 +184,12 @@ export default function SearchScreen() {
                   <Text style={s.countLabel}>projects</Text>
                 </View>
               )}
+              <TouchableOpacity 
+                style={s.msgSmallBtn} 
+                onPress={() => router.push({ pathname: '/(stack)/messages', params: { targetUserId: item.id } } as any)}
+              >
+                <Feather name="message-square" size={16} color={Colors.accent.glow} />
+              </TouchableOpacity>
             </TouchableOpacity>
           )}
         />
@@ -295,6 +302,14 @@ const s = StyleSheet.create({
   countBadge: { alignItems: 'center' },
   countText: { color: Colors.text.primary, fontSize: Typography.sizes.lg, fontWeight: '600' },
   countLabel: { color: Colors.text.tertiary, fontSize: Typography.sizes.xs },
+  msgSmallBtn: {
+    padding: 8,
+    marginLeft: 8,
+    borderRadius: 8,
+    backgroundColor: Colors.bg.tertiary,
+    borderWidth: 0.5,
+    borderColor: Colors.border.default,
+  },
   projectCard: {
     padding: Spacing.lg,
     borderBottomWidth: 0.5,

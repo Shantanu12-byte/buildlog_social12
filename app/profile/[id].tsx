@@ -117,7 +117,7 @@ export default function OtherProfileScreen() {
   };
 
   const handleMessage = () => {
-    router.push('/(stack)/messages');
+    router.push({ pathname: '/(stack)/messages', params: { targetUserId } } as any);
   };
 
   if (isLoading) return <LoadingScreen />;

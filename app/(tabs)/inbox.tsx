@@ -1,10 +1,13 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { View, Text, StyleSheet, SafeAreaView, StatusBar, FlatList, TouchableOpacity, RefreshControl, TextInput, KeyboardAvoidingView, Platform, ActivityIndicator } from 'react-native';
-import { Colors, Spacing, Typography, Radius } from '@/constants/theme';
+import { Colors, Typography, Spacing, Radius } from '@/constants/theme';
+import { FeedPostCard as PostCard, FeedPost as Post } from '@/components/FeedPostCard';
+import { checkRateLimit } from '@/lib/rateLimit';
 import { Feather } from '@expo/vector-icons';
 import { supabase } from '@/lib/supabase';
 import { LoadingScreen, EmptyState, Avatar } from '@/components/ui/UI';
 import { useLocalSearchParams } from 'expo-router';
+import { getOrCreateKeyPair, encryptMessage, decryptMessage, KeyPair } from '@/lib/crypto';
 
 interface SecretScroll {
   id: string;
@@ -24,6 +27,7 @@ interface DMRoom {
   other_user?: {
     id: string;
     username: string;
+    public_key?: string;
   };
 }
 
@@ -50,6 +54,8 @@ export default function InboxScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [user, setUser] = useState<any>(null);
   const [text, setText] = useState('');
+  const [sending, setSending] = useState(false);
+  const [myKeys, setMyKeys] = useState<KeyPair | null>(null);
 
   const channelRef = useRef<any>(null);
   const flatRef = useRef<FlatList>(null);
@@ -72,58 +78,107 @@ export default function InboxScreen() {
 
   const fetchRooms = async () => {
     if (!user) return;
-    // Fetch DM rooms where user is either user1 or user2
-    const { data, error } = await supabase
+    const { data: roomData, error: roomError } = await supabase
       .from('dm_rooms')
-      .select(`
-        *,
-        user1:profiles!user1_id(id, username),
-        user2:profiles!user2_id(id, username)
-      `)
+      .select('*')
       .or(`user1_id.eq.${user.id},user2_id.eq.${user.id}`)
-      .order('updated_at', { ascending: false });
+      .order('last_message_at', { ascending: false });
 
-    if (!error && data) {
-      const processedRooms = data.map((r: any) => ({
-        ...r,
-        other_user: r.user1_id === user.id ? r.user2 : r.user1
-      }));
-      setRooms(processedRooms);
+    if (roomError) {
+      console.error('Fetch rooms error:', roomError);
+      return;
     }
+
+    if (!roomData || roomData.length === 0) {
+      setRooms([]);
+      return;
+    }
+
+    const userIds = new Set<string>();
+    roomData.forEach(r => {
+      userIds.add(r.user1_id);
+      userIds.add(r.user2_id);
+    });
+
+    const { data: profileData } = await supabase
+      .from('profiles')
+      .select('id, username, public_key')
+      .in('id', Array.from(userIds));
+
+    const profileMap = new Map(profileData?.map(p => [p.id, p]));
+
+    const keys = myKeys || await getOrCreateKeyPair();
+    const processedRooms = roomData.map((r: any) => {
+      const other = r.user1_id === user.id ? profileMap.get(r.user2_id) : profileMap.get(r.user1_id);
+      let lastMsg = r.last_message;
+      if (lastMsg && other?.public_key) {
+        lastMsg = decryptMessage(lastMsg, other.public_key, keys.privateKey);
+      }
+      return {
+        ...r,
+        other_user: other,
+        last_message: lastMsg,
+        last_message_at: r.last_message_at || r.created_at
+      };
+    });
+    setRooms(processedRooms);
   };
 
   const findOrCreateRoom = async (otherUserId: string) => {
     if (!user) return null;
     
-    // 1. Check if room exists
-    const { data: existing, error: checkError } = await supabase
+    // Follow Check
+    const { data: follow } = await supabase.from('followers').select('id').eq('follower_id', user.id).eq('following_id', otherUserId).single();
+    if (!follow) {
+      alert("FOLLOW_REQUIRED: You must follow this operative to start a whisper.");
+      return null;
+    }
+    const { data: roomData } = await supabase
       .from('dm_rooms')
-      .select(`
-        *,
-        user1:profiles!user1_id(id, username),
-        user2:profiles!user2_id(id, username)
-      `)
-      .or(`and(user1_id.eq.${user.id},user2_id.eq.${otherUserId}),and(user1_id.eq.${otherUserId},user2_id.eq.${user.id})`)
-      .maybeSingle();
+      .select('*')
+      .or(`user1_id.eq.${user.id},user2_id.eq.${user.id}`);
+
+    const existing = roomData?.find(r => 
+      (r.user1_id === user.id && r.user2_id === otherUserId) || 
+      (r.user1_id === otherUserId && r.user2_id === user.id)
+    );
 
     if (existing) {
-      const room = { ...existing, other_user: existing.user1_id === user.id ? existing.user2 : existing.user1 };
-      return room;
+      const { data: pData } = await supabase
+        .from('profiles')
+        .select('id, username, public_key')
+        .in('id', [existing.user1_id, existing.user2_id]);
+      const map = new Map(pData?.map(p => [p.id, p]));
+
+      return { ...existing, other_user: existing.user1_id === user.id ? map.get(existing.user2_id) : map.get(existing.user1_id) };
     }
 
     // 2. Create room
+    const { data: myProf } = await supabase.from('profiles').select('username').eq('id', user.id).single();
+    const { data: theirProf } = await supabase.from('profiles').select('username').eq('id', otherUserId).single();
+    
     const { data: created, error: createError } = await supabase
       .from('dm_rooms')
-      .insert({ user1_id: user.id, user2_id: otherUserId })
-      .select(`
-        *,
-        user1:profiles!user1_id(id, username),
-        user2:profiles!user2_id(id, username)
-      `)
+      .insert({ 
+        user1_id: user.id, 
+        user1_username: myProf?.username || 'user',
+        user2_id: otherUserId,
+        user2_username: theirProf?.username || 'user',
+        last_message_at: new Date().toISOString()
+      })
+      .select('id')
       .single();
 
     if (created) {
-      return { ...created, other_user: created.user1_id === user.id ? created.user2 : created.user1 };
+      const { data: freshRoom } = await supabase.from('dm_rooms').select('*').eq('id', created.id).single();
+      if (freshRoom) {
+        const { data: pData } = await supabase
+          .from('profiles')
+          .select('id, username, public_key')
+          .in('id', [freshRoom.user1_id, freshRoom.user2_id]);
+        const map = new Map(pData?.map(p => [p.id, p]));
+        return { ...freshRoom, other_user: freshRoom.user1_id === user.id ? map.get(freshRoom.user2_id) : map.get(freshRoom.user1_id) };
+      }
     }
     return null;
   };
@@ -131,6 +186,8 @@ export default function InboxScreen() {
   const init = async () => {
     const u = await fetchUser();
     if (u) {
+      const keys = await getOrCreateKeyPair();
+      setMyKeys(keys);
       await Promise.all([fetchScrolls(), fetchRooms()]);
       
       
@@ -152,7 +209,7 @@ export default function InboxScreen() {
     if (!user) return [];
     const { data } = await supabase
       .from('dm_rooms')
-      .select('*, user1:profiles!user1_id(id, username), user2:profiles!user2_id(id, username)')
+      .select('*, user1:profiles!user1_id(id, username, public_key), user2:profiles!user2_id(id, username, public_key)')
       .or(`user1_id.eq.${user.id},user2_id.eq.${user.id}`);
     
     if (data) {
@@ -192,7 +249,13 @@ export default function InboxScreen() {
       .order('created_at', { ascending: true })
       .limit(50);
 
-    setMessages(data || []);
+    const keys = myKeys || await getOrCreateKeyPair();
+    const decryptedDocs = (data ?? []).map(m => ({
+      ...m,
+      content: decryptMessage(m.content, room.other_user?.public_key || '', keys.privateKey)
+    }));
+
+    setMessages(decryptedDocs);
     setChatLoading(false);
 
     channelRef.current = supabase
@@ -203,26 +266,47 @@ export default function InboxScreen() {
         table: 'messages', 
         filter: `room_id=eq.${room.id}` 
       },
-        payload => setMessages(prev => [...prev, payload.new as Message])
+        payload => {
+          const m = payload.new as Message;
+          const decrypted = decryptMessage(m.content, room.other_user?.public_key || '', keys.privateKey);
+          setMessages(prev => [...prev, { ...m, content: decrypted }]);
+        }
       ).subscribe();
   }, []);
 
   const handleSend = async () => {
-    if (!text.trim() || !user || !selectedRoom) return;
+    if (!text.trim() || !user || !selectedRoom || !myKeys || !selectedRoom.other_user?.public_key || sending) {
+      if (selectedRoom && !selectedRoom.other_user?.public_key) alert("ENCRYPTION_ERROR: Recipient has no public key.");
+      return;
+    }
     
-    const recipientId = selectedRoom.other_user?.id;
-    const newMsg = {
-      room_id: selectedRoom.id,
-      sender_id: user.id,
-      recipient_id: recipientId,
-      content: text.trim(),
-    };
+    if (!checkRateLimit('message', 3, 5000)) { // 3 messages per 5 seconds
+      return;
+    }
 
-    setText('');
-    const { data, error } = await supabase.from('messages').insert(newMsg).select().single();
-    if (!error && data) {
-      // Local update normally handled by subscription, but can also optimistic update
-      await supabase.from('dm_rooms').update({ last_message: text.trim(), updated_at: new Date().toISOString() }).eq('id', selectedRoom.id);
+    setSending(true);
+    try {
+      const encrypted = encryptMessage(text.trim(), selectedRoom.other_user.public_key, myKeys.privateKey);
+      const recipientId = selectedRoom.other_user.id;
+      const newMsg = {
+        room_id: selectedRoom.id,
+        sender_id: user.id,
+        recipient_id: recipientId,
+        content: encrypted,
+      };
+
+      setText('');
+      const { data, error } = await supabase.from('messages').insert(newMsg).select().single();
+      if (!error && data) {
+        await supabase.from('dm_rooms').update({ 
+          last_message: encrypted, 
+          last_message_at: new Date().toISOString() 
+        }).eq('id', selectedRoom.id);
+      }
+    } catch (e: any) {
+      alert(`ENCRYPTION_FAILED: ${e.message}`);
+    } finally {
+      setSending(false);
     }
   };
 

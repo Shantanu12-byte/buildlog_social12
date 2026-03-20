@@ -1,9 +1,11 @@
+import 'react-native-get-random-values';
 import { Slot, router, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import React, { useEffect, useState, useRef } from 'react';
 import { View, Text, ActivityIndicator, Animated, Platform, StyleSheet, useWindowDimensions, TouchableOpacity } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { supabase } from '@/lib/supabase';
+import { getOrCreateKeyPair } from '@/lib/crypto';
 import { useUserStore } from '@/store/userStore';
 import { WebSidebar } from '@/components/WebSidebar';
 import { MinecraftLoader } from '@/components/MinecraftLoader';
@@ -54,6 +56,7 @@ export default function RootLayout() {
     const checkAuth = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       setSession(session);
+      if (session) getOrCreateKeyPair().catch(e => console.error('E2EE_INIT_ERROR:', e));
       setIsLoading(false);
     };
 
@@ -61,11 +64,28 @@ export default function RootLayout() {
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
       setSession(session);
+      if (session) getOrCreateKeyPair().catch(e => console.error('E2EE_INIT_ERROR:', e));
       setIsLoading(false);
     });
 
     return () => subscription.unsubscribe();
   }, []);
+
+  // 1.1 Fail-safe Loader Timeout
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (isLoading) {
+        console.warn('AUTH_LOAD_TIMEOUT: Forcing loader off');
+        setIsLoading(false);
+      }
+      if (profileLoading) {
+        console.warn('PROFILE_LOAD_TIMEOUT: Forcing profile loader off');
+        setProfileLoading(false);
+      }
+    }, 10000); // 10s hex-limit
+
+    return () => clearTimeout(timer);
+  }, [isLoading, profileLoading]);
 
   // 🔔 NOTIFICATION HANDLERS
   useEffect(() => {
@@ -161,7 +181,7 @@ export default function RootLayout() {
           }
           
           const profile = userProfile;
-          const isOnboarded = profile?.onboarding_complete || !!(profile?.username && profile.username.trim() !== '');
+           const isOnboarded = !!profile?.onboarding_complete;
 
           if (!isOnboarded) {
             const onSetupScreen = segs.includes('CompleteProfileScreen');

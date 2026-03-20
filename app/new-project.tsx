@@ -20,6 +20,7 @@ import { Colors, Spacing, Radius, Typography } from '@/constants/theme';
 import { githubService, GithubRepo } from '@/services/githubService';
 import { LoadingScreen, Button, Input } from '@/components/ui/UI';
 import { useUserStore } from '@/store/userStore';
+import { detectSkillsFromGitHub } from '@/lib/githubSkillVerifier';
 
 export default function NewProjectScreen() {
   const router = useRouter();
@@ -82,15 +83,30 @@ export default function NewProjectScreen() {
 
     setIsSubmitting(true);
     try {
-      const skillsArray = skills.split(',').map(s => s.trim()).filter(s => !!s);
+      let githubLanguages = {};
+      let autoDetectedSkills: string[] = [];
+
+      // Step 1: Detect skills from GitHub if repo provided
+      if (selectedRepo?.html_url) {
+        const result = await detectSkillsFromGitHub(selectedRepo.html_url);
+        if (!result.error) {
+          githubLanguages = result.rawLanguages;
+          autoDetectedSkills = result.detectedSkills;
+        }
+      }
+
+      // Merge manually entered skills with auto-detected ones
+      const manuallyEntered = skills.split(',').map(s => s.trim()).filter(s => !!s);
+      const FinalSkillsArray = [...new Set([...manuallyEntered, ...autoDetectedSkills])];
       
       const { data: projData, error } = await supabase.from('projects').insert({
         user_id: userProfile.id,
         title: title.trim(),
         description: description.trim(),
-        needed_skills: skillsArray,
+        needed_skills: FinalSkillsArray,
         status: 'active',
         github_repo_url: selectedRepo?.html_url || null,
+        github_languages: githubLanguages,
       }).select().single();
 
       if (error) throw error;
@@ -104,6 +120,9 @@ export default function NewProjectScreen() {
         caption: `🚀 Just launched a new project from GitHub: ${title.trim()}!`,
         image_url: null, 
       });
+
+      // Recalculate verified skills for the user
+      await supabase.rpc('recalculate_verified_skills', { p_user_id: userProfile.id });
 
       Alert.alert('SYSTEM_ONLINE', 'Project successfully deployed to the grid.');
       router.replace('/(tabs)/profile');

@@ -132,6 +132,7 @@ export default function CreateProjectScreen() {
       // Announce on Feed
       await supabase.from('posts').insert({
         user_id: finalUserId,
+        author_id: finalUserId,
         username: session.user.user_metadata?.username || session.user.email?.split('@')[0] || 'Builder',
         projectTitle: title.trim(),
         caption: description.trim(),

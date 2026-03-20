@@ -14,6 +14,7 @@ import { useRouter } from 'expo-router';
 import { supabase } from '../../lib/supabase';
 import { Colors, Typography, Spacing, Radius } from '../../constants/theme';
 import { Input, Button, Avatar, SectionHeader } from '../../components/ui/UI';
+import { sanitizeUsername, sanitizeBio, sanitizeUrl, isValidUsername } from '@/lib/sanitize';
 
 const ALL_STACKS = [
   'JavaScript', 'TypeScript', 'Python', 'Java', 'C++',
@@ -55,14 +56,32 @@ export default function CompleteProfileScreen() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
 
+      const cleanUsername = sanitizeUsername(username);
+      if (!isValidUsername(cleanUsername)) {
+        throw new Error('Username must be 3-20 characters (letters, numbers, underscore only)');
+      }
+
+      // Check if username is taken (other than current user)
+      const { data: existing } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('username', cleanUsername)
+        .neq('id', user.id)
+        .maybeSingle();
+      
+      if (existing) {
+        throw new Error('Username already taken. Try another.');
+      }
+
       const { error } = await supabase.from('profiles').upsert({
         id: user.id,
-        username: username.trim().toLowerCase(),
-        bio: bio.trim(),
+        username: cleanUsername,
+        bio: sanitizeBio(bio),
         college: college.trim(),
         skills: selectedStack,
-        github_url: githubUrl.trim(),
-        linkedin_url: linkedinUrl.trim(),
+        github_url: sanitizeUrl(githubUrl) ?? '',
+        linkedin_url: sanitizeUrl(linkedinUrl) ?? '',
+        onboarding_complete: true,
         updated_at: new Date().toISOString(),
       });
 
@@ -131,7 +150,7 @@ export default function CompleteProfileScreen() {
               <Input
                 label="Username"
                 value={username}
-                onChangeText={text => { setUsername(text.replace(/[^a-z0-9_]/gi, '').toLowerCase()); setError(''); }}
+                onChangeText={text => { setUsername(sanitizeUsername(text)); setError(''); }}
                 placeholder="tripathi_dev"
                 autoCapitalize="none"
               />

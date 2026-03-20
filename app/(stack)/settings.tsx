@@ -17,16 +17,12 @@ export default function SettingsScreen() {
   const handleLogout = async () => {
     const performLogout = async () => {
       try {
-        const { error } = await supabase.auth.signOut();
-        if (error) {
-          Alert.alert('Error signing out', error.message);
-        } else {
-          clearUser();
-          // Force redirect to login to ensure the UI updates immediately
-          router.replace('/(auth)/login');
-        }
+        await supabase.auth.signOut();
+        clearUser();
+        router.replace('/(auth)/login' as any);
       } catch (err: any) {
-        Alert.alert('Error', 'An unexpected error occurred during sign out.');
+        if (Platform.OS === 'web') alert('Error signing out');
+        else Alert.alert('Error', 'An unexpected error occurred during sign out.');
       }
     };
 
