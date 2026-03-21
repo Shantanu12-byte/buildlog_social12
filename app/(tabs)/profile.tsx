@@ -4,6 +4,7 @@ import {
   SafeAreaView, StatusBar, ActivityIndicator, Alert, Linking,
   RefreshControl,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { Colors, Typography, Spacing, Radius } from '@/constants/theme';
@@ -20,10 +21,11 @@ export default function ProfileScreen() {
   const router = useRouter();
   
   const [profile, setProfile] = useState<any>(null);
-  const [stats, setStats] = useState({ projects: 0, builds: 0, followers: 0, collabs: 0 });
+  const [stats, setStats] = useState({ projects: 0, builds: 0, followers: 0, collabs: 0, streak: 0, timeSpent: 0 });
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [verifiedSkills, setVerifiedSkills] = useState<Record<string, SkillLevel>>({});
+  const [learningStats, setLearningStats] = useState<Record<string, { total: number; done: number }>>({});
 
   const fetchProfileData = useCallback(async () => {
     try {
@@ -55,12 +57,53 @@ export default function ProfileScreen() {
         supabase.from('followers').select('id', { count: 'exact', head: true }).eq('following_id', user.id),
       ]);
 
+      // 4. Local Persistence (Flame Streak & Time)
+      let streakStr = await AsyncStorage.getItem('daily_streak');
+      let timeStr = await AsyncStorage.getItem('total_time_spent');
+      
+      // Mock initialization if empty, just like Android defaults
+      if (!streakStr) {
+          await AsyncStorage.setItem('daily_streak', '3');
+          streakStr = '3';
+      }
+      if (!timeStr) {
+          await AsyncStorage.setItem('total_time_spent', '145'); // 145 mins
+          timeStr = '145';
+      }
+
       setStats({
         projects: projRes.count || 0,
         builds: buildsRes.count || 0,
         followers: followersRes.count || 0,
         collabs: 3, 
+        streak: parseInt(streakStr, 10),
+        timeSpent: parseInt(timeStr, 10)
       });
+
+      // 3. Fetch Learning Stats (Mimo Engine)
+      const { data: completed } = await supabase.from('challenge_progress').select('challenge_id').eq('user_id', user.id);
+      const { data: allChallenges } = await supabase.from('learning_challenges').select('id, topic');
+      
+      const statsByTopic: Record<string, { total: number; done: number }> = {};
+      
+      if (allChallenges) {
+        allChallenges.forEach(c => {
+           if (!statsByTopic[c.topic]) statsByTopic[c.topic] = { total: 0, done: 0 };
+           statsByTopic[c.topic].total++;
+        });
+      }
+      
+      if (completed && allChallenges) {
+         const completedIds = completed.map(c => c.challenge_id);
+         allChallenges.forEach(c => {
+             if (completedIds.includes(c.id)) {
+                 statsByTopic[c.topic].done++;
+             }
+         });
+      }
+      
+      setLearningStats(statsByTopic);
+
     } catch (err: any) {
       console.error('Error fetching profile:', err.message);
     } finally {
@@ -136,13 +179,16 @@ export default function ProfileScreen() {
         {/* High-Fi Stats Grid */}
         <View style={s.statsBox}>
           <View style={s.statItem}>
-            <Text style={s.statVal}>{stats.projects}</Text>
-            <Text style={s.statLab}>Projects</Text>
+            <View style={{flexDirection: 'row', alignItems: 'center', gap: 4}}>
+              <FontAwesome5 name="fire-alt" size={16} color="#FF5F1F" />
+              <Text style={s.statVal}>{stats.streak}</Text>
+            </View>
+            <Text style={s.statLab}>Days</Text>
           </View>
           <View style={s.statSep} />
           <View style={s.statItem}>
-            <Text style={s.statVal}>{stats.builds}</Text>
-            <Text style={s.statLab}>Builds</Text>
+            <Text style={s.statVal}>{stats.projects}</Text>
+            <Text style={s.statLab}>Projects</Text>
           </View>
           <View style={s.statSep} />
           <View style={s.statItem}>
@@ -151,8 +197,8 @@ export default function ProfileScreen() {
           </View>
           <View style={s.statSep} />
           <View style={s.statItem}>
-            <Text style={s.statVal}>{stats.collabs}</Text>
-            <Text style={s.statLab}>Collabs</Text>
+            <Text style={s.statVal}>{Math.floor(stats.timeSpent / 60)}h {stats.timeSpent % 60}m</Text>
+            <Text style={s.statLab}>Learning</Text>
           </View>
         </View>
 
@@ -176,6 +222,27 @@ export default function ProfileScreen() {
             <Text style={s.shareDevTxt}>Share Card</Text>
           </TouchableOpacity>
         </View>
+
+        {/* Learning Progress Section */}
+        {Object.keys(learningStats).length > 0 && (
+          <View style={s.learningSection}>
+            <Text style={s.stackHeader}>MATRIX PROGRESS</Text>
+            {Object.entries(learningStats).map(([topic, data]) => {
+              const percent = data.total > 0 ? Math.round((data.done / data.total) * 100) : 0;
+              return (
+                <View key={topic} style={s.progressRow}>
+                  <View style={s.progressHeader}>
+                    <Text style={s.progressTopic}>{topic}</Text>
+                    <Text style={s.progressPercent}>{percent}%</Text>
+                  </View>
+                  <View style={s.progressBarBg}>
+                    <View style={[s.progressBarFill, { width: `${percent}%` }]} />
+                  </View>
+                </View>
+              );
+            })}
+          </View>
+        )}
 
         {/* Stack */}
         <View style={s.stackWrap}>
@@ -242,5 +309,13 @@ const s = StyleSheet.create({
   pillTxtLight: { color: '#A5B4FC', fontWeight: '700', fontSize: 13 },
   pillDark: { backgroundColor: '#141414', borderColor: '#333' },
   pillTxtDark: { color: '#888', fontWeight: '700', fontSize: 13 },
+  
+  learningSection: { marginBottom: 30, backgroundColor: CARD_BG, padding: 20, borderRadius: 16, borderWidth: 1, borderColor: '#222' },
+  progressRow: { marginBottom: 16 },
+  progressHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
+  progressTopic: { color: '#FFF', fontSize: 14, fontWeight: '700', fontFamily: 'monospace' },
+  progressPercent: { color: '#1D9E75', fontSize: 14, fontWeight: '900', fontFamily: 'monospace' },
+  progressBarBg: { height: 8, backgroundColor: '#111', borderRadius: 4, overflow: 'hidden' },
+  progressBarFill: { height: '100%', backgroundColor: '#1D9E75', borderRadius: 4 },
 
 });

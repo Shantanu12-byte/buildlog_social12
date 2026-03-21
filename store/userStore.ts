@@ -16,6 +16,8 @@ interface UserProfile {
   public_key: string | null;
   expo_push_token: string | null;
   onboarding_complete: boolean;
+  learning_focus?: string | null;
+  skill_level?: string | null;
 }
 
 interface UserState {

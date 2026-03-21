@@ -69,12 +69,10 @@ export default function TabLayout() {
         options={{ title: 'Campus', tabBarIcon: ({ color }) => <Feather name="message-circle" size={24} color={color} /> }} 
       />
       <Tabs.Screen 
-        name="inbox" 
+        name="learn" 
         options={{ 
-          title: 'Challenges', 
-          tabBarIcon: ({ color }) => <Feather name="star" size={24} color={color} />,
-          tabBarBadge: unreadCount > 0 ? unreadCount : undefined,
-          tabBarBadgeStyle: { backgroundColor: Colors.cyber.accent, color: '#000', fontSize: 10, fontWeight: 'bold' }
+          title: 'Learn', 
+          tabBarIcon: ({ color }) => <Feather name="book-open" size={24} color={color} />
         }} 
       />
       <Tabs.Screen 

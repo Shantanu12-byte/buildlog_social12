@@ -1,0 +1,59 @@
+env: load .env
+env: export EXPO_PUBLIC_SUPABASE_URL EXPO_PUBLIC_SUPABASE_ANON_KEY
+React Compiler enabled
+Starting Metro Bundler
+warning: Bundler cache is empty, rebuilding (this may take a minute)
+Web node_modules\expo-router\entry.js ▓▓░░░░░░░░░░░░░░ 16.0% (4/7)
+iOS node_modules\expo-router\entry.js ▓▓▓░░░░░░░░░░░░░ 22.0% ( 61/130)
+Android node_modules\expo-router\entry.js ▓▓░░░░░░░░░░░░░░ 16.0% (18/65)
+Web node_modules\expo-router\entry.js ▓▓▓▓▓▓░░░░░░░░░░ 39.9% ( 90/259)
+iOS node_modules\expo-router\entry.js ▓▓▓▓▓▓░░░░░░░░░░ 41.5% (240/430)
+Android node_modules\expo-router\entry.js ▓▓▓▓▓░░░░░░░░░░░ 32.4% (188/361)
+Web node_modules\expo-router\entry.js ▓▓▓▓▓▓░░░░░░░░░░ 39.9% (137/339)
+iOS node_modules\expo-router\entry.js ▓▓▓▓▓▓▓░░░░░░░░░ 44.0% (421/637)
+Android node_modules\expo-router\entry.js ▓▓▓▓▓░░░░░░░░░░░ 36.3% (277/460)
+Web node_modules\expo-router\entry.js ▓▓▓▓▓▓░░░░░░░░░░ 39.9% (252/421)
+iOS node_modules\expo-router\entry.js ▓▓▓▓▓▓▓░░░░░░░░░ 45.0% (430/641)
+Android node_modules\expo-router\entry.js ▓▓▓▓▓▓▓░░░░░░░░░ 45.4% (404/619)
+Web node_modules\expo-router\entry.js ▓▓▓▓▓▓▓░░░░░░░░░ 45.0% (371/604)
+iOS node_modules\expo-router\entry.js ▓▓▓▓▓▓▓▓░░░░░░░░ 53.6% (641/917)
+Android node_modules\expo-router\entry.js ▓▓▓▓▓▓▓░░░░░░░░░ 49.7% (536/791)
+Web node_modules\expo-router\entry.js ▓▓▓▓▓▓▓▓░░░░░░░░ 55.9% (501/670)
+iOS node_modules\expo-router\entry.js ▓▓▓▓▓▓▓▓▓▓▓░░░░░ 72.2% ( 895/1053)
+Android node_modules\expo-router\entry.js ▓▓▓▓▓▓▓▓▓░░░░░░░ 60.5% (727/935)
+Web node_modules\expo-router\entry.js ▓▓▓▓▓▓▓▓▓▓▓░░░░░ 71.3% (677/802)
+iOS node_modules\expo-router\entry.js ▓▓▓▓▓▓▓▓▓▓▓▓▓░░░ 82.1% (1045/1153)
+Android node_modules\expo-router\entry.js ▓▓▓▓▓▓▓▓▓▓▓▓░░░░ 76.2% ( 928/1063)
+Web node_modules\expo-router\entry.js ▓▓▓▓▓▓▓▓▓▓▓▓▓▓░░ 87.8% (839/897)
+iOS node_modules\expo-router\entry.js ▓▓▓▓▓▓▓▓▓▓▓▓▓░░░ 85.7% (1158/1251)
+Android node_modules\expo-router\entry.js ▓▓▓▓▓▓▓▓▓▓▓▓▓░░░ 84.0% (1139/1243)
+Web node_modules\expo-router\entry.js ▓▓▓▓▓▓▓▓▓▓▓▓▓▓░░ 92.0% (897/935)
+iOS node_modules\expo-router\entry.js ▓▓▓▓▓▓▓▓▓▓▓▓▓▓░░ 88.6% (1325/1408)
+Android node_modules\expo-router\entry.js ▓▓▓▓▓▓▓▓▓▓▓▓▓░░░ 86.9% (1290/1401)
+Web node_modules\expo-router\entry.js ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░ 96.1% (1088/1110)
+iOS node_modules\expo-router\entry.js ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░ 98.3% (1641/1655)
+Android node_modules\expo-router\entry.js ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░ 97.1% (1617/1641)
+Web Bundling failed 35218ms node_modules\expo-router\entry.js (1110 modules)
+Error: Unable to resolve module @lottiefiles/dotlottie-react from C:\Productive Social Media\buildlog\node_modules\lottie-react-native\lib\module\LottieView\index.web.js: @lottiefiles/dotlottie-react could not be found within the project or in these directories:
+  node_modules
+[0m [90m 1 |[39m [36mimport[39m [33mReact[39m[33m,[39m { forwardRef[33m,[39m useImperativeHandle[33m,[39m useEffect[33m,[39m useCallback[33m,[39m useState } [36mfrom[39m [32m'react'[39m[33m;[39m
+ [90m 2 |[39m [36mimport[39m { parsePossibleSources } [36mfrom[39m [32m'./utils'[39m[33m;[39m
+[31m[1m>[22m[39m[90m 3 |[39m [36mimport[39m { [33mDotLottieReact[39m } [36mfrom[39m [32m'@lottiefiles/dotlottie-react'[39m[33m;[39m
+ [90m   |[39m                                 [31m[1m^[22m[39m
+ [90m 4 |[39m [36mconst[39m [33mLottieView[39m [33m=[39m [90m/*#__PURE__*/[39mforwardRef(({
+ [90m 5 |[39m   source[33m,[39m
+ [90m 6 |[39m   speed[33m,[39m[0m
+
+Import stack:
+
+ node_modules\lottie-react-native\lib\module\LottieView\index.web.js
+ | import "@lottiefiles/dotlottie-react"
+
+ node_modules\lottie-react-native\lib\module\index.js
+ | import "./LottieView"
+
+ app\(tabs)\learn.tsx
+ | import "lottie-react-native"
+
+ app (require.context)
+

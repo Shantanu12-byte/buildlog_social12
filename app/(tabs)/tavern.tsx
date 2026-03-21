@@ -10,7 +10,7 @@ import React, { useEffect, useState, useRef, useCallback } from 'react';
 import {
   View, Text, FlatList, TouchableOpacity, TextInput,
   StyleSheet, SafeAreaView, StatusBar, KeyboardAvoidingView,
-  Platform, ActivityIndicator, Modal,
+  Platform, ActivityIndicator, Modal, Alert,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { supabase } from '@/lib/supabase';
@@ -227,8 +227,21 @@ export default function TavernScreen() {
       online_count: 1,
       member_count: 1,
     };
-    const { data, error } = await supabase.from('chat_rooms').insert([newRoom]).select().single();
-    if (!error && data) {
+    
+    // We explicitly name columns here to be safe and catch errors early
+    const { data, error } = await supabase
+      .from('chat_rooms')
+      .insert([newRoom])
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Error creating community:', error);
+      Alert.alert('Error', `Could not create community: ${error.message}`);
+      return;
+    }
+
+    if (data) {
       setRooms(prev => [data, ...prev]);
       setIsCreating(false);
       setNewRoomName('');

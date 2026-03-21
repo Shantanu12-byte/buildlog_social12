@@ -1,0 +1,9 @@
+Unable to resolve module @lottiefiles/dotlottie-react from C:\Productive Social Media\buildlog\node_modules\lottie-react-native\lib\module\LottieView\index.web.js: @lottiefiles/dotlottie-react could not be found within the project or in these directories:
+  node_modules
+[0m [90m 1 |[39m [36mimport[39m [33mReact[39m[33m,[39m { forwardRef[33m,[39m useImperativeHandle[33m,[39m useEffect[33m,[39m useCallback[33m,[39m useState } [36mfrom[39m [32m'react'[39m[33m;[39m
+ [90m 2 |[39m [36mimport[39m { parsePossibleSources } [36mfrom[39m [32m'./utils'[39m[33m;[39m
+[31m[1m>[22m[39m[90m 3 |[39m [36mimport[39m { [33mDotLottieReact[39m } [36mfrom[39m [32m'@lottiefiles/dotlottie-react'[39m[33m;[39m
+ [90m   |[39m                                 [31m[1m^[22m[39m
+ [90m 4 |[39m [36mconst[39m [33mLottieView[39m [33m=[39m [90m/*#__PURE__*/[39mforwardRef(({
+ [90m 5 |[39m   source[33m,[39m
+ [90m 6 |[39m   speed[33m,[39m[0m
