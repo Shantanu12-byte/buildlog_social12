@@ -44,21 +44,14 @@ export default function TabLayout() {
     }
   };
 
-  // ── WEB LAYOUT: Sidebar + Content ──────────────────────────
-  if (isWeb) {
-    return (
-      <View style={s.webRoot}>
-        <Slot /> 
-      </View>
-    );
-  }
-
-  // ── MOBILE LAYOUT: Bottom Tab Bar ──────────────────────────
+  // ── LAYOUT SELECTION ──────────────────────────────
+  // We use Tabs for both mobile and web to keep the navigator stable,
+  // but we hide the tab bar on desktop web.
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarStyle: s.tabBar,
+        tabBarStyle: isWeb ? { display: 'none' } : s.tabBar,
         tabBarActiveTintColor: Colors.accent.primary,
         tabBarInactiveTintColor: Colors.text.tertiary,
       }}

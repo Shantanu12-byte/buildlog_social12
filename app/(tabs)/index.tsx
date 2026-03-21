@@ -47,7 +47,7 @@ export default function FeedScreen() {
           
         const newPost = {
           ...payload.new,
-          username: profile?.username || 'builder',
+          username: payload.new.username || profile?.username || 'builder',
           userAvatar: profile?.avatar_url,
         } as Post;
         
@@ -79,9 +79,8 @@ export default function FeedScreen() {
 
     try {
       const { data, error } = await supabase
-        .from('posts')
-        .select('*, profiles:user_id(username, avatar_url)')
-        .order('created_at', { ascending: false })
+        .from('trending_posts')
+        .select('*, users:user_id(username, avatar_url)')
         .range(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE - 1);
 
       if (error) throw error;
@@ -89,8 +88,9 @@ export default function FeedScreen() {
       if (data) {
         const mapped = data.map((p: any) => ({
           ...p,
-          username: p.profiles?.username || 'builder',
-          userAvatar: p.profiles?.avatar_url,
+          username: p.users?.username || p.username || 'builder',
+          userAvatar: p.users?.avatar_url,
+          cheers: p.likes_count ?? 0,
         }));
         setPosts(prev => reset ? mapped : [...prev, ...mapped]);
         setHasMore(data.length === PAGE_SIZE);

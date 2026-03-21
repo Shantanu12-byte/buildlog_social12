@@ -17,7 +17,7 @@ interface Discussion {
   user_id: string;
   content: string;
   created_at: string;
-  profiles: {
+  users: {
     username: string;
     avatar_url?: string;
   };
@@ -45,22 +45,23 @@ export default function DiscussionScreen() {
     // Fetch Post
     const { data: postData } = await supabase
       .from('posts')
-      .select('*, profiles:author_id(username, avatar_url)')
+      .select('*, users:author_id(username, avatar_url)')
       .eq('id', id)
       .single();
 
     if (postData) {
       setPost({
         ...postData,
-        username: postData.profiles?.username || 'builder',
-        userAvatar: postData.profiles?.avatar_url,
+        username: postData.users?.username || postData.username || 'builder',
+        userAvatar: postData.users?.avatar_url,
+        cheers: postData.likes_count ?? 0,
       });
     }
 
     // Fetch Discussions
     const { data: discData } = await supabase
       .from('discussions')
-      .select('*, profiles(username, avatar_url)')
+      .select('*, users:user_id(username, avatar_url)')
       .eq('post_id', id)
       .order('created_at', { ascending: true });
 
@@ -78,7 +79,7 @@ export default function DiscussionScreen() {
       }, async (payload) => {
         const { data } = await supabase
           .from('discussions')
-          .select('*, profiles(username, avatar_url)')
+          .select('*, users:user_id(username, avatar_url)')
           .eq('id', payload.new.id)
           .single();
         if (data) {
@@ -106,7 +107,9 @@ export default function DiscussionScreen() {
 
     const { error } = await supabase.from('discussions').insert({
       content: trimmed,
+      message: trimmed, // Legacy schema support
       post_id: id,
+      project_id: post?.project_id, // Satisfy NOT NULL constraint
       user_id: user.id,
     });
 
@@ -114,6 +117,20 @@ export default function DiscussionScreen() {
       console.error('Error sending comment:', error);
       Alert.alert('Error', 'Failed to send comment. Please try again.');
       setComment(trimmed);
+    } else if (post) {
+      // Opt to update using the app code since RLS is disabled, 
+      // preventing the need for more SQL scripts explicitly!
+      try {
+        await supabase
+          .from('posts')
+          .update({ comments: (post.comments || 0) + 1 })
+          .eq('id', id);
+        
+        // Optimistically update local state if needed
+        setPost({ ...post, comments: (post.comments || 0) + 1 });
+      } catch (updateErr) {
+        console.error('Error updating comment count:', updateErr);
+      }
     }
     setSending(false);
   }
@@ -147,10 +164,10 @@ export default function DiscussionScreen() {
           contentContainerStyle={s.list}
           renderItem={({ item }) => (
             <View style={s.commentRow}>
-              <Avatar username={item.profiles?.username} size={32} />
+              <Avatar username={item.users?.username} size={32} />
               <View style={s.commentContent}>
                 <View style={s.commentMeta}>
-                  <Text style={s.commentUser}>{item.profiles?.username || 'builder'}</Text>
+                  <Text style={s.commentUser}>{item.users?.username || 'builder'}</Text>
                   <Text style={s.commentTime}>{new Date(item.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</Text>
                 </View>
                 <Text style={s.commentText}>{item.content}</Text>

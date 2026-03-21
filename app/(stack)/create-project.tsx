@@ -20,6 +20,7 @@ export default function CreateProjectScreen() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [user, setUser] = useState<any>(null);
   const [imageUri, setImageUri] = useState<string | null>(null);
+  const [feedCaption, setFeedCaption] = useState('');
 
   React.useEffect(() => {
     const getInitialUser = async () => {
@@ -130,16 +131,18 @@ export default function CreateProjectScreen() {
       if (error) throw error;
 
       // Announce on Feed
-      await supabase.from('posts').insert({
+      const { error: postError } = await supabase.from('posts').insert({
         user_id: finalUserId,
         author_id: finalUserId,
         username: session.user.user_metadata?.username || session.user.email?.split('@')[0] || 'Builder',
-        projectTitle: title.trim(),
-        caption: description.trim(),
-        imageUrl: publicUrl,
-        cheers: 0,
+        "projectTitle": title.trim(),
+        caption: feedCaption.trim() || description.trim(),
+        image_url: publicUrl,
+        likes_count: 0,
         comments: 0
       });
+
+      if (postError) throw postError;
 
       Alert.alert('Success', 'Your new project has been created.');
       router.replace('/(tabs)/profile');
@@ -201,6 +204,14 @@ export default function CreateProjectScreen() {
             value={skills}
             onChangeText={setSkills}
             placeholder="React, TypeScript, Node..."
+          />
+
+          <Input
+            label="Feed Caption"
+            value={feedCaption}
+            onChangeText={setFeedCaption}
+            placeholder="What should the feed say?..."
+            multiline
           />
 
           {/* Toggles */}

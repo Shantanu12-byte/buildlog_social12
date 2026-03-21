@@ -35,6 +35,7 @@ export default function NewProjectScreen() {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [skills, setSkills] = useState('');
+  const [caption, setCaption] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
@@ -65,6 +66,7 @@ export default function NewProjectScreen() {
     setSelectedRepo(repo);
     setTitle(repo.name.replace(/[-_]/g, ' ').toUpperCase());
     setDescription(repo.description || '');
+    setCaption(`🚀 Just launched a new project from GitHub: ${repo.name.replace(/[-_]/g, ' ')}!`);
     
     // Auto-fill skills from language and topics
     const techStack = new Set<string>();
@@ -112,14 +114,17 @@ export default function NewProjectScreen() {
       if (error) throw error;
 
       // Also create a post for the feed
-      await supabase.from('posts').insert({
+      const { error: postError } = await supabase.from('posts').insert({
         author_id: userProfile.id,
-        username: userProfile.username,
+        user_id: userProfile.id, 
+        username: userProfile.username, // AUTO-FETCHED
         project_id: projData?.id || null, 
-        projectTitle: title.trim(),
-        caption: `🚀 Just launched a new project from GitHub: ${title.trim()}!`,
+        "projectTitle": title.trim(),
+        caption: caption.trim() || `🚀 Just launched a new project: ${title.trim()}!`,
         image_url: null, 
       });
+
+      if (postError) throw postError;
 
       // Recalculate verified skills for the user
       await supabase.rpc('recalculate_verified_skills', { p_user_id: userProfile.id });
@@ -246,6 +251,15 @@ export default function NewProjectScreen() {
                 onChangeText={setSkills}
                 placeholder="React, Rust, Web3..."
                 style={s.input}
+              />
+
+              <Input
+                label="FEED_CAPTION"
+                value={caption}
+                onChangeText={setCaption}
+                placeholder="Launching into the grid..."
+                multiline
+                style={{ ...s.input, height: 60 }}
               />
 
               <Button

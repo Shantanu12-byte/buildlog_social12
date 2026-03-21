@@ -129,15 +129,15 @@ export default function NewPostScreen() {
         .from('post-images')
         .getPublicUrl(filePath);
 
-      // 4. Insert Post into Database - aligning with author_id and project_id
+      // 4. Insert Post into Database - aligning with author_id and user_id
       const { error: insertError } = await supabase
         .from('posts')
         .insert({
           author_id: userId,
+          user_id: userId, 
           project_id: selectedProjectId,
           image_url: publicUrl,
-          caption: caption.trim(),
-          github_url: githubUrl.trim() || null,
+          caption: githubUrl.trim() ? `${caption.trim()}\n\n🔗 ${githubUrl.trim()}` : caption.trim(),
         });
 
       if (insertError) throw insertError;

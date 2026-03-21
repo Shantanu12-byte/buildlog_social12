@@ -174,14 +174,15 @@ export default function RootLayout() {
         // Session exists: Check Profile
         try {
           // Fetch if not already in store
-          if (!userProfile) {
+          let profile = userProfile;
+          if (!profile) {
             setProfileLoading(true);
             await fetchUserProfile();
+            profile = useUserStore.getState().userProfile;
             setProfileLoading(false);
           }
           
-          const profile = userProfile;
-           const isOnboarded = !!profile?.onboarding_complete;
+          const isOnboarded = !!profile?.onboarding_complete;
 
           if (!isOnboarded) {
             const onSetupScreen = segs.includes('CompleteProfileScreen');
