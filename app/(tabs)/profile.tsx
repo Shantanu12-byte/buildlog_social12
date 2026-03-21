@@ -80,27 +80,29 @@ export default function ProfileScreen() {
         timeSpent: parseInt(timeStr, 10)
       });
 
-      // 3. Fetch Learning Stats (Mimo Engine)
-      const { data: completed } = await supabase.from('challenge_progress').select('challenge_id').eq('user_id', user.id);
-      const { data: allChallenges } = await supabase.from('learning_challenges').select('id, topic');
+      // 3. Fetch Learning Stats (Local AsyncStorage)
+      const allKeys = await AsyncStorage.getAllKeys();
+      const progressKeys = allKeys.filter(k => k.startsWith('progress_'));
+      const progressValues = await AsyncStorage.multiGet(progressKeys);
       
       const statsByTopic: Record<string, { total: number; done: number }> = {};
+      const TOPICS = ['HTML', 'CSS', 'Python', 'React', 'Java', 'DSA', 'Web3'];
       
-      if (allChallenges) {
-        allChallenges.forEach(c => {
-           if (!statsByTopic[c.topic]) statsByTopic[c.topic] = { total: 0, done: 0 };
-           statsByTopic[c.topic].total++;
+      TOPICS.forEach(topic => {
+        let sum = 0;
+        let count = 0;
+        progressValues.forEach(([key, val]) => {
+          if (key.startsWith(`progress_${topic}_`)) {
+            sum += val ? parseInt(val, 10) : 0;
+            count++;
+          }
         });
-      }
-      
-      if (completed && allChallenges) {
-         const completedIds = completed.map(c => c.challenge_id);
-         allChallenges.forEach(c => {
-             if (completedIds.includes(c.id)) {
-                 statsByTopic[c.topic].done++;
-             }
-         });
-      }
+        // We always show the average across 3 levels (even if not started)
+        const avg = Math.round(sum / 3);
+        if (avg > 0) {
+          statsByTopic[topic] = { total: 100, done: avg }; // Using 100 as total for percentage display
+        }
+      });
       
       setLearningStats(statsByTopic);
 
