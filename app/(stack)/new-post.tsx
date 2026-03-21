@@ -129,12 +129,20 @@ export default function NewPostScreen() {
         .from('post-images')
         .getPublicUrl(filePath);
 
-      // 4. Insert Post into Database - aligning with author_id and user_id
+      // 4. Get User Profile for Username
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('username')
+        .eq('id', userId)
+        .single();
+
+      // 5. Insert Post into Database - aligning with author_id and user_id and including username
       const { error: insertError } = await supabase
         .from('posts')
         .insert({
           author_id: userId,
           user_id: userId, 
+          username: profile?.username || 'builder',
           project_id: selectedProjectId,
           image_url: publicUrl,
           caption: githubUrl.trim() ? `${caption.trim()}\n\n🔗 ${githubUrl.trim()}` : caption.trim(),

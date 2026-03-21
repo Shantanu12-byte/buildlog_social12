@@ -51,7 +51,10 @@ export default function FeedScreen() {
           userAvatar: profile?.avatar_url,
         } as Post;
         
-        setPosts(prev => [newPost, ...prev]);
+        setPosts(prev => {
+          if (prev.find(p => p.id === newPost.id)) return prev;
+          return [newPost, ...prev];
+        });
       })
       .subscribe();
 
