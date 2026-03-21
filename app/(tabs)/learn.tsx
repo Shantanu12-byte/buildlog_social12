@@ -9,6 +9,11 @@ import { Audio } from 'expo-av';
 import { supabase } from '@/lib/supabase';
 import { useUserStore } from '@/store/userStore';
 import { COURSE_DATA } from '@/constants/courseData';
+import AnimatedProgressBar from '@/components/AnimatedProgressBar';
+import QuizOption from '@/components/QuizOption';
+import TutorModal from '@/components/TutorModal';
+import { getTutoringFeedback } from '@/services/TutorController';
+import { manageLanguageProgress } from '@/services/AsyncProgressManager';
 
 export default function LearnScreen() {
   const { userProfile, updateUserProfile } = useUserStore();
@@ -47,12 +52,30 @@ export default function LearnScreen() {
   };
   const LEVELS = ['Beginner', 'Pro', 'Expert'];
   
+  // Dashboard & Quiz Animations
+  const dashboardAnims = useRef(TOPICS.map(() => new Animated.Value(0))).current;
+  const optionRefs = useRef<any[]>([]);
+
+  useEffect(() => {
+    if (!learningFocus || !skillLevel) {
+      dashboardAnims.forEach(anim => anim.setValue(0));
+      Animated.stagger(100, dashboardAnims.map(anim => Animated.timing(anim, {
+        toValue: 1, duration: 600, easing: Easing.out(Easing.exp), useNativeDriver: true
+      }))).start();
+    }
+  }, [learningFocus, skillLevel, dashboardAnims]);
+  
   // Progress State
   const [learningStats, setLearningStats] = useState<Record<string, number>>({});
   const [sessionQuestions, setSessionQuestions] = useState<any[]>([]);
   const [questionIndex, setQuestionIndex] = useState(0);
   const [roundScore, setRoundScore] = useState(0);
   const [isRoundFinished, setIsRoundFinished] = useState(false);
+  
+  // Tutor State
+  const [showTutor, setShowTutor] = useState(false);
+  const [tutorText, setTutorText] = useState('');
+  const [tutorSnippet, setTutorSnippet] = useState<string | null>(null);
 
   useEffect(() => {
     loadProgress();
@@ -111,7 +134,6 @@ export default function LearnScreen() {
 
   const playVictorySound = async () => {
     try {
-      // Using a public high-quality victory sound URI as asset might not exist
       const { sound } = await Audio.Sound.createAsync(
         { uri: 'https://www.myinstants.com/media/sounds/victory-royal_1.mp3' }
       );
@@ -121,12 +143,39 @@ export default function LearnScreen() {
     }
   };
 
+  const playSuccessSound = async () => {
+    try {
+      const { sound } = await Audio.Sound.createAsync(
+        { uri: 'https://www.myinstants.com/media/sounds/level-up-191997.mp3' }
+      );
+      await sound.playAsync();
+    } catch (e) {
+      console.log('Success sound fail:', e);
+    }
+  };
+
   const submitAnswer = async (optIdx: number) => {
     if (isAnswered) return;
     
     const correctIdx = sessionQuestions[questionIndex].answer;
     const correct = optIdx === correctIdx;
     
+    if (correct) {
+      optionRefs.current[optIdx]?.playCorrectAnimation();
+      playSuccessSound();
+    } else {
+      optionRefs.current[optIdx]?.playIncorrectAnimation();
+      optionRefs.current[correctIdx]?.playCorrectAnimation();
+      
+      // Zero-Cost Tutor Fetch
+      const feedback = getTutoringFeedback(`${learningFocus}_${skillLevel}`, sessionQuestions[questionIndex].id, optIdx);
+      if (feedback) {
+        setTutorText(feedback.feedback);
+        setTutorSnippet(feedback.codeSnippet || null);
+        setTimeout(() => setShowTutor(true), 600);
+      }
+    }
+
     setIsAnswered(true);
     setIsCorrect(correct);
     if (correct) setRoundScore(s => s + 1);
@@ -150,18 +199,13 @@ export default function LearnScreen() {
         playVictorySound();
       }
 
-      // Save Progress
-      const key = `progress_${learningFocus}_${skillLevel}`;
-      const currentProgress = learningStats[key] || 0;
-      const newPercent = Math.max(currentProgress, percent);
-      
-      try {
-        await AsyncStorage.setItem(key, newPercent.toString());
-        // Force refresh stats
-        await loadProgress();
-      } catch (e) {
-        console.error('Save progress error:', e);
+      // Save Progress using AsyncProgressManager (Persistent Achievements)
+      if (userProfile?.id) {
+        await manageLanguageProgress(userProfile.id, learningFocus!, skillLevel!, percent);
       }
+      
+      // Refresh local stats
+      await loadProgress();
     }
   };
 
@@ -206,15 +250,23 @@ export default function LearnScreen() {
         <View style={styles.dashboardContainer}>
           <Text style={styles.headerTitle}>CHOOSE YOUR PATH</Text>
           <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 60 }}>
-            {TOPICS.map(topic => {
+            {TOPICS.map((topic, index) => {
               const bgBeg = learningStats[`${topic}_Beginner`] || 0;
               const bgPro = learningStats[`${topic}_Pro`] || 0;
               const bgExp = learningStats[`${topic}_Expert`] || 0;
               const overall = Math.round((bgBeg + bgPro + bgExp) / 3);
               const color = COURSE_THEMES[topic];
               
+              const translateY = dashboardAnims[index].interpolate({
+                inputRange: [0, 1],
+                outputRange: [50, 0]
+              });
+
               return (
-                <View key={topic} style={styles.materialCard}>
+                <Animated.View 
+                  key={topic} 
+                  style={[styles.materialCard, { opacity: dashboardAnims[index], transform: [{ translateY }] }]}
+                >
                   <TouchableOpacity 
                     activeOpacity={0.8}
                     style={styles.cardHeader}
@@ -253,7 +305,7 @@ export default function LearnScreen() {
                       );
                     })}
                   </View>
-                </View>
+                </Animated.View>
               );
             })}
           </ScrollView>
@@ -309,9 +361,7 @@ export default function LearnScreen() {
             <Feather name="arrow-left" size={24} color="#888" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>{learningFocus} • {skillLevel}</Text>
-        <View style={styles.progressBar}>
-          <View style={[styles.progressFill, { width: `${(questionIndex / 5) * 100}%` }]} />
-        </View>
+        <AnimatedProgressBar progress={questionIndex / 5} />
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent}>
@@ -325,35 +375,19 @@ export default function LearnScreen() {
           </Text>
 
           <View style={styles.mcqContainer}>
-            {currentQ.options?.map((opt: string, idx: number) => {
-              const isSelected = selectedOption === opt;
-              let btnStyle: any = [styles.mcqBtn];
-              let textStyle: any = [styles.mcqBtnText];
-
-              if (isAnswered) {
-                if (idx === currentQ.answer) {
-                  btnStyle.push(styles.mcqBtnCorrect);
-                  textStyle.push(styles.mcqBtnTextSelected);
-                } else if (isSelected && !isCorrect) {
-                  btnStyle.push(styles.mcqBtnWrong);
-                  textStyle.push(styles.mcqBtnTextSelected);
-                }
-              } else if (isSelected) {
-                btnStyle.push(styles.mcqBtnSelected);
-                textStyle.push(styles.mcqBtnTextSelected);
-              }
-
-              return (
-                <TouchableOpacity 
-                  key={opt} 
-                  style={btnStyle}
-                  onPress={() => setSelectedOption(opt)}
-                  disabled={isAnswered}
-                >
-                  <Text style={textStyle}>{opt}</Text>
-                </TouchableOpacity>
-              );
-            })}
+            {currentQ.options?.map((opt: string, idx: number) => (
+              <QuizOption
+                key={opt}
+                ref={(el) => { optionRefs.current[idx] = el; }}
+                opt={opt}
+                idx={idx}
+                isSelected={selectedOption === opt}
+                isAnswered={isAnswered}
+                isCorrect={isCorrect}
+                correctIdx={currentQ.answer}
+                onPress={() => setSelectedOption(opt)}
+              />
+            ))}
           </View>
 
           {isAnswered && (
@@ -397,6 +431,13 @@ export default function LearnScreen() {
           </TouchableOpacity>
         )}
       </View>
+
+      <TutorModal 
+        visible={showTutor} 
+        feedback={tutorText} 
+        codeSnippet={tutorSnippet}
+        onClose={() => setShowTutor(false)} 
+      />
     </SafeAreaView>
   );
 }

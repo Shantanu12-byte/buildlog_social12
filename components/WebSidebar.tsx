@@ -14,7 +14,7 @@ export function WebSidebar() {
   const navItems = [
     { name: 'Feed', route: '/(tabs)', icon: 'home' },
     { name: 'Campus', route: '/(tabs)/tavern', icon: 'message-circle' },
-    { name: 'Challenges', route: '/(tabs)/challenges', icon: 'star' },
+    { name: 'Learn', route: '/(tabs)/learn', icon: 'book-open' },
     { name: 'Profile', route: '/(tabs)/profile', icon: 'user' },
   ];
 

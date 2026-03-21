@@ -18,9 +18,9 @@ import {
   ActivityIndicator, Platform,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { supabase } from '../lib/supabase';
-import { Colors, Typography, Spacing, Radius, getAvatarColor, getInitials } from '../constants/theme';
-import { LoadingScreen } from '../components/ui/UI';
+import { supabase } from '@/lib/supabase';
+import { Colors, Typography, Spacing, Radius, getAvatarColor, getInitials } from '@/constants/theme';
+import { LoadingScreen } from '@/components/ui/UI';
 
 // Install these: npx expo install react-native-view-shot expo-sharing expo-clipboard
 let captureRef: any = null;

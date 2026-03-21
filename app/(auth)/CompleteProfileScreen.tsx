@@ -11,7 +11,9 @@ import {
   SafeAreaView, StatusBar, ScrollView, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../../lib/supabase';
+import { useAuth } from '@/context/AuthContext';
 import { Colors, Typography, Spacing, Radius } from '../../constants/theme';
 import { Input, Button, Avatar, SectionHeader } from '../../components/ui/UI';
 import { sanitizeUsername, sanitizeBio, sanitizeUrl, isValidUsername } from '@/lib/sanitize';
@@ -29,6 +31,7 @@ const STEPS = ['Identity', 'Stack', 'Links'];
 
 export default function CompleteProfileScreen() {
   const router = useRouter();
+  const { updateOnboardingStatus } = useAuth();
 
   // ── State (preserved) ─────────────────────────────────────
   const [step, setStep] = useState(0);
@@ -86,6 +89,13 @@ export default function CompleteProfileScreen() {
       });
 
       if (error) throw error;
+      
+      // ✅ (b) Save status to AsyncStorage
+      await AsyncStorage.setItem('onboarding_complete', 'true');
+      
+      // ✅ (c) Update context state to trigger navigation swap
+      updateOnboardingStatus(true);
+
       router.replace('/(tabs)/' as any);
     } catch (err: any) {
       setError(err.message ?? 'Failed to save profile');

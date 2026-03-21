@@ -10,6 +10,12 @@ import { useUserStore } from '@/store/userStore';
 import { WebSidebar } from '@/components/WebSidebar';
 import { MinecraftLoader } from '@/components/MinecraftLoader';
 import { Colors } from '@/constants/theme';
+import { AuthProvider, useAuth } from '@/context/AuthContext';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+import * as Notifications from 'expo-notifications';
+import * as Device from 'expo-device';
+import { CustomNotificationModal } from '@/components/CustomNotificationModal';
 
 // 🛡️ SECURITY: Strip logs in production
 if (!__DEV__) {
@@ -17,10 +23,6 @@ if (!__DEV__) {
   console.error = () => {};
   console.warn = () => {};
 }
-
-import * as Notifications from 'expo-notifications';
-import * as Device from 'expo-device';
-import { CustomNotificationModal } from '@/components/CustomNotificationModal';
 
 // 🔔 NOTIFICATION HANDLER CONFIG
 Notifications.setNotificationHandler({
@@ -34,6 +36,15 @@ Notifications.setNotificationHandler({
 });
 
 export default function RootLayout() {
+  return (
+    <AuthProvider>
+      <InnerRootLayout />
+    </AuthProvider>
+  );
+}
+
+function InnerRootLayout() {
+  const { isOnboardingFinished, isLoading: authLoading } = useAuth();
   const [session, setSession] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [profileLoading, setProfileLoading] = useState(false);
@@ -71,27 +82,10 @@ export default function RootLayout() {
     return () => subscription.unsubscribe();
   }, []);
 
-  // 1.1 Fail-safe Loader Timeout
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      if (isLoading) {
-        console.warn('AUTH_LOAD_TIMEOUT: Forcing loader off');
-        setIsLoading(false);
-      }
-      if (profileLoading) {
-        console.warn('PROFILE_LOAD_TIMEOUT: Forcing profile loader off');
-        setProfileLoading(false);
-      }
-    }, 10000); // 10s hex-limit
-
-    return () => clearTimeout(timer);
-  }, [isLoading, profileLoading]);
-
   // 🔔 NOTIFICATION HANDLERS
   useEffect(() => {
     if (!session || !userProfile) return;
 
-    // Check if we need to show the modal
     const checkNotificationPermission = async () => {
       if (Platform.OS === 'web') return;
       
@@ -105,16 +99,12 @@ export default function RootLayout() {
 
     checkNotificationPermission();
 
-    // Listeners
     notificationListener.current = Notifications.addNotificationReceivedListener(notification => {
       console.log('🔔 NOTIFICATION_RECEIVED:', notification);
     });
 
     responseListener.current = Notifications.addNotificationResponseReceivedListener(response => {
       const data = response.notification.request.content.data;
-      console.log('🔔 NOTIFICATION_CLICKED:', data);
-      
-      // Route to Inbox if it's a Secret Scroll or DM
       if (data?.type === 'secret_scroll' || data?.screen === 'inbox') {
         router.push({ 
           pathname: '/(tabs)/inbox', 
@@ -131,24 +121,17 @@ export default function RootLayout() {
 
   const registerForPushNotificationsAsync = async () => {
     if (Platform.OS === 'web') return;
-    
-    if (!Device.isDevice) {
-      console.warn('PUSH_ERROR: Must use physical device for push notifications');
-      return;
-    }
+    if (!Device.isDevice) return;
 
     try {
       const { status } = await Notifications.requestPermissionsAsync();
       if (status !== 'granted') return;
 
       const token = (await Notifications.getExpoPushTokenAsync({
-        projectId: '659c2596-f99a-4712-ae88-812165edb7d3', // Hardcoded project ID as per package/auth
+        projectId: '659c2596-f99a-4712-ae88-812165edb7d3',
       })).data;
 
-      console.log('🔔 PUSH_TOKEN_ACQUIRED:', token);
       setExpoPushToken(token);
-      
-      // Sync with Supabase profiles table
       if (userProfile?.id) {
         await updateUserProfile({ expo_push_token: token });
       }
@@ -159,21 +142,18 @@ export default function RootLayout() {
 
   // 2. Secure Routing Logic
   useEffect(() => {
-    if (isLoading) return;
+    if (isLoading || authLoading) return;
 
     const segs = segments as string[];
     const inAuthGroup = segs.includes('(auth)');
 
     const handleRedirects = async () => {
       if (!session) {
-        // No session: Go to Login
         if (!inAuthGroup) {
           router.replace('/(auth)/login');
         }
       } else {
-        // Session exists: Check Profile
         try {
-          // Fetch if not already in store
           let profile = userProfile;
           if (!profile) {
             setProfileLoading(true);
@@ -182,7 +162,7 @@ export default function RootLayout() {
             setProfileLoading(false);
           }
           
-          const isOnboarded = !!profile?.onboarding_complete;
+          const isOnboarded = isOnboardingFinished || !!profile?.onboarding_complete;
 
           if (!isOnboarded) {
             const onSetupScreen = segs.includes('CompleteProfileScreen');
@@ -190,7 +170,6 @@ export default function RootLayout() {
               router.replace('/(auth)/CompleteProfileScreen');
             }
           } else {
-            // Already onboarded: Go to Tabs if in auth or on root (but allow /devcard and public [username])
             const isAllowedRootScreen = segs.includes('devcard') || (segs.length === 1 && !segs[0].startsWith('('));
             if (!isAllowedRootScreen && (inAuthGroup || segs.length === 0 || segs[0] === '')) {
               router.replace('/(tabs)');
@@ -203,10 +182,9 @@ export default function RootLayout() {
     };
 
     handleRedirects();
-  }, [session, userProfile, isLoading, segments]);
+  }, [session, userProfile, isLoading, authLoading, segments, isOnboardingFinished]);
 
-  // 3. Loading Splash Screen
-  if (isLoading || profileLoading) {
+  if (isLoading || profileLoading || authLoading) {
     return (
       <View style={styles.loadingContainer}>
         <MinecraftLoader />
@@ -218,16 +196,11 @@ export default function RootLayout() {
   return (
     <SafeAreaProvider style={{ backgroundColor: Colors.bg.primary, flex: 1 }}>
       <View style={[styles.root, { flexDirection: isDesktop ? 'row' : 'column', backgroundColor: Colors.bg.primary }]}>
-        
-        {/* Fixed Left Sidebar for Web */}
         {Platform.OS === 'web' && isDesktop && <WebSidebar />}
-
-        {/* Center Wrapper: Ensures the 600px app is centered in remaining space */}
         <View style={[styles.centerWrapper, { backgroundColor: Colors.bg.primary }]}>
           <View style={[styles.mainContent, { backgroundColor: Colors.bg.primary }]}>
             <Slot />
             <StatusBar style="light" />
-            
             <CustomNotificationModal 
               visible={showNotificationModal}
               onAuthorize={() => {
@@ -238,7 +211,6 @@ export default function RootLayout() {
             />
           </View>
         </View>
-
       </View>
     </SafeAreaProvider>
   );

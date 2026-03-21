@@ -11,10 +11,10 @@ import {
   StyleSheet, SafeAreaView, StatusBar, TextInput,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { supabase } from '../../lib/supabase';
-import { Colors, Typography, Spacing, Radius } from '../../constants/theme';
-import { FeedPostCard as PostCard, FeedPost as Post } from '../../components/FeedPostCard';
-import { EmptyState, Avatar, SectionHeader, LoadingScreen, Tag } from '../../components/ui/UI';
+import { supabase } from '@/lib/supabase';
+import { Colors, Typography, Spacing, Radius } from '@/constants/theme';
+import { FeedPostCard as PostCard, FeedPost as Post } from '@/components/FeedPostCard';
+import { EmptyState, Avatar, SectionHeader, LoadingScreen, Tag } from '@/components/ui/UI';
 import { Feather } from '@expo/vector-icons';
 
 interface Developer {

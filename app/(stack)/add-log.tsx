@@ -8,12 +8,19 @@ import { Feather } from '@expo/vector-icons';
 
 export default function AddLogScreen() {
   const router = useRouter();
-  const { projectId } = useLocalSearchParams<{ projectId: string }>();
+  const { projectId, repoName, repoUrl } = useLocalSearchParams<{ 
+    projectId: string;
+    repoName?: string;
+    repoUrl?: string; 
+  }>();
   
   const [caption, setCaption] = useState('');
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [user, setUser] = useState<any>(null);
+  const [linkedRepo, setLinkedRepo] = useState<{ name: string, url: string } | null>(
+    repoName ? { name: repoName, url: repoUrl || '' } : null
+  );
 
   React.useEffect(() => {
     const getInitialUser = async () => {
@@ -113,6 +120,8 @@ export default function AddLogScreen() {
           quest_id: projectId,
           content: caption.trim(),
           image_url: publicImageUrl,
+          github_repo_name: linkedRepo?.name,
+          github_repo_url: linkedRepo?.url,
         });
 
       if (insertError) throw insertError;
@@ -150,6 +159,16 @@ export default function AddLogScreen() {
             multiline
             numberOfLines={6}
           />
+          
+          {linkedRepo && (
+            <View style={styles.linkedRepoChip}>
+              <Feather name="git-branch" size={14} color={Colors.accent.primary} />
+              <Text style={styles.linkedRepoText} numberOfLines={1}>{linkedRepo.name}</Text>
+              <TouchableOpacity onPress={() => setLinkedRepo(null)}>
+                <Feather name="x" size={14} color="#888888" />
+              </TouchableOpacity>
+            </View>
+          )}
 
           <View style={styles.imageSection}>
             <Text style={styles.label}>VISUAL_PROOF (SCREENSHOT)</Text>
@@ -295,5 +314,22 @@ const styles = StyleSheet.create({
   },
   disabledButton: {
     opacity: 0.6,
+  },
+  linkedRepoChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1A1A1A',
+    padding: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#333333',
+    gap: 8,
+    alignSelf: 'flex-start',
+  },
+  linkedRepoText: {
+    fontFamily: 'monospace',
+    color: '#FFFFFF',
+    fontSize: 12,
+    maxWidth: 200,
   },
 });

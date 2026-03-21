@@ -222,13 +222,13 @@ export default function FeedScreen() {
               style={s.iconBtn}
               onPress={() => router.push('/search' as any)}
             >
-              <Feather name="search" size={18} color={Colors.text.secondary} />
+              <Feather name="search" size={20} color={Colors.text.secondary} />
             </TouchableOpacity>
             <TouchableOpacity
               style={s.iconBtn}
               onPress={() => router.push('/(stack)/messages' as any)}
             >
-              <Feather name="message-square" size={18} color={Colors.text.secondary} />
+              <Feather name="message-square" size={20} color={Colors.text.secondary} />
             </TouchableOpacity>
           </View>
         </View>
@@ -265,9 +265,9 @@ const s = StyleSheet.create({
     gap: Spacing.sm,
   },
   iconBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: Colors.bg.secondary,
     borderWidth: 0.5,
     borderColor: Colors.border.default,

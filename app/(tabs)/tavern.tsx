@@ -237,7 +237,7 @@ export default function TavernScreen() {
 
     if (error) {
       console.error('Error creating community:', error);
-      Alert.alert('Error', `Could not create community: ${error.message}`);
+      Alert.alert('Error', `Could not create community: ${error.message}${error.details ? ` (${error.details})` : ''}\n\nHint: Check if the chat_rooms table has all required columns.`);
       return;
     }
 
