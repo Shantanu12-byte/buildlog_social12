@@ -13,7 +13,7 @@ const config = {
   issuer: 'https://github.com',
   clientId: GITHUB_CLIENT_ID,
   redirectUrl: Platform.select({
-    web: typeof window !== 'undefined' ? `${window.location.origin}/(stack)/connect-github` : 'http://localhost:19006',
+    web: typeof window !== 'undefined' ? `${window.location.origin}/connect-github` : 'http://localhost:19006/connect-github',
     default: 'com.buildlog://oauth',
   }),
   scopes: ['read:user', 'repo'],
@@ -37,7 +37,15 @@ export default function ConnectGitHubScreen() {
     try {
       if (Platform.OS === 'web') {
         // Web Flow: Manual Redirect
-        const authUrl = `${config.serviceConfiguration.authorizationEndpoint}?client_id=${config.clientId}&redirect_uri=${encodeURIComponent(config.redirectUrl!)}&scope=${config.scopes.join('%20')}`;
+        const redirectUri = config.redirectUrl!;
+        const authUrl = `${config.serviceConfiguration.authorizationEndpoint}?client_id=${config.clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${config.scopes.join('%20')}`;
+        
+        console.log('--- DEBUG GITHUB OAUTH ---');
+        console.log('Client ID:', config.clientId);
+        console.log('Redirect URI:', redirectUri);
+        console.log('Full Auth URL:', authUrl);
+        console.log('---------------------------');
+        
         window.location.assign(authUrl);
         return;
       }
