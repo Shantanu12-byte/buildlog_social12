@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, Platform, Linking } from 'react-native';
 import { router } from 'expo-router';
 import { authorize } from 'react-native-app-auth';
 import { Colors, Shadows } from '@/constants/theme';
@@ -7,15 +7,19 @@ import { useUserStore } from '@/store/userStore';
 import { githubService } from '@/services/githubService';
 import { Github } from 'lucide-react-native';
 
+const GITHUB_CLIENT_ID = process.env.EXPO_PUBLIC_GITHUB_CLIENT_ID || 'your_github_client_id';
+
 const config = {
   issuer: 'https://github.com',
-  clientId: 'YOUR_GITHUB_CLIENT_ID', // User needs to replace this
-  redirectUrl: 'com.buildlog://oauth',
+  clientId: GITHUB_CLIENT_ID,
+  redirectUrl: Platform.select({
+    web: typeof window !== 'undefined' ? `${window.location.origin}/(stack)/connect-github` : 'http://localhost:19006',
+    default: 'com.buildlog://oauth',
+  }),
   scopes: ['read:user', 'repo'],
   serviceConfiguration: {
     authorizationEndpoint: 'https://github.com/login/oauth/authorize',
     tokenEndpoint: 'https://github.com/login/oauth/access_token',
-    revocationEndpoint: 'https://github.com/settings/connections/applications/YOUR_GITHUB_CLIENT_ID',
   },
 };
 
@@ -24,31 +28,58 @@ export default function ConnectGitHubScreen() {
   const { userId } = useUserStore();
 
   const handleConnect = async () => {
+    if (GITHUB_CLIENT_ID === 'your_github_client_id') {
+      Alert.alert('Configuration Missing', 'Please set EXPO_PUBLIC_GITHUB_CLIENT_ID in your .env file.');
+      return;
+    }
+
     setIsConnecting(true);
     try {
-      // 1. Launch standard OAuth flow
+      if (Platform.OS === 'web') {
+        // Web Flow: Manual Redirect
+        const authUrl = `${config.serviceConfiguration.authorizationEndpoint}?client_id=${config.clientId}&redirect_uri=${encodeURIComponent(config.redirectUrl!)}&scope=${config.scopes.join('%20')}`;
+        window.location.assign(authUrl);
+        return;
+      }
+
+      // Native Flow: Standard OAuth
       const authState = await authorize(config);
 
-      if (authState.accessToken) {
-        // 2. Exchange code via backend (using authorizationCode if available, or token directly if preferred)
-        // Note: react-native-app-auth usually handles the exchange, but for added security 
-        // and to store it server-side, we send the authorizatonCode to our backend.
-        if (authState.authorizationCode) {
-          await githubService.exchangeGithubCode(authState.authorizationCode, userId!);
-          
-          Alert.alert('Success', 'GitHub account linked!');
-          router.push('/(stack)/repo-picker');
-        } else {
-          throw new Error('No authorization code returned');
-        }
+      if (authState.accessToken && authState.authorizationCode) {
+        await githubService.exchangeGithubCode(authState.authorizationCode, userId!);
+        Alert.alert('Success', 'GitHub account linked!');
+        router.push('/(stack)/repo-picker');
       }
     } catch (error: any) {
       console.error('GitHub Connection Error:', error);
-      Alert.alert('Connection Failed', 'Could not connect to GitHub. Please check your credentials.');
+      if (Platform.OS !== 'web') {
+        Alert.alert('Connection Failed', 'Could not connect to GitHub. Please check your credentials.');
+      }
     } finally {
       setIsConnecting(false);
     }
   };
+
+  // Web Callback Handling
+  React.useEffect(() => {
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      const urlParams = new URLSearchParams(window.location.search);
+      const code = urlParams.get('code');
+      if (code && userId) {
+        setIsConnecting(true);
+        githubService.exchangeGithubCode(code, userId)
+          .then(() => {
+            Alert.alert('Success', 'GitHub account linked!');
+            router.replace('/(stack)/repo-picker');
+          })
+          .catch(err => {
+            console.error('Web callback error:', err);
+            Alert.alert('Import Failed', 'Failed to exchange GitHub code.');
+          })
+          .finally(() => setIsConnecting(false));
+      }
+    }
+  }, [userId]);
 
   return (
     <View style={styles.container}>

@@ -171,7 +171,8 @@ function InnerRootLayout() {
             }
           } else {
             const isAllowedRootScreen = segs.includes('devcard') || (segs.length === 1 && !segs[0].startsWith('('));
-            if (!isAllowedRootScreen && (inAuthGroup || segs.length === 0 || segs[0] === '')) {
+            const isAuthAllowedScreen = segs.includes('CampusOnboarding');
+            if (!isAllowedRootScreen && ((inAuthGroup && !isAuthAllowedScreen) || segs.length === 0 || segs[0] === '')) {
               router.replace('/(tabs)');
             }
           }

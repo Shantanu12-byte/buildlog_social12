@@ -15,6 +15,7 @@ export default function NewPostScreen() {
   const [caption, setCaption] = useState('');
   const [githubUrl, setGithubUrl] = useState('');
   const [isUploading, setIsUploading] = useState(false);
+  const isCurrentlyUploading = React.useRef(false);
   const [projects, setProjects] = useState<any[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [isLoadingProjects, setIsLoadingProjects] = useState(true);
@@ -70,12 +71,14 @@ export default function NewPostScreen() {
   };
 
   const handlePost = async () => {
+    if (isCurrentlyUploading.current) return;
     if (!imageUri || !caption.trim() || !selectedProjectId) {
       Alert.alert('Incomplete Post', 'Please select an image, write a caption, and choose a project.');
       return;
     }
 
     setIsUploading(true);
+    isCurrentlyUploading.current = true;
 
     try {
       
@@ -163,6 +166,7 @@ export default function NewPostScreen() {
       Alert.alert('Post Failed', error.message || 'An error occurred during submission.');
     } finally {
       setIsUploading(false);
+      isCurrentlyUploading.current = false;
     }
   };
 

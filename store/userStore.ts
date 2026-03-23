@@ -18,6 +18,9 @@ interface UserProfile {
   onboarding_complete: boolean;
   learning_focus?: string | null;
   skill_level?: string | null;
+  campus_id?: string | null;
+  campus_name?: string | null;
+  is_joined_to_campus?: boolean;
 }
 
 interface UserState {

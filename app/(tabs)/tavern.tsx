@@ -16,6 +16,7 @@ import { useRouter } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { Colors, Typography, Spacing, Radius } from '@/constants/theme';
 import { Avatar, LoadingScreen } from '@/components/ui/UI';
+import { useUserStore } from '@/store/userStore';
 
 // ─── Types ────────────────────────────────────────────────────
 interface Room {
@@ -60,7 +61,7 @@ function RoomCard({ room, isActive, onPress }: { room: Room; isActive: boolean; 
   return (
     <TouchableOpacity style={[s.roomCard, isActive && s.roomCardActive]} onPress={onPress} activeOpacity={0.75}>
       <View style={[s.roomIcon, isGlobal ? s.roomIconGlobal : s.roomIconCampus]}>
-        <Text style={s.roomIconText}>{isGlobal ? '🌐' : '🎓'}</Text>
+        <Text style={s.roomIconText}>{isGlobal ? '🌐' : '🏛️'}</Text>
       </View>
       <View style={{ flex: 1, marginLeft: Spacing.md }}>
         <View style={s.roomNameRow}>
@@ -72,8 +73,14 @@ function RoomCard({ room, isActive, onPress }: { room: Room; isActive: boolean; 
             </View>
           )}
         </View>
-        {room.description && <Text style={s.roomDesc} numberOfLines={1}>{room.description}</Text>}
-        {room.last_message && <Text style={s.roomLastMsg} numberOfLines={1}>{room.last_message}</Text>}
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 }}>
+          {room.college && (
+            <View style={s.campusBadge}>
+              <Text style={s.campusBadgeText}>{room.college.split('_').join(' ').toUpperCase()}</Text>
+            </View>
+          )}
+          {room.description && <Text style={s.roomDesc} numberOfLines={1}>{room.description}</Text>}
+        </View>
       </View>
       {!!room.unread_count && room.unread_count > 0 && (
         <View style={s.unreadBadge}>
@@ -179,6 +186,7 @@ function ChatView({ room, messages, loading, userId, onSend, onBack }: {
 
 export default function TavernScreen() {
   const router = useRouter();
+  const { userProfile } = useUserStore();
 
   // ── State (preserved) ─────────────────────────────────────
   const [rooms, setRooms] = useState<Room[]>([]);
@@ -192,7 +200,7 @@ export default function TavernScreen() {
 
   useEffect(() => {
     initScreen();
-    return () => { 
+    return () => {
       if (channelRef.current) {
         supabase.removeChannel(channelRef.current).then(() => {
           channelRef.current = null;
@@ -224,10 +232,11 @@ export default function TavernScreen() {
       name: newRoomName.trim(),
       description: newRoomDesc.trim(),
       type: 'campus',
+      college: userProfile?.campus_id || 'Global',
       online_count: 1,
       member_count: 1,
     };
-    
+
     // We explicitly name columns here to be safe and catch errors early
     const { data, error } = await supabase
       .from('chat_rooms')
@@ -262,11 +271,11 @@ export default function TavernScreen() {
     // Realtime (preserved)
     channelRef.current = supabase
       .channel(`room:${room.id}`)
-      .on('postgres_changes', { 
-        event: 'INSERT', 
-        schema: 'public', 
-        table: 'messages', 
-        filter: `room_id=eq.${room.id}` 
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'messages',
+        filter: `room_id=eq.${room.id}`
       },
         payload => setMessages(prev => [...prev, payload.new as Message])
       ).subscribe();
@@ -301,7 +310,14 @@ export default function TavernScreen() {
     );
   }
 
-  const filteredRooms = rooms.filter(r => activeTab === 'campus' ? (!r.type || r.type === 'campus' || r.type === 'project') : r.type === 'global');
+  const filteredRooms = rooms.filter(r => {
+    if (activeTab === 'campus') {
+      return r.type === 'campus' && r.college === userProfile?.campus_id;
+    }
+    return r.type === 'global';
+  });
+
+  const isJoinedToCampus = userProfile?.is_joined_to_campus;
 
   return (
     <SafeAreaView style={s.container}>
@@ -321,22 +337,41 @@ export default function TavernScreen() {
           </TouchableOpacity>
         ))}
       </View>
-      <FlatList
-        data={filteredRooms}
-        keyExtractor={item => item.id}
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: 100 }}
-        ListEmptyComponent={
-          <View style={s.emptyList}>
-            <Text style={s.emptyIcon}>{activeTab === 'campus' ? '🎓' : '🌐'}</Text>
-            <Text style={s.emptyTitle}>{activeTab === 'campus' ? 'No campus chats yet' : 'No global servers yet'}</Text>
-            <Text style={s.emptySub}>{activeTab === 'campus' ? 'Join your college community or create one!' : 'Global servers coming soon'}</Text>
-          </View>
-        }
-        renderItem={({ item }) => <RoomCard room={item} isActive={false} onPress={() => openRoom(item)} />}
-      />
 
-      {activeTab === 'campus' && !selectedRoom && (
+      {activeTab === 'campus' && !isJoinedToCampus ? (
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+          <View style={{ backgroundColor: Colors.bg.secondary, padding: 30, borderRadius: 16, alignItems: 'center', borderWidth: 1, borderColor: Colors.border.default, width: '100%' }}>
+            <Text style={{ fontSize: 48, marginBottom: 16 }}>🎓</Text>
+            <Text style={{ color: Colors.text.primary, fontSize: 18, fontWeight: '700', marginBottom: 8 }}>Campus Hub Locked</Text>
+            <Text style={{ color: Colors.text.secondary, fontSize: 14, textAlign: 'center', marginBottom: 24, lineHeight: 20 }}>
+              You must select and officially join a campus community to access chat groups and projects.
+            </Text>
+            <TouchableOpacity 
+              style={{ backgroundColor: Colors.accent.primary, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 8 }}
+              onPress={() => router.push('/(auth)/CampusOnboarding')}
+            >
+              <Text style={{ color: '#fff', fontSize: 16, fontWeight: '700' }}>Join Community</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      ) : (
+        <FlatList
+          data={filteredRooms}
+          keyExtractor={item => item.id}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingBottom: 100 }}
+          ListEmptyComponent={
+            <View style={s.emptyList}>
+              <Text style={s.emptyIcon}>{activeTab === 'campus' ? '🎓' : '🌐'}</Text>
+              <Text style={s.emptyTitle}>{activeTab === 'campus' ? 'No campus chats yet' : 'No global servers yet'}</Text>
+              <Text style={s.emptySub}>{activeTab === 'campus' ? 'Join your college community or create one!' : 'Global servers coming soon'}</Text>
+            </View>
+          }
+          renderItem={({ item }) => <RoomCard room={item} isActive={false} onPress={() => openRoom(item)} />}
+        />
+      )}
+
+      {activeTab === 'campus' && isJoinedToCampus && !selectedRoom && (
         <TouchableOpacity style={s.fab} onPress={() => setIsCreating(true)} activeOpacity={0.8}>
           <Text style={s.fabIcon}>+</Text>
         </TouchableOpacity>
@@ -347,7 +382,7 @@ export default function TavernScreen() {
         <KeyboardAvoidingView style={s.modalOverlay} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
           <View style={s.modalContent}>
             <Text style={s.modalTitle}>Create Community</Text>
-            
+
             <TextInput
               style={s.modalInput}
               placeholder="Community Name (e.g. CS 101)"
@@ -356,7 +391,7 @@ export default function TavernScreen() {
               onChangeText={setNewRoomName}
               autoFocus
             />
-            
+
             <TextInput
               style={[s.modalInput, { height: 80 }]}
               placeholder="Description (optional)"
@@ -405,7 +440,9 @@ const s = StyleSheet.create({
   roomName: { color: Colors.text.primary, fontSize: Typography.sizes.base, fontWeight: '500', flex: 1 },
   onlinePill: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(6,78,59,0.3)', borderWidth: 0.5, borderColor: 'rgba(6,95,70,0.5)', borderRadius: Radius.full, paddingHorizontal: 7, paddingVertical: 2 },
   onlinePillText: { color: '#6EE7B7', fontSize: Typography.sizes.xs, fontWeight: '500' },
-  roomDesc: { color: Colors.text.tertiary, fontSize: Typography.sizes.xs, marginBottom: 2 },
+  roomDesc: { color: Colors.text.tertiary, fontSize: Typography.sizes.xs, flex: 1 },
+  campusBadge: { backgroundColor: 'rgba(59,130,246,0.1)', borderWidth: 0.5, borderColor: 'rgba(59,130,246,0.3)', borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2 },
+  campusBadgeText: { color: Colors.accent.primary, fontSize: 8, fontWeight: '700' },
   roomLastMsg: { color: Colors.text.tertiary, fontSize: Typography.sizes.sm },
   unreadBadge: { minWidth: 20, height: 20, borderRadius: 10, backgroundColor: Colors.accent.primary, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 5 },
   unreadText: { color: '#fff', fontSize: Typography.sizes.xs, fontWeight: '600' },

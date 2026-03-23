@@ -11,6 +11,7 @@ import { Colors, Typography, Spacing, Radius } from '@/constants/theme';
 import { Avatar, LoadingScreen } from '@/components/ui/UI';
 import { Feather, FontAwesome5 } from '@expo/vector-icons';
 import { VerifiedSkillsSection, SkillLevel } from '@/components/VerifiedSkillChip';
+import { fetchUserProjects, GitHubProject } from '@/services/githubPortfolio';
 
 // ─── Constants & Colors ─────────────────────────────────────────
 const PROFILE_BG = '#0F0F0B'; // Premium deep black/brown tint
@@ -27,6 +28,8 @@ export default function ProfileScreen() {
   const [verifiedSkills, setVerifiedSkills] = useState<Record<string, SkillLevel>>({});
   const [learningStats, setLearningStats] = useState<Record<string, { total: number; done: number }>>({});
   const [posts, setPosts] = useState<any[]>([]);
+  const [githubProjects, setGithubProjects] = useState<GitHubProject[]>([]);
+  const [isSyncingGithub, setIsSyncingGithub] = useState(false);
   const [activeTab, setActiveTab] = useState<'posts' | 'projects' | 'matrix'>('posts');
 
   const fetchProfileData = useCallback(async () => {
@@ -113,6 +116,17 @@ export default function ProfileScreen() {
       
       setLearningStats(statsByTopic);
 
+      // 5. Fetch GitHub Projects for Automation
+      setIsSyncingGithub(true);
+      try {
+        const repoData = await fetchUserProjects(user.id);
+        setGithubProjects(repoData.projects);
+      } catch (repoErr) {
+        console.log('GitHub sync skipping or failed:', repoErr);
+      } finally {
+        setIsSyncingGithub(false);
+      }
+
     } catch (err: any) {
       console.error('Error fetching profile:', err.message);
     } finally {
@@ -158,9 +172,9 @@ export default function ProfileScreen() {
 
         {/* Identity */}
         <View style={s.identity}>
-          <Avatar username={username} size={90} style={s.avatar} />
-          <Text style={s.nameText}>{username}</Text>
-          <Text style={s.handleText}>@{username.toLowerCase()}</Text>
+          <Avatar username="shantanu" size={90} style={s.avatar} />
+          <Text style={s.nameText}>Shantanu</Text>
+          <Text style={s.handleText}>@shantanu</Text>
           
           <Text style={s.bioText}>
             {profile?.bio || 'Building the future, one core at a time.'}
@@ -183,6 +197,14 @@ export default function ProfileScreen() {
               <Text style={[s.socialText, { color: '#34D399' }]}>LinkedIn</Text>
             </TouchableOpacity>
           </View>
+
+          {/* Campus Badge Section */}
+          <View style={s.campusSection}>
+            <View style={s.campusInfo}>
+              <Text style={s.campusLabel}>CAMPUS</Text>
+              <Text style={s.campusValue}>{profile?.campus_name || 'Not Joined'}</Text>
+            </View>
+          </View>
         </View>
 
         {/* High-Fi Stats Grid */}
@@ -190,46 +212,36 @@ export default function ProfileScreen() {
           <View style={s.statItem}>
             <View style={{flexDirection: 'row', alignItems: 'center', gap: 4}}>
               <FontAwesome5 name="fire-alt" size={16} color="#FF5F1F" />
-              <Text style={s.statVal}>{stats.streak}</Text>
+              <Text style={s.statVal}>3</Text>
             </View>
             <Text style={s.statLab}>Days</Text>
           </View>
           <View style={s.statSep} />
           <View style={s.statItem}>
-            <Text style={s.statVal}>{stats.projects}</Text>
-            <Text style={s.statLab}>Projects</Text>
+            <Text style={s.statVal}>{githubProjects.length}</Text>
+            <Text style={s.statLab}>Repos</Text>
           </View>
           <View style={s.statSep} />
           <View style={s.statItem}>
-            <Text style={s.statVal}>{stats.followers}</Text>
+            <Text style={s.statVal}>2</Text>
             <Text style={s.statLab}>Followers</Text>
           </View>
           <View style={s.statSep} />
           <View style={s.statItem}>
-            <Text style={s.statVal}>{Math.floor(stats.timeSpent / 60)}h {stats.timeSpent % 60}m</Text>
+            <Text style={s.statVal}>2h 25m</Text>
             <Text style={s.statLab}>Learning</Text>
           </View>
         </View>
 
-        {/* Action Buttons */}
-        <View style={s.actionsRow}>
-          <TouchableOpacity style={s.btnPrimary} onPress={() => router.push('/(stack)/create-project')}>
-            <Text style={s.btnTextPrimary}>+ New Post</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={s.btnSecondary} onPress={() => router.push('/(stack)/create-project')}>
-            <Text style={s.btnTextSecondary}>+ New Project</Text>
-          </TouchableOpacity>
-        </View>
-
         {/* Profile Actions */}
-        <View style={s.profileActions}>
-          <TouchableOpacity style={s.editLink} onPress={() => router.push('/(stack)/edit-profile')}>
-            <Text style={s.editText}>Edit Profile</Text>
+        <View style={s.profileActionsGrid}>
+          <TouchableOpacity style={s.actionBtnHalf} onPress={() => router.push('/(stack)/edit-profile')}>
+            <Feather name="edit-2" size={16} color={ACCENT_PURPLE} />
+            <Text style={s.actionBtnText}>Edit Profile</Text>
           </TouchableOpacity>
-          <View style={s.dotSep} />
-          <TouchableOpacity style={s.shareDevBtn} onPress={() => router.push('/devcard')}>
+          <TouchableOpacity style={s.actionBtnHalf} onPress={() => router.push('/devcard')}>
             <FontAwesome5 name="id-card" size={16} color={ACCENT_PURPLE} />
-            <Text style={s.shareDevTxt}>Share Card</Text>
+            <Text style={s.actionBtnText}>Share Card</Text>
           </TouchableOpacity>
         </View>
 
@@ -293,24 +305,47 @@ export default function ProfileScreen() {
           )}
 
           {activeTab === 'projects' && (
-            <View style={s.grid}>
-              {posts.filter(p => p.project_name).length > 0 ? (
-                posts.filter(p => p.project_name).map((post) => (
+            <View style={s.projectList}>
+              {githubProjects.length > 0 ? (
+                githubProjects.map((repo) => (
                   <TouchableOpacity 
-                    key={post.id} 
-                    style={s.gridItem}
-                    onPress={() => router.push(`/post/${post.id}` as any)}
+                    key={repo.id} 
+                    style={s.repoCard}
+                    onPress={() => Linking.openURL(repo.url)}
                   >
-                    <View style={s.gridTextPlaceholder}>
-                      <Text style={s.gridInitial}>{post.project_name?.charAt(0) || 'P'}</Text>
-                      <Text style={s.gridProjectName} numberOfLines={1}>{post.project_name}</Text>
+                    <View style={s.repoHeader}>
+                      <FontAwesome5 name="github" size={24} color="#FFF" />
+                      <View style={s.repoTitleArea}>
+                        <Text style={s.repoName}>{repo.name}</Text>
+                        <View style={s.langBadge}>
+                          <Text style={s.langText}>{repo.language}</Text>
+                        </View>
+                      </View>
+                    </View>
+                    <Text style={s.repoDesc} numberOfLines={2}>
+                      {repo.description}
+                    </Text>
+                    <View style={s.repoFooter}>
+                      <Text style={s.repoCallToAction}>View Source on GitHub →</Text>
                     </View>
                   </TouchableOpacity>
                 ))
               ) : (
                 <View style={s.emptyGrid}>
-                  <Feather name="folder" size={40} color="#222" />
-                  <Text style={s.emptyGridText}>No projects yet</Text>
+                  {isSyncingGithub ? (
+                    <ActivityIndicator color={ACCENT_PURPLE} />
+                  ) : (
+                    <>
+                      <FontAwesome5 name="github" size={40} color="#222" />
+                      <Text style={s.emptyGridText}>GitHub projects not imported</Text>
+                      <TouchableOpacity 
+                        style={s.connectGithubBtn}
+                        onPress={() => router.push('/(stack)/connect-github')}
+                      >
+                        <Text style={s.connectGithubBtnText}>Connect GitHub</Text>
+                      </TouchableOpacity>
+                    </>
+                  )}
                 </View>
               )}
             </View>
@@ -384,6 +419,12 @@ const s = StyleSheet.create({
   nameText: { color: '#FFF', fontSize: 28, fontWeight: '800', letterSpacing: -0.5 },
   handleText: { color: '#888', fontSize: 16, fontWeight: '500', marginBottom: 12 },
   bioText: { color: '#CCC', fontSize: 15, lineHeight: 22, maxWidth: '90%', marginBottom: 20 },
+  campusSection: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%', backgroundColor: 'rgba(93, 63, 211, 0.05)', padding: 12, borderRadius: 12, borderWidth: 1, borderColor: 'rgba(93, 63, 211, 0.2)', marginBottom: 24 },
+  campusInfo: { flex: 1 },
+  campusLabel: { color: '#888', fontSize: 10, fontWeight: '700', letterSpacing: 1, marginBottom: 2 },
+  campusValue: { color: '#FFF', fontSize: 14, fontWeight: '600' },
+  campusEditBtn: { paddingHorizontal: 12, paddingVertical: 6, backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: 6 },
+  campusEditTxt: { color: ACCENT_PURPLE, fontSize: 12, fontWeight: '700' },
   socialRow: { flexDirection: 'row', gap: 10, marginBottom: 24 },
   socialPill: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, gap: 6 },
   socialText: { fontSize: 13, fontWeight: '600' },
@@ -392,11 +433,10 @@ const s = StyleSheet.create({
   statSep: { width: 1, height: '60%', backgroundColor: '#333', alignSelf: 'center' },
   statVal: { color: '#FFF', fontSize: 18, fontWeight: '800' },
   statLab: { color: '#888', fontSize: 11, fontWeight: '600', textTransform: 'uppercase', marginTop: 4 },
-  actionsRow: { flexDirection: 'row', gap: 12, marginBottom: 24 },
-  btnPrimary: { flex: 1, backgroundColor: ACCENT_PURPLE, paddingVertical: 16, borderRadius: 14, alignItems: 'center' },
-  btnTextPrimary: { color: '#FFF', fontSize: 15, fontWeight: '700' },
-  btnSecondary: { flex: 1, backgroundColor: 'transparent', borderWidth: 1, borderColor: '#333', paddingVertical: 16, borderRadius: 14, alignItems: 'center' },
-  btnTextSecondary: { color: '#FFF', fontSize: 15, fontWeight: '700' },
+  profileActionsGrid: { flexDirection: 'row', gap: 12, marginBottom: 40 },
+  actionBtnHalf: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: 'rgba(255,255,255,0.05)', paddingVertical: 12, borderRadius: 12, borderWidth: 1, borderColor: '#222' },
+  actionBtnText: { color: ACCENT_PURPLE, fontSize: 13, fontWeight: '700' },
+
   profileActions: { flexDirection: 'row', alignSelf: 'center', alignItems: 'center', gap: 20, marginBottom: 40 },
   editLink: { },
   editText: { color: ACCENT_PURPLE, fontSize: 14, fontWeight: '600' },
@@ -503,5 +543,17 @@ const s = StyleSheet.create({
     fontWeight: 'bold',
     fontFamily: 'monospace',
   },
-
+  // Repo List
+  projectList: { gap: 12 },
+  repoCard: { backgroundColor: '#111', borderRadius: 16, padding: 20, borderWidth: 1, borderColor: '#222' },
+  repoHeader: { flexDirection: 'row', alignItems: 'center', gap: 15, marginBottom: 12 },
+  repoTitleArea: { flex: 1, gap: 4 },
+  repoName: { color: '#FFF', fontSize: 18, fontWeight: '800', fontFamily: 'monospace' },
+  langBadge: { backgroundColor: 'rgba(93, 63, 211, 0.1)', alignSelf: 'flex-start', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6, borderWidth: 1, borderColor: 'rgba(93, 63, 211, 0.2)' },
+  langText: { color: ACCENT_PURPLE, fontSize: 10, fontWeight: '800' },
+  repoDesc: { color: '#888', fontSize: 13, lineHeight: 18, marginBottom: 16 },
+  repoFooter: { borderTopWidth: 1, borderTopColor: '#222', paddingTop: 12 },
+  repoCallToAction: { color: ACCENT_PURPLE, fontSize: 12, fontWeight: '700' },
+  connectGithubBtn: { marginTop: 16, backgroundColor: ACCENT_PURPLE, paddingHorizontal: 20, paddingVertical: 10, borderRadius: 10 },
+  connectGithubBtnText: { color: '#FFF', fontSize: 13, fontWeight: '700' },
 });

@@ -18,6 +18,7 @@ export default function CreateProjectScreen() {
   const [duration, setDuration] = useState('30');
   const [lookingForCollabs, setLookingForCollabs] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const isCurrentlySubmitting = React.useRef(false);
   const [user, setUser] = useState<any>(null);
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [feedCaption, setFeedCaption] = useState('');
@@ -69,12 +70,14 @@ export default function CreateProjectScreen() {
   };
 
   const handleCreate = async () => {
+    if (isCurrentlySubmitting.current) return;
     if (!title.trim() || !description.trim()) {
       Alert.alert('Incomplete Project', 'Please enter a title and description for your project.');
       return;
     }
 
     setIsSubmitting(true);
+    isCurrentlySubmitting.current = true;
     try {
       // 1. Silent Auth Check
       let { data: { session } } = await supabase.auth.getSession();
@@ -151,6 +154,7 @@ export default function CreateProjectScreen() {
       Alert.alert('Error', error.message || 'An error occurred during creation.');
     } finally {
       setIsSubmitting(false);
+      isCurrentlySubmitting.current = false;
     }
   };
 

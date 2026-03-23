@@ -17,6 +17,7 @@ export default function AddLogScreen() {
   const [caption, setCaption] = useState('');
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const isCurrentlySubmitting = React.useRef(false);
   const [user, setUser] = useState<any>(null);
   const [linkedRepo, setLinkedRepo] = useState<{ name: string, url: string } | null>(
     repoName ? { name: repoName, url: repoUrl || '' } : null
@@ -62,6 +63,7 @@ export default function AddLogScreen() {
   };
 
   const handleSubmit = async () => {
+    if (isCurrentlySubmitting.current) return;
     if (!caption.trim()) {
       Alert.alert('Quest Incomplete', 'Please describe what you built today!');
       return;
@@ -73,6 +75,7 @@ export default function AddLogScreen() {
     }
 
     setIsSubmitting(true);
+    isCurrentlySubmitting.current = true;
 
     try {
       let finalUserId = user?.id;
@@ -134,6 +137,7 @@ export default function AddLogScreen() {
       Alert.alert('Post Failed', error.message || 'An error occurred while saving your log.');
     } finally {
       setIsSubmitting(false);
+      isCurrentlySubmitting.current = false;
     }
   };
 

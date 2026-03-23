@@ -37,6 +37,7 @@ export default function NewProjectScreen() {
   const [skills, setSkills] = useState('');
   const [caption, setCaption] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const isCurrentlySubmitting = React.useRef(false);
 
   useEffect(() => {
     if (userProfile?.github_url) {
@@ -76,6 +77,7 @@ export default function NewProjectScreen() {
   };
 
   const handleLaunch = async () => {
+    if (isCurrentlySubmitting.current) return;
     if (!title.trim() || !description.trim()) {
       Alert.alert('INVALID_INPUT', 'Project Name and Description are mandatory.');
       return;
@@ -84,6 +86,7 @@ export default function NewProjectScreen() {
     if (!userProfile?.id) return;
 
     setIsSubmitting(true);
+    isCurrentlySubmitting.current = true;
     try {
       let githubLanguages = {};
       let autoDetectedSkills: string[] = [];
@@ -135,6 +138,7 @@ export default function NewProjectScreen() {
       Alert.alert('DEPLOYMENT_FAILED', e.message || 'Fatal error during project launch.');
     } finally {
       setIsSubmitting(false);
+      isCurrentlySubmitting.current = false;
     }
   };
 
