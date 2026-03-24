@@ -1,5 +1,5 @@
 const GITHUB_API_URL = 'https://api.github.com';
-const BACKEND_URL = 'http://localhost:5000'; // Update this for production
+const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL || 'http://localhost:5000'; // Fallback for development
 
 export interface GithubRepo {
   id: number;

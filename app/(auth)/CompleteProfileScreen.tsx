@@ -76,7 +76,7 @@ export default function CompleteProfileScreen() {
         throw new Error('Username already taken. Try another.');
       }
 
-      const { error } = await supabase.from('profiles').upsert({
+      const profileData = {
         id: user.id,
         username: cleanUsername,
         bio: sanitizeBio(bio),
@@ -86,9 +86,24 @@ export default function CompleteProfileScreen() {
         linkedin_url: sanitizeUrl(linkedinUrl) ?? '',
         onboarding_complete: true,
         updated_at: new Date().toISOString(),
-      });
+      };
 
-      if (error) throw error;
+      // Upsert into both tables to satisfy foreign key constraints in schema
+      const { error: pError } = await supabase.from('profiles').upsert(profileData);
+      if (pError) throw pError;
+
+      const { error: uError } = await supabase.from('users').upsert({
+        id: user.id,
+        username: cleanUsername,
+        bio: sanitizeBio(bio),
+        avatar_url: `https://ui-avatars.com/api/?name=${cleanUsername}&background=0D1117&color=fff`,
+        github_url: sanitizeUrl(githubUrl) ?? '',
+        linkedin_url: sanitizeUrl(linkedinUrl) ?? '',
+        skills: selectedStack,
+        learning_focus: selectedStack[0] || 'Web Development',
+        skill_level: 'beginner',
+      });
+      if (uError) throw uError;
       
       // ✅ (b) Save status to AsyncStorage
       await AsyncStorage.setItem('onboarding_complete', 'true');
@@ -161,7 +176,7 @@ export default function CompleteProfileScreen() {
                 label="Username"
                 value={username}
                 onChangeText={text => { setUsername(sanitizeUsername(text)); setError(''); }}
-                placeholder="tripathi_dev"
+                placeholder="username"
                 autoCapitalize="none"
               />
               <Text style={s.inputHint}>Letters, numbers and underscores only</Text>

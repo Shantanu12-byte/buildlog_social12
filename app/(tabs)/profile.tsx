@@ -2,16 +2,19 @@ import React, { useEffect, useState, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   SafeAreaView, StatusBar, ActivityIndicator, Alert, Linking,
-  RefreshControl, Image,
+  RefreshControl, Image, Modal, FlatList,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import { supabase } from '@/lib/supabase';
-import { Colors, Typography, Spacing, Radius } from '@/constants/theme';
+import { Colors, Typography, Spacing, Radius, Shadows } from '@/constants/theme';
 import { Avatar, LoadingScreen } from '@/components/ui/UI';
 import { Feather, FontAwesome5 } from '@expo/vector-icons';
 import { VerifiedSkillsSection, SkillLevel } from '@/components/VerifiedSkillChip';
-import { fetchUserProjects, GitHubProject } from '@/services/githubPortfolio';
+import { GitHubProject } from '@/services/githubPortfolio';
+import { ProfilePortfolioController } from '@/services/ProfilePortfolioController';
+import LogEntryFeedItem from '@/components/LogEntryFeedItem';
+import { fetchUserProjects } from '@/services/ProfilePersistenceManager';
 
 // ─── Constants & Colors ─────────────────────────────────────────
 const PROFILE_BG = '#0F0F0B'; // Premium deep black/brown tint
@@ -30,67 +33,84 @@ export default function ProfileScreen() {
   const [posts, setPosts] = useState<any[]>([]);
   const [githubProjects, setGithubProjects] = useState<GitHubProject[]>([]);
   const [isSyncingGithub, setIsSyncingGithub] = useState(false);
+  const [githubStatus, setGithubStatus] = useState({ isConnected: false, hasSufficientScopes: false });
   const [activeTab, setActiveTab] = useState<'posts' | 'projects' | 'matrix'>('posts');
+  const [followersModalVisible, setFollowersModalVisible] = useState(false);
+  const [followersList, setFollowersList] = useState<any[]>([]);
+  const [followersLoading, setFollowersLoading] = useState(false);
 
   const fetchProfileData = useCallback(async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const { data: { session } } = await supabase.auth.getSession();
+      const user = session?.user;
       if (!user) {
         router.replace('/(auth)/login');
         return;
       }
-
-      // 1. Fetch Profile
-      const { data: prof, error: pErr } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', user.id)
-        .single();
       
-      if (!pErr) {
-        setProfile(prof);
-        if (prof.verified_skills) {
-          setVerifiedSkills(prof.verified_skills);
-        }
+      // Initial fallback to metadata to prevent 'builder' flicker
+      if (!profile && user.user_metadata?.username) {
+        setProfile({ username: user.user_metadata.username });
       }
 
-      // 2. Fetch Stats
-      const [projRes, buildsRes, followingRes, followersRes, postsRes] = await Promise.all([
-        supabase.from('posts').select('id', { count: 'exact', head: true }).eq('user_id', user.id),
-        supabase.from('quest_logs').select('id', { count: 'exact', head: true }).eq('user_id', user.id),
-        supabase.from('followers').select('id', { count: 'exact', head: true }).eq('follower_id', user.id),
-        supabase.from('followers').select('id', { count: 'exact', head: true }).eq('following_id', user.id),
-        supabase.from('posts').select('*').eq('user_id', user.id).order('created_at', { ascending: false }).limit(30),
-      ]);
-
-      if (postsRes.data) {
-        setPosts(postsRes.data);
+      // Single Consolidated Query: Profile + Stats + Recent Posts
+      // This replaces 7 individual REST calls with 1.
+      const { data, error } = await supabase
+        .from('profiles')
+        .select(`
+          *,
+          posts_count:posts(count),
+          builds_count:quest_logs(count),
+          following_count:followers!follower_id(count),
+          followers_count:followers!following_id(count),
+          recent_posts:posts(*)
+        `)
+        .eq('id', user.id)
+        .order('created_at', { foreignTable: 'posts', ascending: false })
+        .limit(30, { foreignTable: 'posts' })
+        .single();
+      
+      if (error) throw error;
+      
+      if (data) {
+        setProfile(data);
+        if (data.verified_skills) {
+          setVerifiedSkills(data.verified_skills);
+        }
+        setPosts(data.recent_posts || []);
+        
+        // Map stats from the nested count arrays
+        setStats(prev => ({
+          ...prev,
+          projects: data.posts_count?.[0]?.count || 0,
+          builds: data.builds_count?.[0]?.count || 0,
+          followers: data.followers_count?.[0]?.count || 0,
+          following: data.following_count?.[0]?.count || 0, // Using internal state mapping
+          streak: prev.streak, // Preserve local streak
+          timeSpent: prev.timeSpent
+        }));
       }
 
       // 4. Local Persistence (Flame Streak & Time)
       let streakStr = await AsyncStorage.getItem('daily_streak');
       let timeStr = await AsyncStorage.getItem('total_time_spent');
       
-      // Mock initialization if empty, just like Android defaults
       if (!streakStr) {
           await AsyncStorage.setItem('daily_streak', '3');
           streakStr = '3';
       }
       if (!timeStr) {
-          await AsyncStorage.setItem('total_time_spent', '145'); // 145 mins
+          await AsyncStorage.setItem('total_time_spent', '145');
           timeStr = '145';
       }
 
-      setStats({
-        projects: projRes.count || 0,
-        builds: buildsRes.count || 0,
-        followers: followersRes.count || 0,
-        collabs: 3, 
-        streak: parseInt(streakStr, 10),
-        timeSpent: parseInt(timeStr, 10)
-      });
+      setStats(prev => ({
+        ...prev,
+        streak: parseInt(streakStr || '3', 10),
+        timeSpent: parseInt(timeStr || '145', 10)
+      }));
 
-      // 3. Fetch Learning Stats (Local AsyncStorage)
+      // 6. Fetch Learning Stats (Local AsyncStorage)
       const allKeys = await AsyncStorage.getAllKeys();
       const progressKeys = allKeys.filter(k => k.startsWith('progress_'));
       const progressValues = await AsyncStorage.multiGet(progressKeys);
@@ -100,29 +120,30 @@ export default function ProfileScreen() {
       
       TOPICS.forEach(topic => {
         let sum = 0;
-        let count = 0;
         progressValues.forEach(([key, val]) => {
           if (key.startsWith(`progress_${topic}_`)) {
             sum += val ? parseInt(val, 10) : 0;
-            count++;
           }
         });
-        // We always show the average across 3 levels (even if not started)
         const avg = Math.round(sum / 3);
         if (avg > 0) {
-          statsByTopic[topic] = { total: 100, done: avg }; // Using 100 as total for percentage display
+          statsByTopic[topic] = { total: 100, done: avg };
         }
       });
-      
       setLearningStats(statsByTopic);
 
-      // 5. Fetch GitHub Projects for Automation
+      // 5. Check GitHub Status
       setIsSyncingGithub(true);
       try {
-        const repoData = await fetchUserProjects(user.id);
-        setGithubProjects(repoData.projects);
+        const status = await ProfilePortfolioController.checkGitHubStatus(user.id);
+        setGithubStatus(status);
+        
+        if (status.isConnected && status.hasSufficientScopes) {
+          const repoData = await ProfilePortfolioController.loadUserProjects(user.id);
+          setGithubProjects(repoData.projects || []);
+        }
       } catch (repoErr) {
-        console.log('GitHub sync skipping or failed:', repoErr);
+        console.log('GitHub sync skipping:', repoErr);
       } finally {
         setIsSyncingGithub(false);
       }
@@ -144,11 +165,58 @@ export default function ProfileScreen() {
     fetchProfileData();
   };
 
+  const handleDisconnectGithub = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
 
+      setLoading(true);
+      await ProfilePortfolioController.disconnectGitHub(user.id);
+      Alert.alert('Disconnected', 'GitHub account has been unlinked.');
+      fetchProfileData();
+    } catch (err) {
+      console.error('Disconnect error:', err);
+      Alert.alert('Error', 'Failed to disconnect GitHub.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+
+
+  const handleViewFollowers = async () => {
+    setFollowersModalVisible(true);
+    if (followersList.length > 0) return; // already loaded
+    setFollowersLoading(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const { data: follows } = await supabase
+        .from('followers')
+        .select('follower_id')
+        .eq('following_id', user.id);
+      if (follows && follows.length > 0) {
+        const ids = follows.map((f: any) => f.follower_id);
+        const { data: profiles } = await supabase
+          .from('profiles')
+          .select('id, username, avatar_url, bio')
+          .in('id', ids);
+        setFollowersList(profiles || []);
+      } else {
+        setFollowersList([]);
+      }
+    } catch (e) {
+      console.error('fetchFollowers error:', e);
+    } finally {
+      setFollowersLoading(false);
+    }
+  };
 
   if (loading) return <LoadingScreen />;
 
-  const username = profile?.username || 'builder';
+  const userMetadata = profile?.user_metadata || (profile as any)?._user_metadata;
+  const displayName = profile?.full_name || userMetadata?.full_name || profile?.username || userMetadata?.username || 'Builder';
+  const username = profile?.username || userMetadata?.username || 'builder';
 
   return (
     <SafeAreaView style={s.container}>
@@ -172,9 +240,14 @@ export default function ProfileScreen() {
 
         {/* Identity */}
         <View style={s.identity}>
-          <Avatar username="shantanu" size={90} style={s.avatar} />
-          <Text style={s.nameText}>Shantanu</Text>
-          <Text style={s.handleText}>@shantanu</Text>
+          <Avatar 
+            username={profile?.username || 'builder'} 
+            uri={profile?.avatar_url}
+            size={90} 
+            style={s.avatar} 
+          />
+          <Text style={s.nameText}>{displayName}</Text>
+          <Text style={s.handleText}>@{username}</Text>
           
           <Text style={s.bioText}>
             {profile?.bio || 'Building the future, one core at a time.'}
@@ -222,26 +295,25 @@ export default function ProfileScreen() {
             <Text style={s.statLab}>Repos</Text>
           </View>
           <View style={s.statSep} />
-          <View style={s.statItem}>
-            <Text style={s.statVal}>2</Text>
+          <TouchableOpacity style={s.statItem} onPress={handleViewFollowers} activeOpacity={0.7}>
+            <Text style={s.statVal}>{stats.followers}</Text>
             <Text style={s.statLab}>Followers</Text>
-          </View>
-          <View style={s.statSep} />
-          <View style={s.statItem}>
-            <Text style={s.statVal}>2h 25m</Text>
-            <Text style={s.statLab}>Learning</Text>
-          </View>
+          </TouchableOpacity>
         </View>
 
         {/* Profile Actions */}
         <View style={s.profileActionsGrid}>
+          <TouchableOpacity style={s.actionBtnHighlight} onPress={() => router.push('/(stack)/new-post')}>
+            <Feather name="plus-circle" size={16} color="#FFF" />
+            <Text style={s.actionBtnTextWhite}>New Post</Text>
+          </TouchableOpacity>
           <TouchableOpacity style={s.actionBtnHalf} onPress={() => router.push('/(stack)/edit-profile')}>
             <Feather name="edit-2" size={16} color={ACCENT_PURPLE} />
-            <Text style={s.actionBtnText}>Edit Profile</Text>
+            <Text style={s.actionBtnText}>Edit</Text>
           </TouchableOpacity>
           <TouchableOpacity style={s.actionBtnHalf} onPress={() => router.push('/devcard')}>
             <FontAwesome5 name="id-card" size={16} color={ACCENT_PURPLE} />
-            <Text style={s.actionBtnText}>Share Card</Text>
+            <Text style={s.actionBtnText}>Card</Text>
           </TouchableOpacity>
         </View>
 
@@ -273,27 +345,16 @@ export default function ProfileScreen() {
         {/* Tab Content */}
         <View style={s.tabContent}>
           {activeTab === 'posts' && (
-            <View style={s.grid}>
+            <View style={s.postList}>
               {posts.length > 0 ? (
                 posts.map((post) => (
-                  <TouchableOpacity 
+                  <LogEntryFeedItem 
                     key={post.id} 
-                    style={s.gridItem}
-                    onPress={() => router.push(`/post/${post.id}` as any)}
-                  >
-                    {post.image_url ? (
-                      <Image 
-                        source={{ uri: post.image_url }} 
-                        style={s.gridImage} 
-                        resizeMode="cover"
-                      />
-                    ) : (
-                      <View style={s.gridTextPlaceholder}>
-                        <Text style={s.gridInitial}>{post.project_name?.charAt(0) || 'B'}</Text>
-                        <Text style={s.gridProjectName} numberOfLines={1}>{post.project_name || 'Build'}</Text>
-                      </View>
-                    )}
-                  </TouchableOpacity>
+                    post={post}
+                    onHypePress={() => {}} 
+                    onCommentPress={() => {}}
+                    onSharePress={() => {}}
+                  />
                 ))
               ) : (
                 <View style={s.emptyGrid}>
@@ -306,47 +367,72 @@ export default function ProfileScreen() {
 
           {activeTab === 'projects' && (
             <View style={s.projectList}>
-              {githubProjects.length > 0 ? (
-                githubProjects.map((repo) => (
-                  <TouchableOpacity 
-                    key={repo.id} 
-                    style={s.repoCard}
-                    onPress={() => Linking.openURL(repo.url)}
-                  >
-                    <View style={s.repoHeader}>
-                      <FontAwesome5 name="github" size={24} color="#FFF" />
-                      <View style={s.repoTitleArea}>
-                        <Text style={s.repoName}>{repo.name}</Text>
-                        <View style={s.langBadge}>
-                          <Text style={s.langText}>{repo.language}</Text>
-                        </View>
-                      </View>
-                    </View>
-                    <Text style={s.repoDesc} numberOfLines={2}>
-                      {repo.description}
-                    </Text>
-                    <View style={s.repoFooter}>
-                      <Text style={s.repoCallToAction}>View Source on GitHub →</Text>
-                    </View>
-                  </TouchableOpacity>
-                ))
-              ) : (
+              {githubStatus.isConnected && !githubStatus.hasSufficientScopes && (
+                <TouchableOpacity 
+                  style={s.reAuthCard} 
+                  onPress={() => router.push('/(stack)/connect-github')}
+                >
+                  <View style={s.reAuthIconHeader}>
+                    <FontAwesome5 name="github" size={30} color={ACCENT_PURPLE} />
+                    <Feather name="refresh-cw" size={20} color={ACCENT_PURPLE} />
+                  </View>
+                  <Text style={s.reAuthTitle}>Re-Authorize GitHub</Text>
+                  <Text style={s.reAuthSubtitle}>
+                    To see private projects or organization work, please refresh your credentials. Your current pass lacks the full 'repo' scope stamp.
+                  </Text>
+                  <View style={s.reAuthActionRow}>
+                    <TouchableOpacity style={s.reAuthAction} onPress={() => router.push('/(stack)/connect-github')}>
+                      <Text style={s.reAuthActionText}>Refresh Pass Now</Text>
+                      <Feather name="arrow-right" size={16} color="#FFF" />
+                    </TouchableOpacity>
+                    <TouchableOpacity style={s.disconnectMiniBtn} onPress={handleDisconnectGithub}>
+                      <Text style={s.disconnectMiniText}>Disconnect</Text>
+                    </TouchableOpacity>
+                  </View>
+                </TouchableOpacity>
+              )}
+
+              {!githubStatus.isConnected && !isSyncingGithub && (
                 <View style={s.emptyGrid}>
-                  {isSyncingGithub ? (
-                    <ActivityIndicator color={ACCENT_PURPLE} />
-                  ) : (
-                    <>
-                      <FontAwesome5 name="github" size={40} color="#222" />
-                      <Text style={s.emptyGridText}>GitHub projects not imported</Text>
-                      <TouchableOpacity 
-                        style={s.connectGithubBtn}
-                        onPress={() => router.push('/(stack)/connect-github')}
-                      >
-                        <Text style={s.connectGithubBtnText}>Connect GitHub</Text>
-                      </TouchableOpacity>
-                    </>
-                  )}
+                  <FontAwesome5 name="github" size={40} color="#222" />
+                  <Text style={s.emptyGridText}>GitHub projects not imported</Text>
+                  <TouchableOpacity 
+                    style={s.connectGithubBtn}
+                    onPress={() => router.push('/(stack)/connect-github')}
+                  >
+                    <Text style={s.connectGithubBtnText}>Connect GitHub</Text>
+                  </TouchableOpacity>
                 </View>
+              )}
+
+              {githubStatus.isConnected && githubStatus.hasSufficientScopes && githubProjects.length > 0 ? (
+                githubProjects.map((repo) => (
+                  <LogEntryFeedItem 
+                    key={repo.id}
+                    post={{
+                      username: username,
+                      repoName: repo.name,
+                      language: repo.language,
+                      title: repo.name,
+                      description: repo.description,
+                      achievements: ['Imported from GitHub', 'Verified Proof of Work'],
+                      tags: [repo.language, 'GitHub'],
+                      progress: 100
+                    }}
+                    onHypePress={() => {}}
+                    onCommentPress={() => {}}
+                    onSharePress={() => {}}
+                  />
+                ))
+              ) : githubStatus.hasSufficientScopes && !isSyncingGithub && (
+                <View style={s.emptyGrid}>
+                  <Feather name="folder" size={40} color="#222" />
+                  <Text style={s.emptyGridText}>No public projects found</Text>
+                </View>
+              )}
+
+              {isSyncingGithub && (
+                <ActivityIndicator color={ACCENT_PURPLE} style={{ marginVertical: 40 }} />
               )}
             </View>
           )}
@@ -404,6 +490,61 @@ export default function ProfileScreen() {
         </View>
 
       </ScrollView>
+
+      {/* Followers Modal */}
+      <Modal
+        visible={followersModalVisible}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setFollowersModalVisible(false)}
+      >
+        <View style={s.modalOverlay}>
+          <SafeAreaView style={s.modalSheet}>
+            <View style={s.modalHeader}>
+              <View>
+                <Text style={s.modalTitle}>FOLLOWERS</Text>
+                <Text style={s.modalSub}>OPERATIVE_NETWORK</Text>
+              </View>
+              <TouchableOpacity onPress={() => setFollowersModalVisible(false)} style={s.modalCloseBtn}>
+                <Feather name="x" size={22} color={ACCENT_PURPLE} />
+              </TouchableOpacity>
+            </View>
+            <View style={s.modalDivider} />
+            {followersLoading ? (
+              <ActivityIndicator color={ACCENT_PURPLE} style={{ marginTop: 40 }} />
+            ) : (
+              <FlatList
+                data={followersList}
+                keyExtractor={item => item.id}
+                contentContainerStyle={s.followerList}
+                renderItem={({ item }) => (
+                  <TouchableOpacity
+                    style={s.followerCard}
+                    onPress={() => {
+                      setFollowersModalVisible(false);
+                      router.push(`/(stack)/messages?targetUserId=${item.id}` as any);
+                    }}
+                    activeOpacity={0.8}
+                  >
+                    <Avatar username={item.username} uri={item.avatar_url} size={44} />
+                    <View style={s.followerInfo}>
+                      <Text style={s.followerName}>@{item.username}</Text>
+                      {item.bio ? <Text style={s.followerBio} numberOfLines={1}>{item.bio}</Text> : null}
+                    </View>
+                    <Feather name="message-circle" size={18} color={ACCENT_PURPLE} />
+                  </TouchableOpacity>
+                )}
+                ListEmptyComponent={
+                  <View style={s.emptyGrid}>
+                    <Feather name="users" size={40} color="#222" />
+                    <Text style={s.emptyGridText}>No followers yet</Text>
+                  </View>
+                }
+              />
+            )}
+          </SafeAreaView>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -433,9 +574,11 @@ const s = StyleSheet.create({
   statSep: { width: 1, height: '60%', backgroundColor: '#333', alignSelf: 'center' },
   statVal: { color: '#FFF', fontSize: 18, fontWeight: '800' },
   statLab: { color: '#888', fontSize: 11, fontWeight: '600', textTransform: 'uppercase', marginTop: 4 },
-  profileActionsGrid: { flexDirection: 'row', gap: 12, marginBottom: 40 },
-  actionBtnHalf: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: 'rgba(255,255,255,0.05)', paddingVertical: 12, borderRadius: 12, borderWidth: 1, borderColor: '#222' },
+  profileActionsGrid: { flexDirection: 'row', gap: 10, marginBottom: 40 },
+  actionBtnHalf: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: 'rgba(255,255,255,0.05)', paddingVertical: 12, borderRadius: 12, borderWidth: 1, borderColor: '#222' },
+  actionBtnHighlight: { flex: 1.2, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: ACCENT_PURPLE, paddingVertical: 12, borderRadius: 12, ...Shadows.soft },
   actionBtnText: { color: ACCENT_PURPLE, fontSize: 13, fontWeight: '700' },
+  actionBtnTextWhite: { color: '#FFF', fontSize: 13, fontWeight: '700' },
 
   profileActions: { flexDirection: 'row', alignSelf: 'center', alignItems: 'center', gap: 20, marginBottom: 40 },
   editLink: { },
@@ -556,4 +699,28 @@ const s = StyleSheet.create({
   repoCallToAction: { color: ACCENT_PURPLE, fontSize: 12, fontWeight: '700' },
   connectGithubBtn: { marginTop: 16, backgroundColor: ACCENT_PURPLE, paddingHorizontal: 20, paddingVertical: 10, borderRadius: 10 },
   connectGithubBtnText: { color: '#FFF', fontSize: 13, fontWeight: '700' },
+  // Re-Auth Card
+  reAuthCard: { backgroundColor: '#1A1A1A', borderRadius: 20, padding: 24, borderWidth: 1, borderColor: 'rgba(93, 63, 211, 0.3)', marginBottom: 20, ...Shadows.soft },
+  reAuthIconHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 },
+  reAuthTitle: { color: '#FFF', fontSize: 20, fontWeight: '800', marginBottom: 10 },
+  reAuthSubtitle: { color: '#888', fontSize: 14, lineHeight: 20, marginBottom: 20 },
+  reAuthAction: { flex: 2, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: ACCENT_PURPLE, paddingVertical: 12, borderRadius: 12 },
+  reAuthActionText: { color: '#FFF', fontSize: 14, fontWeight: '700' },
+  reAuthActionRow: { flexDirection: 'row', gap: 10, alignItems: 'center' },
+  disconnectMiniBtn: { flex: 1, paddingVertical: 12, alignItems: 'center', justifyContent: 'center', borderRadius: 12, backgroundColor: 'rgba(255,59,48,0.1)', borderWidth: 1, borderColor: 'rgba(255,59,48,0.2)' },
+  disconnectMiniText: { color: Colors.danger || '#FF3B30', fontSize: 13, fontWeight: '600' },
+  postList: { gap: Spacing.lg, marginTop: Spacing.md },
+  // Followers Modal
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.85)', justifyContent: 'flex-end' },
+  modalSheet: { flex: 0.75, backgroundColor: '#0A0A0A', borderTopLeftRadius: 24, borderTopRightRadius: 24, borderWidth: 1, borderColor: '#1A1A1A' },
+  modalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 20 },
+  modalTitle: { color: '#FFF', fontSize: 22, fontWeight: '900', letterSpacing: 2, fontFamily: 'monospace' },
+  modalSub: { color: ACCENT_PURPLE, fontSize: 9, fontFamily: 'monospace', letterSpacing: 1, marginTop: 2 },
+  modalCloseBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(93,63,211,0.1)', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(93,63,211,0.2)' },
+  modalDivider: { height: 1, backgroundColor: '#111' },
+  followerList: { padding: 16, gap: 12 },
+  followerCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#111', padding: 14, borderRadius: 14, borderWidth: 1, borderColor: '#1A1A1A', gap: 12 },
+  followerInfo: { flex: 1 },
+  followerName: { color: '#FFF', fontSize: 15, fontWeight: '700', fontFamily: 'monospace' },
+  followerBio: { color: '#555', fontSize: 12, marginTop: 3, fontFamily: 'monospace' },
 });

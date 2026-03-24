@@ -5,8 +5,6 @@ const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 async function check() {
   const { data, error } = await supabase.from('profiles').select('*').limit(1);
-  if (data && data.length > 0) {
-    console.log(Object.keys(data[0]));
-  }
+  console.log(JSON.stringify(data, null, 2));
 }
 check();

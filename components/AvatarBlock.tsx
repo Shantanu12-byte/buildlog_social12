@@ -46,7 +46,7 @@ export const AvatarBlock = ({ url, username = '?', size = 40, tier = 'Default' }
         </View>
       )}
       {/* 8-Bit Bevel Overlay */}
-      <View style={styles.bevelOverlay} pointerEvents="none" />
+      <View style={[styles.bevelOverlay, { pointerEvents: 'none' }]} />
     </View>
   );
 };

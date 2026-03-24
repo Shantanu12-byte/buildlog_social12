@@ -7,7 +7,7 @@ import {
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { Colors, Typography, Spacing, Radius } from '@/constants/theme';
-import { FeedPostCard as PostCard } from '@/components/FeedPostCard';
+import LogEntryFeedItem from '@/components/LogEntryFeedItem';
 import { Avatar, LoadingScreen } from '@/components/ui/UI';
 import { Feather } from '@expo/vector-icons';
 
@@ -44,8 +44,8 @@ export default function DiscussionScreen() {
 
     // Fetch Post
     const { data: postData } = await supabase
-      .from('posts')
-      .select('*, users:author_id(username, avatar_url)')
+      .from('trending_posts')
+      .select('*, users:user_id(username, avatar_url)')
       .eq('id', id)
       .single();
 
@@ -54,7 +54,10 @@ export default function DiscussionScreen() {
         ...postData,
         username: postData.users?.username || postData.username || 'builder',
         userAvatar: postData.users?.avatar_url,
-        cheers: postData.likes_count ?? 0,
+        title: postData.projectTitle || postData.title || 'untitled project',
+        description: postData.caption || postData.description || 'show',
+        likes: postData.likes_count ?? 0,
+        comments: postData.comments ?? 0,
       });
     }
 
@@ -94,6 +97,28 @@ export default function DiscussionScreen() {
     };
   }
 
+  const handleLike = async () => {
+    if (!post || !user) return;
+    const postId = id as string;
+
+    // Optimistic UI update
+    setPost({ 
+      ...post, 
+      likes: (post.likes || 0) + (post.isLiked ? -1 : 1), 
+      isLiked: !post.isLiked 
+    });
+
+    try {
+      if (post.isLiked) {
+        await supabase.from('likes').delete().eq('post_id', postId).eq('user_id', user.id);
+      } else {
+        await supabase.from('likes').insert({ post_id: postId, user_id: user.id });
+      }
+    } catch (err) {
+      console.error('handleLike error:', err);
+    }
+  };
+
   async function handleSend() {
     const trimmed = comment.trim();
     if (!trimmed) {
@@ -102,14 +127,19 @@ export default function DiscussionScreen() {
     }
     if (!user || !id) return;
 
+    if (!post?.project_id) {
+      Alert.alert('Error', 'Discussions are limited to project-linked logs.');
+      return;
+    }
+
     setSending(true);
     setComment('');
 
     const { error } = await supabase.from('discussions').insert({
       content: trimmed,
-      message: trimmed, // Legacy schema support
+      message: trimmed, 
       post_id: id,
-      project_id: post?.project_id, // Satisfy NOT NULL constraint
+      project_id: post.project_id,
       user_id: user.id,
     });
 
@@ -118,19 +148,7 @@ export default function DiscussionScreen() {
       Alert.alert('Error', 'Failed to send comment. Please try again.');
       setComment(trimmed);
     } else if (post) {
-      // Opt to update using the app code since RLS is disabled, 
-      // preventing the need for more SQL scripts explicitly!
-      try {
-        await supabase
-          .from('posts')
-          .update({ comments: (post.comments || 0) + 1 })
-          .eq('id', id);
-        
-        // Optimistically update local state if needed
-        setPost({ ...post, comments: (post.comments || 0) + 1 });
-      } catch (updateErr) {
-        console.error('Error updating comment count:', updateErr);
-      }
+      setPost({ ...post, comments: (post.comments || 0) + 1 });
     }
     setSending(false);
   }
@@ -140,7 +158,7 @@ export default function DiscussionScreen() {
   return (
     <SafeAreaView style={s.container}>
       <StatusBar barStyle="light-content" />
-      
+
       <View style={s.header}>
         <TouchableOpacity style={s.backBtn} onPress={() => router.back()}>
           <Feather name="arrow-left" size={24} color="#FFF" />
@@ -152,14 +170,13 @@ export default function DiscussionScreen() {
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
       >
         <FlatList
           ref={flatRef}
           data={discussions}
           keyExtractor={item => item.id}
           ListHeaderComponent={
-            post && <PostCard post={post} />
+            post && <LogEntryFeedItem post={post} onHypePress={handleLike} />
           }
           contentContainerStyle={s.list}
           renderItem={({ item }) => (

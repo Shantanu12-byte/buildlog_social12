@@ -5,23 +5,11 @@ import { authorize } from 'react-native-app-auth';
 import { Colors, Shadows } from '@/constants/theme';
 import { useUserStore } from '@/store/userStore';
 import { githubService } from '@/services/githubService';
+import { AuthConfiguration } from '@/constants/AuthConfiguration';
 import { Github } from 'lucide-react-native';
 
-const GITHUB_CLIENT_ID = process.env.EXPO_PUBLIC_GITHUB_CLIENT_ID || 'your_github_client_id';
-
-const config = {
-  issuer: 'https://github.com',
-  clientId: GITHUB_CLIENT_ID,
-  redirectUrl: Platform.select({
-    web: typeof window !== 'undefined' ? `${window.location.origin}/connect-github` : 'http://localhost:19006/connect-github',
-    default: 'com.buildlog://oauth',
-  }),
-  scopes: ['read:user', 'repo'],
-  serviceConfiguration: {
-    authorizationEndpoint: 'https://github.com/login/oauth/authorize',
-    tokenEndpoint: 'https://github.com/login/oauth/access_token',
-  },
-};
+const GITHUB_CLIENT_ID = AuthConfiguration.clientId;
+const config = AuthConfiguration;
 
 export default function ConnectGitHubScreen() {
   const [isConnecting, setIsConnecting] = useState(false);

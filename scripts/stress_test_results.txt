@@ -1,0 +1,7 @@
+
+--- STRESS TEST RESULTS ---
+Room: f0df12ac-60a7-476f-9e63-8542131f5180
+Sequential Latency (20 msgs): 2233ms (Avg: 111.65ms/msg)
+Parallel Throughput (50 msgs): 367ms (136 msg/sec)
+Read Performance (100 msgs): 145ms
+---------------------------

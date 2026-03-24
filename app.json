@@ -53,7 +53,9 @@
           }
         }
       ],
-      "react-native-app-auth"
+      "react-native-app-auth",
+      "expo-audio",
+      "expo-video"
     ],
     "experiments": {
       "typedRoutes": true,

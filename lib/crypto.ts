@@ -19,13 +19,17 @@ function safeDecode(str: string, label: string): Uint8Array {
   if (!str || typeof str !== 'string' || str.trim().length === 0) {
     throw new Error(`INVALID_KEY_FORMAT: ${label} is empty or not a string`);
   }
+  
+  // Clean the string - remove any hidden characters or whitespace that might break base64
+  const cleaned = str.trim().replace(/\s/g, '');
+  
   try {
-    return decodeBase64(str);
+    return decodeBase64(cleaned);
   } catch (e) {
     console.error(`BASE64_DECODE_FAILED [${label}]:`, {
-      length: str.length,
-      prefix: str.substring(0, 5) + '...',
-      type: typeof str
+      length: cleaned.length,
+      prefix: cleaned.substring(0, 5) + '...',
+      type: typeof cleaned
     });
     throw new Error(`INVALID_ENCODING: ${label}`);
   }

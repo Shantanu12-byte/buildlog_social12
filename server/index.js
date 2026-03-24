@@ -4,6 +4,7 @@ const http = require('http');
 const cors = require('cors');
 const githubAuthRoutes = require('./routes/githubAuth');
 const githubPortfolioRoutes = require('./routes/githubPortfolio');
+const githubDataFixRoutes = require('./routes/githubDataFix');
 const campusCommunityRoutes = require('./routes/campusCommunity');
 const { initChatService } = require('./ChatServiceController');
 
@@ -16,8 +17,8 @@ app.use(express.json());
 
 // Routes
 app.use('/api/auth/github', githubAuthRoutes);
-app.use('/api/user/github', githubAuthRoutes);
 app.use('/api/user/projects', githubPortfolioRoutes);
+app.use('/api/user/github', githubDataFixRoutes);
 app.use('/api/user/campus', campusCommunityRoutes);
 
 app.get('/health', (req, res) => {

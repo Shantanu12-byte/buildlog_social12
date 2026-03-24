@@ -151,7 +151,7 @@ export default function LoginScreen() {
                 label="Username"
                 value={username}
                 onChangeText={setUsername}
-                placeholder="tripathi_dev"
+                placeholder="username"
                 autoCapitalize="none"
               />
             )}

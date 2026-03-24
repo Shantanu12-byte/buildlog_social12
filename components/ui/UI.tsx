@@ -9,6 +9,7 @@ import {
   View, Text, TouchableOpacity, TextInput,
   StyleSheet, ActivityIndicator, ViewStyle, TextStyle,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { Colors, Typography, Spacing, Radius, getAvatarColor, getInitials } from '../../constants/theme';
 
 // ─────────────────────────────────────────────────────────────
@@ -16,20 +17,33 @@ import { Colors, Typography, Spacing, Radius, getAvatarColor, getInitials } from
 // ─────────────────────────────────────────────────────────────
 interface AvatarProps {
   username: string;
+  uri?: string | null;
   size?: number;
   style?: ViewStyle;
 }
-export function Avatar({ username, size = 36, style }: AvatarProps) {
+export function Avatar({ username, uri, size = 36, style }: AvatarProps) {
   const colors = getAvatarColor(username);
   return (
     <View style={[{
       width: size, height: size, borderRadius: size / 2,
       backgroundColor: colors.bg,
       alignItems: 'center', justifyContent: 'center',
+      overflow: 'hidden',
     }, style]}>
-      <Text style={{ color: colors.text, fontSize: size * 0.35, fontWeight: '500' }}>
-        {getInitials(username)}
-      </Text>
+      {uri ? (
+        <View style={StyleSheet.absoluteFill}>
+           <Image 
+             source={{ uri }} 
+             style={{ width: '100%', height: '100%' }} 
+             contentFit="cover"
+             transition={200}
+           />
+        </View>
+      ) : (
+        <Text style={{ color: colors.text, fontSize: size * 0.35, fontWeight: '500' }}>
+          {getInitials(username)}
+        </Text>
+      )}
     </View>
   );
 }
@@ -37,10 +51,10 @@ export function Avatar({ username, size = 36, style }: AvatarProps) {
 // ─────────────────────────────────────────────────────────────
 // STATUS PILL
 // ─────────────────────────────────────────────────────────────
-type PillType = 'building' | 'collab' | 'campus' | 'challenge' | 'done';
+type PillType = 'building' | 'collab' | 'campus' | 'challenge' | 'done' | 'tech' | 'design' | 'other';
 interface PillProps { type: PillType; label: string }
 export function StatusPill({ type, label }: PillProps) {
-  const c = Colors.pills[type];
+  const c = Colors.pills[type as keyof typeof Colors.pills] || Colors.pills.other;
   return (
     <View style={{
       backgroundColor: c.bg, borderColor: c.border,
@@ -150,16 +164,7 @@ export function Input({
         autoCapitalize={autoCapitalize || 'none'}
         onFocus={() => setFocused(true)}
         onBlur={() => setFocused(false)}
-        style={[{
-          backgroundColor: Colors.bg.input,
-          borderColor: focused ? Colors.accent.primary : Colors.border.default,
-          borderWidth: focused ? 1 : 0.5,
-          borderRadius: Radius.md,
-          padding: Spacing.md,
-          color: Colors.text.primary,
-          fontSize: Typography.sizes.base,
-          minHeight: multiline ? 80 : 44,
-        }, style]}
+        style={[s.input, { borderColor: focused ? Colors.accent.primary : Colors.border.default, borderWidth: focused ? 1 : 0.5, minHeight: multiline ? 80 : 44 }, style] as any}
       />
     </View>
   );
@@ -261,5 +266,12 @@ const s = StyleSheet.create({
   mutedText: {
     color: Colors.text.tertiary,
     fontSize: Typography.sizes.sm,
+  },
+  input: {
+    backgroundColor: Colors.bg.input,
+    borderRadius: Radius.md,
+    padding: Spacing.md,
+    color: Colors.text.primary,
+    fontSize: Typography.sizes.base,
   },
 });

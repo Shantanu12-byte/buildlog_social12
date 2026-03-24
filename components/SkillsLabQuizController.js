@@ -1,11 +1,17 @@
 // SkillsLabQuizController.js - Controls logic for BuildLog Skills Lab (Zero-Cost Tutor)
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Modal, ScrollView, Alert, Platform } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Modal, ScrollView, Alert } from 'react-native';
 import { Feather } from '@expo/vector-icons';
-import { LESSON_DATA } from '../constants/LESSON_DATA'; 
+import { LESSON_DATA } from '../constants/BulkLessonData'; 
 import { updateProfileWithSkillsData } from '../services/ProfilePersistenceManager';
-import { Colors, Spacing, Radius } from '../constants/theme';
+import { Colors, Spacing, Radius, Typography } from '../constants/theme';
+import TutorModal from './TutorModal';
 
+/**
+ * SkillsLabQuizController
+ * @param {string} language - Course topic (e.g., 'HTML')
+ * @param {string} initialLevel - Difficulty (Beginner, Pro, Expert)
+ */
 const SkillsLabQuizController = ({ language = "HTML", initialLevel = "Beginner" }) => {
   const [level, setLevel] = useState(initialLevel);
   const [questionIndex, setQuestionIndex] = useState(0);
@@ -14,6 +20,7 @@ const SkillsLabQuizController = ({ language = "HTML", initialLevel = "Beginner" 
   const [tutorFeedback, setTutorFeedback] = useState("");
   const [showTutorModal, setShowTutorModal] = useState(false);
   const [roundCompleted, setRoundCompleted] = useState(false);
+  const [incorrectAttempts, setIncorrectAttempts] = useState(0);
 
   const currentQuestions = LESSON_DATA[language]?.[level] || [];
   const currentQuestion = currentQuestions[questionIndex];
@@ -25,9 +32,9 @@ const SkillsLabQuizController = ({ language = "HTML", initialLevel = "Beginner" 
     
     if (index === currentQuestion.correctAnswerIndex) {
       setScore(prevScore => prevScore + 1);
-      Alert.alert("Correct!", "Well done!");
-      setTimeout(goToNextQuestion, 800);
+      setTimeout(goToNextQuestion, 1000);
     } else {
+      setIncorrectAttempts(prev => prev + 1);
       const feedbackPill = currentQuestion.incorrectAnswerFeedback[index];
       setTutorFeedback(feedbackPill || "That's not quite right. Look closer!");
       setShowTutorModal(true);
@@ -52,101 +59,220 @@ const SkillsLabQuizController = ({ language = "HTML", initialLevel = "Beginner" 
       total: currentQuestions.length
     });
 
-    if (results?.awardedTrophy) {
-      Alert.alert("🏆 MASTERED!", `You earned the ${results.awardedTrophy.name} trophy!`);
-    } else {
-      Alert.alert("Round Finished", `Score: ${score}/${currentQuestions.length}. ${results?.nextStep}`);
+    if (score === currentQuestions.length) {
+      // Perfect Score
+      console.log('🏆 MASTERY ACHIEVED');
     }
   };
 
   if (!currentQuestion && !roundCompleted) {
-    return <View style={s.container}><Text style={s.header}>Syncing Lab...</Text></View>;
+    return (
+      <View style={s.container}>
+        <Text style={s.header}>Syncing Lab...</Text>
+      </View>
+    );
   }
 
   if (roundCompleted) {
     return (
       <View style={s.container}>
-        <Feather name="zap" size={64} color={Colors.accent.primary} style={{ alignSelf: 'center', marginBottom: 20 }} />
-        <Text style={s.header}>Skills Lab Complete!</Text>
-        <Text style={s.scoreText}>{score} / {currentQuestions.length}</Text>
-        <TouchableOpacity style={s.primaryBtn} onPress={() => console.log('Exit')}>
-          <Text style={s.btnText}>Back to Path</Text>
-        </TouchableOpacity>
+        <View style={s.completionCard}>
+          <Feather name="zap" size={64} color={Colors.accent.primary} style={s.zapIcon} />
+          <Text style={s.header}>Lab Complete!</Text>
+          <Text style={s.scoreText}>{score} / {currentQuestions.length}</Text>
+          <Text style={s.subtitle}>
+            {score === currentQuestions.length 
+              ? "🏆 PERFECT! You've mastered this tier." 
+              : "Keep building! Review your tips and try again."}
+          </Text>
+          <TouchableOpacity style={s.primaryBtn} onPress={() => console.log('Exit')}>
+            <Text style={s.btnText}>Return to Skills Hub</Text>
+          </TouchableOpacity>
+        </View>
       </View>
     );
   }
 
   return (
     <View style={s.container}>
-      <Text style={s.header}>{language} {level}</Text>
-      <View style={s.progressRow}>
-         <Text style={s.pText}>Question {questionIndex + 1}/{currentQuestions.length}</Text>
+      {/* Header / Progress */}
+      <View style={s.topNav}>
+        <View style={s.levelBadge}>
+          <Text style={s.levelText}>{level.toUpperCase()}</Text>
+        </View>
+        <Text style={s.progressText}>Question {questionIndex + 1} of {currentQuestions.length}</Text>
       </View>
       
-      <ScrollView style={s.qContainer} showsVerticalScrollIndicator={false}>
-        <Text style={s.qText}>{currentQuestion.question}</Text>
+      <ScrollView style={s.scrollArea} showsVerticalScrollIndicator={false}>
+        <Text style={s.questionText}>{currentQuestion.question}</Text>
         
         {currentQuestion.codeSnippet && (
-          <View style={s.codeBox}>
-            <Text style={s.codeText}>{currentQuestion.codeSnippet}</Text>
+          <View style={s.codeSnippetContainer}>
+            <Text style={s.codeSnippetText}>{currentQuestion.codeSnippet}</Text>
           </View>
         )}
         
-        {currentQuestion.options.map((option, index) => {
-          const isSelected = selectedOption === index;
-          const isCorrect = index === currentQuestion.correctAnswerIndex;
-          
-          return (
-            <TouchableOpacity
-              key={index}
-              style={[s.optBtn, isSelected && (isCorrect ? s.correct : s.wrong)]}
-              onPress={() => handleOptionSelect(index)}
-              disabled={selectedOption !== null}
-            >
-              <Text style={[s.optText, isSelected && { color: '#000' }]}>{option}</Text>
-            </TouchableOpacity>
-          );
-        })}
+        <View style={s.optionsGrid}>
+          {currentQuestion.options.map((option, index) => {
+            const isSelected = selectedOption === index;
+            const isCorrect = index === currentQuestion.correctAnswerIndex;
+            
+            return (
+              <TouchableOpacity
+                key={index}
+                style={[
+                  s.optionButton, 
+                  isSelected && (isCorrect ? s.optionCorrect : s.optionWrong)
+                ]}
+                onPress={() => handleOptionSelect(index)}
+                disabled={selectedOption !== null}
+                activeOpacity={0.7}
+              >
+                <Text style={[s.optionText, isSelected && s.optionTextActive]}>{option}</Text>
+                {isSelected && (
+                  <Feather 
+                    name={isCorrect ? "check-circle" : "x-circle"} 
+                    size={16} 
+                    color={isCorrect ? "#FFF" : "#FFF"} 
+                  />
+                )}
+              </TouchableOpacity>
+            );
+          })}
+        </View>
       </ScrollView>
 
-      <Modal transparent visible={showTutorModal} animationType="fade">
-        <View style={s.mOverlay}>
-          <View style={s.mContent}>
-            <View style={s.avatar}><Text style={{ fontSize: 32 }}>🤖</Text></View>
-            <Text style={s.mHeader}>Supportive Tip!</Text>
-            <Text style={s.mFeedback}>{tutorFeedback}</Text>
-            <TouchableOpacity style={s.mBtn} onPress={() => { setShowTutorModal(false); goToNextQuestion(); }}>
-              <Text style={s.btnText}>I understand, next!</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
+      <TutorModal 
+        visible={showTutorModal}
+        feedback={tutorFeedback}
+        onClose={() => {
+          setShowTutorModal(false);
+          goToNextQuestion();
+        }}
+      />
     </View>
   );
 };
 
 const s = StyleSheet.create({
-  container: { flex: 1, padding: 25, backgroundColor: '#000', justifyContent: 'center' },
-  header: { fontSize: 28, fontWeight: '900', color: '#FFF', textAlign: 'center', marginBottom: 5, fontFamily: 'monospace' },
-  progressRow: { marginBottom: 30, alignItems: 'center' },
-  pText: { color: Colors.accent.glow, fontSize: 13, fontFamily: 'monospace', opacity: 0.8 },
-  qContainer: { flex: 1 },
-  qText: { fontSize: 20, color: '#EEE', marginBottom: 25, fontWeight: '700', lineHeight: 28 },
-  codeBox: { backgroundColor: '#111', padding: 15, borderRadius: 10, marginBottom: 25, borderLeftWidth: 4, borderLeftColor: Colors.accent.primary },
-  codeText: { fontFamily: 'monospace', color: Colors.accent.glow, fontSize: 14 },
-  optBtn: { backgroundColor: '#121212', padding: 20, borderRadius: 15, marginBottom: 15, borderWidth: 1, borderColor: '#333' },
-  optText: { fontSize: 17, color: '#FFF', fontWeight: 'bold', textAlign: 'center' },
-  correct: { backgroundColor: Colors.accent.primary, borderColor: Colors.accent.primary },
-  wrong: { backgroundColor: '#FF3B30', borderColor: '#FF3B30' },
-  scoreText: { fontSize: 48, fontWeight: '900', color: Colors.accent.primary, textAlign: 'center', marginVertical: 30 },
-  primaryBtn: { backgroundColor: Colors.accent.primary, padding: 20, borderRadius: 15 },
-  btnText: { color: '#000', textAlign: 'center', fontWeight: '900', fontSize: 16, letterSpacing: 1 },
-  mOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.9)', justifyContent: 'center', alignItems: 'center' },
-  mContent: { width: '85%', backgroundColor: '#111', borderRadius: Radius.lg, padding: 30, alignItems: 'center', borderWidth: 1, borderColor: Colors.accent.primary },
-  avatar: { width: 70, height: 70, borderRadius: 35, backgroundColor: 'rgba(57,255,20,0.1)', marginBottom: 20, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: Colors.accent.primary },
-  mHeader: { fontSize: 22, fontWeight: '900', color: Colors.accent.primary, marginBottom: 15, textAlign: 'center' },
-  mFeedback: { fontSize: 16, color: '#CCC', textAlign: 'center', marginBottom: 30, lineHeight: 24 },
-  mBtn: { backgroundColor: Colors.accent.primary, padding: 18, borderRadius: 15, width: '100%' }
+  container: { 
+    flex: 1, 
+    backgroundColor: Colors.bg.primary, 
+    padding: Spacing.lg 
+  },
+  topNav: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: Spacing.xl,
+    paddingTop: Spacing.md,
+  },
+  levelBadge: {
+    backgroundColor: 'rgba(47, 129, 247, 0.1)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: Radius.full,
+    borderWidth: 1,
+    borderColor: Colors.accent.primary,
+  },
+  levelText: {
+    color: Colors.accent.primary,
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 1,
+  },
+  progressText: {
+    color: Colors.text.tertiary,
+    fontSize: 12,
+    fontFamily: 'System',
+  },
+  scrollArea: {
+    flex: 1,
+  },
+  questionText: {
+    fontSize: 22,
+    color: Colors.text.primary,
+    fontWeight: '700',
+    lineHeight: 30,
+    marginBottom: Spacing.xl,
+  },
+  codeSnippetContainer: {
+    backgroundColor: Colors.bg.secondary,
+    padding: Spacing.lg,
+    borderRadius: Radius.md,
+    marginBottom: Spacing.xl,
+    borderWidth: 1,
+    borderColor: Colors.border.subtle,
+  },
+  codeSnippetText: {
+    fontFamily: 'monospace',
+    color: Colors.accent.glow,
+    fontSize: 14,
+  },
+  optionsGrid: {
+    gap: Spacing.md,
+  },
+  optionButton: {
+    backgroundColor: Colors.bg.secondary,
+    padding: Spacing.lg,
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    borderColor: Colors.border.subtle,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  optionText: {
+    fontSize: 16,
+    color: Colors.text.secondary,
+    fontWeight: '600',
+    flex: 1,
+  },
+  optionTextActive: {
+    color: '#FFF',
+  },
+  optionCorrect: {
+    backgroundColor: Colors.github.green,
+    borderColor: Colors.github.green,
+  },
+  optionWrong: {
+    backgroundColor: Colors.danger,
+    borderColor: Colors.danger,
+  },
+  completionCard: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: Spacing.xl,
+  },
+  zapIcon: {
+    marginBottom: Spacing.lg,
+  },
+  scoreText: {
+    fontSize: 64,
+    fontWeight: '900',
+    color: Colors.text.primary,
+    marginVertical: Spacing.md,
+  },
+  subtitle: {
+    color: Colors.text.secondary,
+    fontSize: 16,
+    textAlign: 'center',
+    marginBottom: Spacing.xl,
+  },
+  primaryBtn: {
+    backgroundColor: Colors.accent.primary,
+    paddingVertical: 18,
+    paddingHorizontal: 32,
+    borderRadius: Radius.full,
+    width: '100%',
+  },
+  btnText: {
+    color: '#FFF',
+    textAlign: 'center',
+    fontWeight: '800',
+    fontSize: 16,
+  }
 });
 
 export default SkillsLabQuizController;

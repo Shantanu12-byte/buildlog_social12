@@ -2,7 +2,7 @@ import React, { useEffect, useState, useRef, useCallback } from 'react';
 import {
   View, Text, FlatList, TouchableOpacity, TextInput,
   StyleSheet, SafeAreaView, StatusBar, KeyboardAvoidingView,
-  Platform, ActivityIndicator,
+  Platform, ActivityIndicator, Alert,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { supabase } from '@/lib/supabase';
@@ -23,6 +23,7 @@ interface DMRoom {
   other_user?: {
     id: string;
     username: string;
+    avatar_url?: string;
     public_key?: string;
   };
 }
@@ -64,7 +65,7 @@ function DMListItem({
       activeOpacity={0.8}
     >
       <View style={s.avatarSquare}>
-        <Avatar username={room.other_user?.username || 'u'} size={32} />
+        <Avatar username={room.other_user?.username || 'u'} uri={room.other_user?.avatar_url} size={32} />
       </View>
 
       <View style={s.dmInfo}>
@@ -94,6 +95,8 @@ function ChatPanel({
   userId,
   onSend,
   onBack,
+  onDeleteMessage,
+  onDeleteChat,
 }: {
   room: DMRoom;
   messages: Message[];
@@ -101,6 +104,8 @@ function ChatPanel({
   userId: string;
   onSend: (text: string) => void;
   onBack: () => void;
+  onDeleteMessage: (id: string) => void;
+  onDeleteChat: () => void;
 }) {
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
@@ -129,8 +134,12 @@ function ChatPanel({
         <TouchableOpacity onPress={onBack} style={s.chatBackBtn}>
           <Feather name="arrow-left" size={20} color={Colors.accent.glow} />
         </TouchableOpacity>
-        <Avatar username={room.other_user?.username || 'u'} size={28} />
+        <Avatar username={room.other_user?.username || 'u'} uri={room.other_user?.avatar_url} size={28} />
         <Text style={s.userNameTitle}>{(room.other_user?.username || 'unknown').toUpperCase()}</Text>
+        <View style={{ flex: 1 }} />
+        <TouchableOpacity onPress={onDeleteChat} style={s.chatHeaderIcon}>
+          <Feather name="trash-2" size={18} color="#555" />
+        </TouchableOpacity>
       </View>
       
       <View style={s.e2eeBanner}>
@@ -154,10 +163,15 @@ function ChatPanel({
               const isMe = item.sender_id === userId;
               return (
                 <View style={[s.msgRow, isMe && s.msgRowMe]}>
-                  <View style={[s.bubble, isMe ? s.bubbleMe : s.bubbleThem]}>
+                  <TouchableOpacity 
+                    style={[s.bubble, isMe ? s.bubbleMe : s.bubbleThem]}
+                    onLongPress={() => onDeleteMessage(item.id)}
+                    delayLongPress={500}
+                    activeOpacity={0.7}
+                  >
                     <Text style={s.bubbleText}>{item.content}</Text>
                     <Text style={s.bubbleTime}>{formatTime(item.created_at)}</Text>
-                  </View>
+                  </TouchableOpacity>
                 </View>
               );
             }}
@@ -198,7 +212,6 @@ export default function MessagesScreen() {
   const [chatLoading, setChatLoading] = useState(false);
   const [user, setUser] = useState<any>(null);
   const [mobileView, setMobileView] = useState<MobileView>('list');
-  const [searchModalVisible, setSearchModalVisible] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [searching, setSearching] = useState(false);
@@ -292,7 +305,7 @@ export default function MessagesScreen() {
     setSearching(true);
     const { data } = await supabase
       .from('profiles')
-      .select('id, username, public_key')
+      .select('id, username, avatar_url, public_key')
       .ilike('username', `%${q}%`)
       .limit(10);
     setSearchResults(data || []);
@@ -301,7 +314,6 @@ export default function MessagesScreen() {
 
   async function handleStartChat(otherUser: { id: string, username: string }) {
     if (!user) return;
-    setSearchModalVisible(false);
     setSearchQuery('');
     setSearchResults([]);
 
@@ -329,7 +341,7 @@ export default function MessagesScreen() {
       if (fullRoom) {
         const { data: pData } = await supabase
           .from('profiles')
-          .select('id, username, public_key')
+          .select('id, username, avatar_url, public_key')
           .in('id', [fullRoom.user1_id, fullRoom.user2_id]);
         const map = new Map(pData?.map(p => [p.id, p]));
         const room: DMRoom = { 
@@ -368,7 +380,7 @@ export default function MessagesScreen() {
       if (freshRoom) {
         const { data: pData } = await supabase
           .from('profiles')
-          .select('id, username, public_key')
+          .select('id, username, avatar_url, public_key')
           .in('id', [freshRoom.user1_id, freshRoom.user2_id]);
         
         const map = new Map(pData?.map(p => [p.id, p]));
@@ -422,8 +434,58 @@ export default function MessagesScreen() {
           const decrypted = decryptMessage(m.content, room.other_user?.public_key || '', keys.privateKey);
           setMessages(prev => [...prev, { ...m, content: decrypted }]);
         }
-      ).subscribe();
+      )
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'messages', filter: `room_id=eq.${room.id}` },
+        p => {
+          const deletedId = p.old.id;
+          setMessages(prev => prev.filter(m => m.id !== deletedId));
+        }
+      )
+      .subscribe();
   }, []);
+
+  async function handleDeleteMessage(messageId: string) {
+    Alert.alert(
+      "DELETE_MESSAGE",
+      "This action is irreversible. Proceed?",
+      [
+        { text: "CANCEL", style: "cancel" },
+        { 
+          text: "DELETE", 
+          style: "destructive",
+          onPress: async () => {
+            const { error } = await supabase.from('messages').delete().eq('id', messageId);
+            if (!error) {
+              setMessages(prev => prev.filter(m => m.id !== messageId));
+            }
+          }
+        }
+      ]
+    );
+  }
+
+  async function handleDeleteChat() {
+    if (!selectedRoom) return;
+    Alert.alert(
+      "TERMINATE_CHANNEL",
+      "Wipe entire conversation? This removes all records for both operatives.",
+      [
+        { text: "CANCEL", style: "cancel" },
+        { 
+          text: "TERMINATE", 
+          style: "destructive",
+          onPress: async () => {
+            const { error } = await supabase.from('dm_rooms').delete().eq('id', selectedRoom.id);
+            if (!error) {
+              setSelectedRoom(null);
+              setMobileView('list');
+              fetchRooms(user.id);
+            }
+          }
+        }
+      ]
+    );
+  }
 
   async function handleSend(text: string) {
     if (!selectedRoom || isSending) return;
@@ -440,6 +502,7 @@ export default function MessagesScreen() {
       const newMsg = {
         room_id: selectedRoom.id,
         sender_id: user.id,
+        recipient_id: otherUser.id,
         content: encrypted,
       };
 
@@ -479,39 +542,80 @@ export default function MessagesScreen() {
             <TouchableOpacity onPress={() => router.back()} style={{ marginBottom: 12 }}>
               <Feather name="arrow-left" size={24} color={Colors.accent.glow} />
             </TouchableOpacity>
-            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-              <View>
-                <Text style={s.title}>SECRET_SCROLL</Text>
-                <Text style={s.subtitle}>SECURE_VOICE_INBOX</Text>
-              </View>
-              <TouchableOpacity style={s.newMsgBtn} onPress={() => setSearchModalVisible(true)}>
-                <Feather name="plus" size={24} color={Colors.accent.glow} />
-              </TouchableOpacity>
+            <View style={{ marginBottom: 10 }}>
+              <Text style={s.title}>PRIVATE MESSAGES</Text>
+              <Text style={s.subtitle}>SECURE_VOICE_INBOX</Text>
+            </View>
+            <View style={s.searchBarContainer}>
+              <Feather name="search" size={16} color="#444" style={{ marginRight: 10 }} />
+              <TextInput
+                placeholder="SEARCH_OPERATIVES..."
+                placeholderTextColor="#333"
+                value={searchQuery}
+                onChangeText={(t) => { setSearchQuery(t); performSearch(t); }}
+                style={s.searchBarInput}
+                autoCapitalize="none"
+              />
+              {searchQuery.length > 0 && (
+                <TouchableOpacity onPress={() => { setSearchQuery(''); setSearchResults([]); }}>
+                  <Feather name="x" size={16} color="#555" />
+                </TouchableOpacity>
+              )}
             </View>
             <View style={s.divider} />
           </View>
 
-          <FlatList
-            data={rooms}
-            keyExtractor={item => item.id}
-            contentContainerStyle={s.list}
-            renderItem={({ item }) => <DMListItem room={item} onPress={() => openRoom(item)} />}
-            ListHeaderComponent={
-              followError ? (
-                <View style={s.errorBanner}>
-                  <Text style={s.errorText}>{followError}</Text>
-                  <TouchableOpacity onPress={() => setFollowError('')}>
-                    <Feather name="x" size={14} color="#FFF" />
-                  </TouchableOpacity>
+          {searchQuery.length > 0 ? (
+            <FlatList
+              data={searchResults}
+              keyExtractor={item => item.id}
+              contentContainerStyle={s.list}
+              renderItem={({ item }) => (
+                <TouchableOpacity 
+                  style={s.searchResult} 
+                  onPress={() => handleStartChat(item)}
+                >
+                  <Avatar username={item.username} uri={item.avatar_url} size={40} />
+                  <View style={{ flex: 1, marginLeft: 12 }}>
+                    <Text style={s.searchResultText}>{item.username.toUpperCase()}</Text>
+                    <Text style={{ color: '#444', fontSize: 10, fontFamily: 'monospace' }}>OPERATIVE_READY</Text>
+                  </View>
+                  <Feather name="message-square" size={18} color={Colors.accent.glow} />
+                </TouchableOpacity>
+              )}
+              ListEmptyComponent={
+                searching ? (
+                  <ActivityIndicator color={Colors.accent.glow} style={{ marginTop: 50 }} />
+                ) : (
+                  <View style={s.center}>
+                    <Text style={s.emptyText}>NO_OPERATIVES_FOUND</Text>
+                  </View>
+                )
+              }
+            />
+          ) : (
+            <FlatList
+              data={rooms}
+              keyExtractor={item => item.id}
+              contentContainerStyle={s.list}
+              renderItem={({ item }) => <DMListItem room={item} onPress={() => openRoom(item)} />}
+              ListHeaderComponent={
+                followError ? (
+                  <View style={s.errorBanner}>
+                    <Text style={s.errorText}>{followError}</Text>
+                    <TouchableOpacity onPress={() => setFollowError('')}>
+                      <Feather name="x" size={14} color="#FFF" />
+                    </TouchableOpacity>
+                  </View>
+                ) : null
+              }
+              ListEmptyComponent={
+                <View style={s.center}>
+                  <Text style={s.emptyText}>NO_MESSAGES_FOUND</Text>
                 </View>
-              ) : null
-            }
-            ListEmptyComponent={
-              <View style={s.center}>
-                <Text style={s.emptyText}>NO_SCROLLS_FOUND</Text>
-              </View>
-            }
-          />
+              }
+            />
+          )}
         </View>
       ) : (
         selectedRoom && (
@@ -522,61 +626,11 @@ export default function MessagesScreen() {
             userId={user?.id ?? ''}
             onSend={handleSend}
             onBack={() => { setMobileView('list'); setSelectedRoom(null); fetchRooms(user.id); }}
+            onDeleteMessage={handleDeleteMessage}
+            onDeleteChat={handleDeleteChat}
           />
         )
       )}
-
-      {/* NEW MESSAGE MODAL */}
-      <Modal
-        visible={searchModalVisible}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setSearchModalVisible(false)}
-      >
-        <View style={s.modalOverlay}>
-          <SafeAreaView style={s.modalContent}>
-            <View style={s.modalHeader}>
-              <Text style={s.modalTitle}>NEW_TRANSMISSION</Text>
-              <TouchableOpacity onPress={() => setSearchModalVisible(false)}>
-                <Feather name="x" size={24} color={Colors.accent.glow} />
-              </TouchableOpacity>
-            </View>
-
-            <View style={{ padding: Spacing.lg }}>
-              <Input
-                placeholder="SEARCH_USERNAME..."
-                value={searchQuery}
-                onChangeText={(t) => { setSearchQuery(t); performSearch(t); }}
-                autoCapitalize="none"
-              />
-
-              {searching ? (
-                <ActivityIndicator color={Colors.accent.glow} style={{ marginTop: 20 }} />
-              ) : (
-                <RNFlatList
-                  data={searchResults}
-                  keyExtractor={item => item.id}
-                  renderItem={({ item }) => (
-                    <TouchableOpacity 
-                      style={s.searchResult} 
-                      onPress={() => handleStartChat(item)}
-                    >
-                      <Avatar username={item.username} size={32} />
-                      <Text style={s.searchResultText}>{item.username.toUpperCase()}</Text>
-                      <Feather name="send" size={16} color={Colors.accent.glow} />
-                    </TouchableOpacity>
-                  )}
-                  ListEmptyComponent={
-                    searchQuery.length >= 2 ? (
-                      <Text style={s.emptyText}>NO_OPERATIVES_FOUND</Text>
-                    ) : null
-                  }
-                />
-              )}
-            </View>
-          </SafeAreaView>
-        </View>
-      </Modal>
     </SafeAreaView>
   );
 }
@@ -585,118 +639,152 @@ const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#000' },
   header: { padding: Spacing.xl, paddingTop: 10 },
   title: {
-    color: Colors.accent.glow,
-    fontSize: 32,
+    color: '#FFF',
+    fontSize: 28,
     fontWeight: '900',
     fontFamily: 'monospace',
-    letterSpacing: 2,
+    letterSpacing: 1,
   },
   subtitle: {
     color: Colors.accent.glow,
-    fontSize: 10,
+    fontSize: 9,
     fontFamily: 'monospace',
-    marginTop: 4,
-    opacity: 0.8,
+    marginTop: 2,
+    letterSpacing: 1,
+    opacity: 0.7,
   },
-  divider: { height: 1, backgroundColor: '#111', marginTop: 20 },
-  list: { padding: Spacing.lg, gap: 16 },
+  searchBarContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#080808',
+    borderRadius: 12,
+    paddingHorizontal: 15,
+    paddingVertical: 10,
+    marginTop: 15,
+    borderWidth: 1,
+    borderColor: '#111',
+  },
+  searchBarInput: {
+    flex: 1,
+    color: '#FFF',
+    fontSize: 14,
+    fontFamily: 'monospace',
+  },
+  divider: { height: 1, backgroundColor: '#111', marginTop: 15 },
+  list: { padding: Spacing.lg },
   dmCard: {
     flexDirection: 'row',
     alignItems: 'center',
     padding: 16,
-    borderWidth: 2,
-    borderColor: Colors.accent.glow,
-    backgroundColor: '#000',
+    borderRadius: 16,
+    backgroundColor: '#080808',
+    borderWidth: 1,
+    borderColor: '#111',
+    marginBottom: 12,
   },
   avatarSquare: {
-    width: 50,
-    height: 50,
-    borderWidth: 1,
-    borderColor: Colors.accent.glow,
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: '#111',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#050505',
+    borderWidth: 1,
+    borderColor: '#1A1A1A',
   },
-  dmInfo: { flex: 1, marginLeft: 16 },
+  dmInfo: { flex: 1, marginLeft: 14 },
   dmTitleRow: { flexDirection: 'row', alignItems: 'center' },
-  dmUsername: { color: Colors.accent.glow, fontSize: 16, fontWeight: '700', fontFamily: 'monospace' },
+  dmUsername: { color: '#FFF', fontSize: 15, fontWeight: '700', fontFamily: 'monospace' },
   dmMetaRow: { flexDirection: 'row', alignItems: 'center', marginTop: 4, gap: 4 },
-  dmDate: { color: '#888', fontSize: 10, fontFamily: 'monospace' },
-  dmRight: { alignItems: 'flex-end', gap: 4 },
-  dmTime: { color: '#888', fontSize: 10, fontFamily: 'monospace' },
-  emptyText: { color: '#222', fontSize: 14, fontFamily: 'monospace', marginTop: 100 },
+  dmDate: { color: '#444', fontSize: 10, fontFamily: 'monospace' },
+  dmRight: { alignItems: 'flex-end', gap: 6 },
+  dmTime: { color: '#444', fontSize: 10, fontFamily: 'monospace' },
+  emptyText: { color: '#222', fontSize: 13, fontFamily: 'monospace', marginTop: 100 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
 
   chatPanel: { flex: 1, backgroundColor: '#000' },
   chatHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: Spacing.lg,
-    borderBottomWidth: 1,
-    borderBottomColor: '#222',
-    gap: 12,
-  },
-  chatBackBtn: { padding: 4 },
-  userNameTitle: { color: Colors.accent.glow, fontSize: 18, fontWeight: '800', fontFamily: 'monospace' },
-  e2eeBanner: { paddingVertical: 8, alignItems: 'center', backgroundColor: '#050505', borderBottomWidth: 1, borderBottomColor: '#111' },
-  e2eeText: { color: Colors.accent.glow, fontSize: 9, fontFamily: 'monospace', opacity: 0.5 },
-  messageList: { padding: Spacing.lg, gap: 16 },
-  msgRow: { flexDirection: 'row', marginBottom: 4 },
-  msgRowMe: { justifyContent: 'flex-end' },
-  bubble: { maxWidth: '80%', padding: 12, borderWidth: 1, borderColor: '#333' },
-  bubbleMe: { backgroundColor: '#111', borderColor: Colors.accent.glow },
-  bubbleThem: { backgroundColor: '#080808' },
-  bubbleText: { color: '#FFF', fontSize: 14, fontFamily: 'monospace' },
-  bubbleTime: { color: '#555', fontSize: 8, fontFamily: 'monospace', marginTop: 4, textAlign: 'right' },
-  inputBar: { flexDirection: 'row', alignItems: 'flex-end', padding: 16, borderTopWidth: 1, borderTopColor: '#222', gap: 12 },
-  msgInput: { flex: 1, backgroundColor: '#080808', borderWidth: 1, borderColor: '#333', color: '#FFF', padding: 12, fontFamily: 'monospace', fontSize: 14 },
-  sendBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#333' },
-
-  newMsgBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    borderWidth: 1,
-    borderColor: Colors.accent.glow,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#050505',
-  },
-
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.9)',
-    justifyContent: 'flex-end',
-  },
-  modalContent: {
-    flex: 0.9,
-    backgroundColor: '#000',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    borderWidth: 1,
-    borderColor: Colors.accent.glow,
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: Spacing.lg,
+    paddingHorizontal: 20,
+    paddingVertical: 14,
     borderBottomWidth: 1,
     borderBottomColor: '#111',
   },
-  modalTitle: {
-    color: Colors.accent.glow,
-    fontSize: 18,
-    fontWeight: '900',
-    fontFamily: 'monospace',
-    letterSpacing: 1,
+  chatBackBtn: { marginRight: 15, padding: 4 },
+  userNameTitle: { color: '#FFF', fontSize: 16, fontWeight: '800', fontFamily: 'monospace', marginLeft: 12 },
+  chatHeaderIcon: { padding: 8, marginLeft: 10 },
+  e2eeBanner: { paddingVertical: 6, alignItems: 'center', backgroundColor: '#050505' },
+  e2eeText: { color: '#333', fontSize: 8, fontFamily: 'monospace', letterSpacing: 1 },
+  messageList: { padding: 20, paddingBottom: 40 },
+  msgRow: { flexDirection: 'row', marginBottom: 16 },
+  msgRowMe: { justifyContent: 'flex-end' },
+  bubble: { 
+    maxWidth: '85%', 
+    paddingHorizontal: 16, 
+    paddingVertical: 12, 
+    borderRadius: 20, 
+    borderWidth: 1,
   },
+  bubbleMe: { 
+    backgroundColor: Colors.accent.glow, 
+    borderColor: 'rgba(255,255,255,0.1)',
+    borderBottomRightRadius: 4,
+  },
+  bubbleThem: { 
+    backgroundColor: '#111', 
+    borderColor: '#1A1A1A',
+    borderBottomLeftRadius: 4,
+  },
+  bubbleText: { color: '#FFF', fontSize: 14, lineHeight: 20, fontFamily: 'monospace' },
+  bubbleTime: { 
+    color: 'rgba(255,255,255,0.4)', 
+    fontSize: 8, 
+    fontFamily: 'monospace', 
+    marginTop: 6, 
+    textAlign: 'right' 
+  },
+  inputBar: { 
+    flexDirection: 'row', 
+    alignItems: 'flex-end', 
+    padding: 16, 
+    backgroundColor: '#000',
+    borderTopWidth: 1,
+    borderTopColor: '#111',
+    gap: 12 
+  },
+  msgInput: { 
+    flex: 1, 
+    backgroundColor: '#0A0A0A', 
+    borderRadius: 22,
+    borderWidth: 1, 
+    borderColor: '#1A1A1A', 
+    color: '#FFF', 
+    paddingHorizontal: 16,
+    paddingVertical: 10, 
+    fontFamily: 'monospace', 
+    fontSize: 14 
+  },
+  sendBtn: { 
+    width: 44, 
+    height: 44, 
+    borderRadius: 22,
+    alignItems: 'center', 
+    justifyContent: 'center', 
+    backgroundColor: '#0A0A0A',
+    borderWidth: 1, 
+    borderColor: '#1A1A1A' 
+  },
+
   searchResult: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 12,
-    borderBottomWidth: 0.5,
-    borderBottomColor: '#111',
+    padding: 16,
+    backgroundColor: '#080808',
+    marginBottom: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#111',
     gap: 12,
   },
   searchResultText: {
@@ -706,10 +794,11 @@ const s = StyleSheet.create({
     fontSize: 14,
   },
   errorBanner: {
-    backgroundColor: 'rgba(218, 54, 51, 0.15)',
-    borderColor: '#DA3633',
+    backgroundColor: 'rgba(218, 54, 51, 0.1)',
+    borderColor: 'rgba(218, 54, 51, 0.2)',
     borderWidth: 1,
-    padding: 12,
+    padding: 14,
+    borderRadius: 12,
     marginBottom: 16,
     flexDirection: 'row',
     alignItems: 'center',
@@ -717,7 +806,7 @@ const s = StyleSheet.create({
   },
   errorText: {
     color: '#DA3633',
-    fontSize: 12,
+    fontSize: 11,
     fontFamily: 'monospace',
     fontWeight: '700',
   },

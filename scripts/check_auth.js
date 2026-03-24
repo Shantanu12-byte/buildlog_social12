@@ -4,9 +4,11 @@ const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYm
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 async function check() {
-  const { data, error } = await supabase.from('profiles').select('*').limit(1);
-  if (data && data.length > 0) {
-    console.log(Object.keys(data[0]));
+  const { data: { session }, error } = await supabase.auth.getSession();
+  if (session) {
+    console.log(JSON.stringify(session.user.user_metadata, null, 2));
+  } else {
+    console.log('No active session found in script environment.');
   }
 }
 check();

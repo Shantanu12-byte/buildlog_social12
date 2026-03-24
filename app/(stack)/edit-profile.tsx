@@ -7,8 +7,9 @@ import * as ImagePicker from 'expo-image-picker';
 import { supabase, getValidSession } from '@/lib/supabase';
 import { processImage } from '@/lib/imageProcessor';
 import { useUserStore } from '@/store/userStore';
-import { Colors, FontSizes, Spacing } from '@/constants/theme';
-import { Feather } from '@expo/vector-icons';
+import { Colors, Spacing, Radius, Typography } from '@/constants/theme';
+import { Feather, FontAwesome5 } from '@expo/vector-icons';
+import { Input, Button, Avatar } from '@/components/ui/UI';
 
 export default function EditProfileScreen() {
   const router = useRouter();
@@ -190,81 +191,60 @@ export default function EditProfileScreen() {
 
         {/* Avatar Section */}
         <View style={styles.avatarSection}>
-          <View style={styles.avatarFrame}>
-            {avatarUrl ? (
-              <Image source={{ uri: avatarUrl }} style={styles.avatarImage} />
-            ) : (
-              <View style={styles.avatarPlaceholder}>
-                <Feather name="user" size={40} color="#666666" />
+          <TouchableOpacity onPress={handlePickImage} activeOpacity={0.8}>
+            <View style={styles.avatarWrapper}>
+              <Avatar 
+                username={username || 'builder'} 
+                uri={avatarUrl} 
+                size={120} 
+              />
+              <View style={styles.editIconBadge}>
+                <Feather name="camera" size={16} color="#FFF" />
               </View>
-            )}
-          </View>
-          <TouchableOpacity style={styles.changePhotoButton} onPress={handlePickImage}>
-            <Text style={styles.changePhotoText}>CHANGE_PHOTO</Text>
+            </View>
           </TouchableOpacity>
+          <Text style={styles.avatarHint}>TAP_TO_CHANGE_IDENTITY_VISUAL</Text>
         </View>
 
         {/* Form Fields */}
         <View style={styles.form}>
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>USERNAME</Text>
-            <TextInput
-              style={styles.input}
-              value={username}
-              onChangeText={setUsername}
-              placeholder="Enter username"
-              placeholderTextColor="#555"
-            />
-          </View>
+          <Input
+            label="USERNAME"
+            value={username}
+            onChangeText={setUsername}
+            placeholder="OPERATOR_TAG"
+          />
 
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>BIO</Text>
-            <TextInput
-              style={[styles.input, styles.multilineInput]}
-              value={bio}
-              onChangeText={setBio}
-              placeholder="Tell us about yourself..."
-              placeholderTextColor="#555"
-              multiline
-            />
-          </View>
+          <Input
+            label="BIO"
+            value={bio}
+            onChangeText={setBio}
+            placeholder="ENCRYPTED_STATUS_MESSAGE"
+            multiline
+          />
 
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>GITHUB_URL</Text>
-            <TextInput
-              style={styles.input}
-              value={githubUrl}
-              onChangeText={setGithubUrl}
-              placeholder="https://github.com/..."
-              placeholderTextColor="#555"
-              autoCapitalize="none"
-              keyboardType="url"
-            />
-          </View>
+          <Input
+            label="GITHUB_URL"
+            value={githubUrl}
+            onChangeText={setGithubUrl}
+            placeholder="https://github.com/..."
+            autoCapitalize="none"
+          />
 
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>LINKEDIN_URL</Text>
-            <TextInput
-              style={styles.input}
-              value={linkedinUrl}
-              onChangeText={setLinkedinUrl}
-              placeholder="https://linkedin.com/in/..."
-              placeholderTextColor="#555"
-              autoCapitalize="none"
-              keyboardType="url"
-            />
-          </View>
+          <Input
+            label="LINKEDIN_URL"
+            value={linkedinUrl}
+            onChangeText={setLinkedinUrl}
+            placeholder="https://linkedin.com/in/..."
+            autoCapitalize="none"
+          />
 
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>SKILLS (COMMA SEPARATED)</Text>
-            <TextInput
-              style={styles.input}
-              value={skills}
-              onChangeText={setSkills}
-              placeholder="e.g. Java, React Native, UI Design"
-              placeholderTextColor="#555"
-            />
-          </View>
+          <Input
+            label="SKILLS (COMMA SEPARATED)"
+            value={skills}
+            onChangeText={setSkills}
+            placeholder="REACT, NODE, DESIGN"
+          />
 
           <View style={styles.inputGroup}>
             <Text style={styles.label}>LANGUAGE_STACK (SELECT_YOUR_POWER)</Text>
@@ -301,17 +281,19 @@ export default function EditProfileScreen() {
 
         {/* Action Buttons */}
         <View style={styles.actions}>
-          <TouchableOpacity 
-            style={[styles.saveButton, isSaving && styles.disabledButton]} 
+          <Button
+            label="SYNC_PROFILE_DATA"
             onPress={handleSave}
-            disabled={isSaving}
-          >
-            {isSaving ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.saveButtonText}>SAVE_PROFILE</Text>}
-          </TouchableOpacity>
+            loading={isSaving}
+            variant="primary"
+          />
 
-          <TouchableOpacity style={styles.cancelButton} onPress={() => router.back()} disabled={isSaving}>
-            <Text style={styles.cancelButtonText}>CANCEL</Text>
-          </TouchableOpacity>
+          <Button
+            label="ABORT_CHANGES"
+            onPress={() => router.back()}
+            variant="ghost"
+            style={{ marginTop: 8 }}
+          />
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -324,7 +306,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#000000',
   },
   scrollContent: {
-    paddingBottom: 100,
+    paddingBottom: 60,
   },
   loadingContainer: {
     flex: 1,
@@ -333,63 +315,44 @@ const styles = StyleSheet.create({
     backgroundColor: '#000000',
   },
   header: {
-    padding: 24,
-    paddingTop: 48,
+    paddingHorizontal: 24,
+    paddingTop: 40,
+    marginBottom: 24,
   },
   headerTitle: {
     fontFamily: 'monospace',
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#FFFFFF',
-    letterSpacing: 2,
+    fontSize: 22,
+    fontWeight: '900',
+    color: Colors.accent.glow,
+    letterSpacing: 3,
   },
   avatarSection: {
     alignItems: 'center',
-    marginBottom: 24,
+    marginBottom: 32,
   },
-  avatarFrame: {
-    width: 104,
-    height: 104,
-    backgroundColor: '#111111',
-    borderWidth: 4,
-    borderTopColor: '#FFFFFF',
-    borderLeftColor: '#FFFFFF',
-    borderBottomColor: '#555555',
-    borderRightColor: '#555555',
-    justifyContent: 'center',
-    alignItems: 'center',
+  avatarWrapper: {
+    position: 'relative',
   },
-  avatarImage: {
-    width: 96,
-    height: 96,
+  editIconBadge: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    backgroundColor: Colors.accent.primary,
+    padding: 8,
+    borderRadius: 20,
+    borderWidth: 2,
+    borderColor: '#000',
   },
-  avatarPlaceholder: {
-    width: 96,
-    height: 96,
-    backgroundColor: '#333333',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  changePhotoButton: {
-    marginTop: 16,
-    backgroundColor: '#8B8B8B',
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderWidth: 3,
-    borderTopColor: '#FFFFFF',
-    borderLeftColor: '#FFFFFF',
-    borderBottomColor: '#555555',
-    borderRightColor: '#555555',
-  },
-  changePhotoText: {
+  avatarHint: {
     fontFamily: 'monospace',
-    color: '#FFFFFF',
     fontSize: 10,
-    fontWeight: 'bold',
+    color: '#444',
+    marginTop: 12,
+    letterSpacing: 1,
   },
   form: {
     paddingHorizontal: 24,
-    gap: 16,
+    gap: 8,
   },
   inputGroup: {
     gap: 4,
@@ -399,55 +362,7 @@ const styles = StyleSheet.create({
     fontSize: 10,
     color: '#888888',
     letterSpacing: 1,
-  },
-  input: {
-    borderWidth: 4,
-    borderRadius: 0,
-    borderTopColor: '#555555',
-    borderLeftColor: '#555555',
-    borderBottomColor: '#FFFFFF',
-    borderRightColor: '#FFFFFF',
-    backgroundColor: '#1A1A1A',
-    color: '#FFFFFF',
-    fontFamily: 'monospace',
-    padding: 12,
-  },
-  multilineInput: {
-    minHeight: 80,
-    textAlignVertical: 'top',
-  },
-  actions: {
-    padding: 24,
-    gap: 16,
-  },
-  saveButton: {
-    backgroundColor: '#4CAF50',
-    paddingVertical: 18,
-    alignItems: 'center',
-    borderWidth: 4,
-    borderTopColor: '#FFFFFF',
-    borderLeftColor: '#FFFFFF',
-    borderBottomColor: '#2E7D32',
-    borderRightColor: '#2E7D32',
-    borderRadius: 0,
-  },
-  saveButtonText: {
-    fontFamily: 'monospace',
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  cancelButton: {
-    paddingVertical: 12,
-    alignItems: 'center',
-  },
-  cancelButtonText: {
-    fontFamily: 'monospace',
-    color: '#888888',
-    fontSize: 12,
-  },
-  disabledButton: {
-    opacity: 0.6,
+    marginBottom: 8,
   },
   languagesGrid: {
     flexDirection: 'row',
@@ -456,27 +371,28 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   languageOption: {
-    backgroundColor: '#111111',
+    backgroundColor: '#090909',
     paddingHorizontal: 12,
     paddingVertical: 8,
-    borderWidth: 2,
-    borderColor: '#333333',
-    borderBottomWidth: 4,
-    borderBottomColor: '#000000',
+    borderRadius: Radius.sm,
+    borderWidth: 1,
+    borderColor: '#222',
   },
   languageOptionSelected: {
-    backgroundColor: '#333333',
-    borderColor: '#FFFFFF',
-    borderBottomColor: '#888888',
-    transform: [{ translateY: 2 }],
+    backgroundColor: 'rgba(168, 85, 247, 0.1)',
+    borderColor: Colors.accent.primary,
   },
   languageOptionText: {
     fontFamily: 'monospace',
-    color: '#888888',
+    color: '#666',
     fontSize: 10,
     fontWeight: 'bold',
   },
   languageOptionTextSelected: {
-    color: '#FFFFFF',
+    color: Colors.accent.glow,
+  },
+  actions: {
+    padding: 24,
+    marginTop: 12,
   },
 });

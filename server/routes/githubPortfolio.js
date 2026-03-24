@@ -12,7 +12,7 @@ const supabase = createClient(
  * GET /api/user/projects
  * Fetches and filters public GitHub repositories for the user to showcase as projects.
  */
-router.get('/projects', async (req, res) => {
+router.get('/', async (req, res) => {
   const { userId } = req.query;
 
   if (!userId) {

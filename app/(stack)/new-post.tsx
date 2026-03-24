@@ -1,13 +1,17 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, TextInput, ActivityIndicator, Alert, ScrollView } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import {
+  View, Text, StyleSheet, TouchableOpacity, TextInput,
+  ActivityIndicator, Alert, ScrollView, KeyboardAvoidingView,
+  Platform, SafeAreaView, StatusBar
+} from 'react-native';
 import { Image } from 'expo-image';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { Feather } from '@expo/vector-icons';
 import { supabase } from '@/lib/supabase';
 import { processImage } from '@/lib/imageProcessor';
-import { Colors, FontSizes, Spacing } from '@/constants/theme';
+import { Colors, Typography, Spacing, Radius } from '@/constants/theme';
+import { Card, SectionHeader, Avatar, Input } from '@/components/ui/UI';
 
 export default function NewPostScreen() {
   const router = useRouter();
@@ -15,65 +19,73 @@ export default function NewPostScreen() {
   const [caption, setCaption] = useState('');
   const [githubUrl, setGithubUrl] = useState('');
   const [isUploading, setIsUploading] = useState(false);
-  const isCurrentlyUploading = React.useRef(false);
+  const isCurrentlyUploading = useRef(false);
+  
   const [projects, setProjects] = useState<any[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [isLoadingProjects, setIsLoadingProjects] = useState(true);
+  const [user, setUser] = useState<any>(null);
 
-  // Fetch projects for selection
-  React.useEffect(() => {
-    const fetchUserProjects = async () => {
-      try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user) {
-          const { data, error } = await supabase
-            .from('projects')
-            .select('id, title')
-            .eq('user_id', user.id);
-          
-          if (!error && data) {
-            setProjects(data);
-            if (data.length > 0) setSelectedProjectId(data[0].id);
-          }
-        }
-      } catch (e) {
-        console.error('Error fetching user projects:', e);
-      } finally {
-        setIsLoadingProjects(false);
-      }
-    };
-    fetchUserProjects();
+  useEffect(() => {
+    init();
   }, []);
+
+  async function init() {
+    try {
+      const { data: { user: authUser } } = await supabase.auth.getUser();
+      if (!authUser) {
+        router.replace('/(auth)/login');
+        return;
+      }
+      setUser(authUser);
+
+      // Fetch user projects
+      const { data, error } = await supabase
+        .from('projects')
+        .select('id, title')
+        .eq('user_id', authUser.id)
+        .order('created_at', { ascending: false });
+      
+      if (!error && data) {
+        setProjects(data);
+        if (data.length > 0) setSelectedProjectId(data[0].id);
+      }
+    } catch (e) {
+      console.error('Init error:', e);
+    } finally {
+      setIsLoadingProjects(false);
+    }
+  }
 
   const pickImage = async () => {
     try {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Permission Denied', 'Sorry, we need camera roll permissions to make this work!');
+        Alert.alert('Permission Denied', 'Media library access is required to share progress.');
         return;
       }
 
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images'], // Newer API format
+        mediaTypes: ['images'],
         allowsEditing: true,
         aspect: [1, 1],
         quality: 0.8,
       });
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
-        const selectedImage = result.assets[0];
-        setImageUri(selectedImage.uri);
+        setImageUri(result.assets[0].uri);
       }
     } catch (error) {
-      console.error('Error picking image:', error);
-      Alert.alert('Error', 'Failed to pick image');
+      console.error('Picker error:', error);
     }
   };
 
   const handlePost = async () => {
     if (isCurrentlyUploading.current) return;
+    console.log('handlePost triggered');
     if (!imageUri || !caption.trim() || !selectedProjectId) {
-      Alert.alert('Incomplete Post', 'Please select an image, write a caption, and choose a project.');
+      console.log('Incomplete fields:', { imageUri, caption: !!caption.trim(), selectedProjectId });
+      Alert.alert('Incomplete Log', 'Please select a project, add proof (image), and write a summary.');
       return;
     }
 
@@ -81,89 +93,48 @@ export default function NewPostScreen() {
     isCurrentlyUploading.current = true;
 
     try {
-      
-      // 1. Get current user - with a small delay for session hydration
-      let userId = '';
-      let retries = 0;
-      
-      while (retries < 2) {
-        const { data: { user }, error: authError } = await supabase.auth.getUser();
-        
-        if (user) {
-          userId = user.id;
-          break;
-        }
+      console.log('User check...', user?.id);
+      if (!user) throw new Error('Auth session lost. Please login again.');
 
-        const { data: { session } } = await supabase.auth.getSession();
-        
-        if (session) {
-          userId = session.user.id;
-          break;
-        }
-
-        // Wait 300ms before retry
-        await new Promise(resolve => setTimeout(resolve, 300));
-        retries++;
-      }
-
-      if (!userId) {
-        throw new Error('You must be logged in to post. Please sign in again.');
-      }
-
-      // 2. Process and Upload Image
+      // 1. Process and Upload Image
       const processedImage = await processImage(imageUri);
-      
       const response = await fetch(processedImage.uri);
       const blob = await response.blob();
       const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.jpg`;
-      const filePath = `${userId}/${fileName}`;
+      const filePath = `${user.id}/${fileName}`;
 
-      const { data: uploadData, error: uploadError } = await supabase.storage
+      const { error: uploadError } = await supabase.storage
         .from('post-images')
-        .upload(filePath, blob, {
-          contentType: 'image/jpeg',
-          upsert: false
-        });
+        .upload(filePath, blob, { contentType: 'image/jpeg' });
 
       if (uploadError) throw uploadError;
 
-      // 3. Get Public URL
       const { data: { publicUrl } } = supabase.storage
         .from('post-images')
         .getPublicUrl(filePath);
 
-      // 4. Get User Profile for Username
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('username')
-        .eq('id', userId)
-        .single();
-
-      // 5. Insert Post into Database - aligning with author_id and user_id and including username
+      // 2. Insert Post
+      const selectedProject = projects.find(p => p.id === selectedProjectId);
+      
       const { error: insertError } = await supabase
         .from('posts')
         .insert({
-          author_id: userId,
-          user_id: userId, 
-          username: profile?.username || 'builder',
+          user_id: user.id,
+          author_id: user.id,
+          username: user.user_metadata?.username || 'builder',
           project_id: selectedProjectId,
+          projectTitle: selectedProject?.title || '', // Match camelCase schema
           image_url: publicUrl,
           caption: githubUrl.trim() ? `${caption.trim()}\n\n🔗 ${githubUrl.trim()}` : caption.trim(),
         });
 
       if (insertError) throw insertError;
 
-      Alert.alert('Success!', 'Your buildlog has been shared.');
-      
-      // Reset state
-      setImageUri(null);
-      setCaption('');
-      setGithubUrl('');
-      
+      Alert.alert('Post Success', 'Your log entry has been broadcasted.');
       router.replace('/(tabs)');
     } catch (error: any) {
-      console.error('Error sharing post:', error);
-      Alert.alert('Post Failed', error.message || 'An error occurred during submission.');
+      console.error('Post failed:', error);
+      Alert.alert('Post Failed', error.message || 'An error occurred during verification.');
     } finally {
       setIsUploading(false);
       isCurrentlyUploading.current = false;
@@ -171,245 +142,200 @@ export default function NewPostScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scrollContent}>
-        <View style={styles.header}>
-          <Text style={styles.title}>NEW_POST</Text>
-          <Text style={styles.subtitle}>SHARE_YOUR_PROGRESS</Text>
-        </View>
-
-        {/* Project Selector */}
-        <View style={styles.projectSelector}>
-          <Text style={styles.label}>SELECT_PROJECT</Text>
-          {isLoadingProjects ? (
-            <ActivityIndicator size="small" color="#FFFFFF" />
-          ) : projects.length > 0 ? (
-            <View style={styles.projectList}>
-              {projects.map((p) => (
-                <TouchableOpacity
-                  key={p.id}
-                  style={[
-                    styles.projectItem,
-                    selectedProjectId === p.id && styles.projectItemSelected
-                  ]}
-                  onPress={() => setSelectedProjectId(p.id)}
-                >
-                  <Text style={[
-                    styles.projectItemText,
-                    selectedProjectId === p.id && styles.projectItemTextSelected
-                  ]}>
-                    {p.title.toUpperCase()}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          ) : (
-            <Text style={styles.noProjectsText}>NO_ACTIVE_PROJECTS. CREATE_ONE_FIRST!</Text>
-          )}
-        </View>
-
-        {/* Image Picker Area */}
+    <SafeAreaView style={s.container}>
+      <StatusBar barStyle="light-content" />
+      
+      {/* Header */}
+      <View style={s.header}>
+        <TouchableOpacity onPress={() => router.back()} style={s.backBtn}>
+          <Feather name="x" size={24} color="#FFF" />
+        </TouchableOpacity>
+        <Text style={s.headerTitle}>LOG_ENTRY</Text>
         <TouchableOpacity 
-          style={styles.imagePicker} 
-          onPress={pickImage}
-          activeOpacity={0.8}
+          onPress={handlePost} 
+          disabled={isUploading || !caption.trim() || !imageUri}
+          style={[s.postBtn, (isUploading || !caption.trim() || !imageUri) && s.postBtnDisabled]}
         >
-          {imageUri ? (
-            <Image source={{ uri: imageUri }} style={styles.previewImage} />
+          {isUploading ? (
+            <ActivityIndicator size="small" color="#000" />
           ) : (
-            <View style={styles.placeholderBox}>
-              <Feather name="plus-square" size={48} color="#666666" />
-              <Text style={styles.placeholderText}>TAP_TO_SELECT_IMAGE</Text>
-            </View>
+            <Text style={s.postBtnText}>POST</Text>
           )}
         </TouchableOpacity>
+      </View>
 
-        {/* Inputs */}
-        <View style={styles.form}>
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>CAPTION</Text>
-            <View style={styles.inputWrap}>
-              <TextInput
-                style={[styles.input, styles.multilineInput]}
-                placeholder="What are you building?..."
-                placeholderTextColor="#666666"
-                multiline
-                value={caption}
-                onChangeText={setCaption}
-              />
-            </View>
-          </View>
-
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>GITHUB_REPO_URL</Text>
-            <View style={styles.inputWrap}>
-              <TextInput
-                style={styles.input}
-                placeholder="https://github.com/..."
-                placeholderTextColor="#666666"
-                value={githubUrl}
-                onChangeText={setGithubUrl}
-                autoCapitalize="none"
-                keyboardType="url"
-              />
-            </View>
-          </View>
-
-          <TouchableOpacity 
-            style={[styles.submitButton, isUploading && styles.disabledButton]} 
-            onPress={handlePost}
-            disabled={isUploading}
-          >
-            {isUploading ? (
-              <ActivityIndicator color="#FFFFFF" />
+      <KeyboardAvoidingView 
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={{ flex: 1 }}
+      >
+        <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
+          
+          {/* Project Selection */}
+          <View style={s.section}>
+            <SectionHeader title="Select Project" />
+            {isLoadingProjects ? (
+              <ActivityIndicator color={Colors.accent.primary} />
+            ) : projects.length > 0 ? (
+              <ScrollView 
+                horizontal 
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={s.projectList}
+              >
+                {projects.map(p => (
+                  <TouchableOpacity 
+                    key={p.id}
+                    onPress={() => setSelectedProjectId(p.id)}
+                    style={[s.projectCard, selectedProjectId === p.id && s.projectCardActive]}
+                  >
+                    <Text style={[s.projectTitle, selectedProjectId === p.id && { color: '#000' }]}>
+                      {p.title.toUpperCase()}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
             ) : (
-              <Text style={styles.submitButtonText}>SHARE_WORLD</Text>
+              <View style={s.noProjectsContainer}>
+                <Text style={s.noneText}>NO_ACTIVE_PROJECTS_FOUND</Text>
+                <TouchableOpacity 
+                  style={s.createProjectBtn}
+                  onPress={() => router.push('/(stack)/create-project')}
+                >
+                  <Feather name="plus" size={14} color={Colors.accent.glow} />
+                  <Text style={s.createProjectBtnText}>START_NEW_PROJECT</Text>
+                </TouchableOpacity>
+              </View>
             )}
-          </TouchableOpacity>
-        </View>
-      </ScrollView>
+          </View>
+
+          {/* Main Input Area */}
+          <Card style={s.entryCard}>
+            <View style={s.inputHeader}>
+              <Avatar username={user?.user_metadata?.username || 'B'} size={32} />
+              <View style={s.inputMeta}>
+                <Text style={s.username}>{user?.user_metadata?.username || 'builder'}</Text>
+                <Text style={s.timestamp}>PRODUCING_LOG</Text>
+              </View>
+            </View>
+            
+            <TextInput
+              style={s.textInput}
+              placeholder="What did you build today?"
+              placeholderTextColor="#555"
+              multiline
+              value={caption}
+              onChangeText={setCaption}
+              maxLength={1000}
+            />
+
+            {/* Image Preview / Picker */}
+            <TouchableOpacity style={s.mediaBox} onPress={pickImage} activeOpacity={0.9}>
+              {imageUri ? (
+                <View style={s.imageWrap}>
+                  <Image source={{ uri: imageUri }} style={s.preview} />
+                  <View style={s.changeBadge}>
+                    <Feather name="edit-2" size={12} color="#FFF" />
+                  </View>
+                </View>
+              ) : (
+                <View style={s.placeholder}>
+                  <Feather name="camera" size={32} color="#333" />
+                  <Text style={s.placeholderTxt}>ATTACH_VISUAL_PROOF</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+          </Card>
+
+          {/* Proof of Work Section */}
+          <View style={s.section}>
+            <SectionHeader title="Proof of Work" />
+            <Input
+              placeholder="GitHub Repo URL (Optional)"
+              value={githubUrl}
+              onChangeText={setGithubUrl}
+              autoCapitalize="none"
+              style={s.githubInput}
+            />
+            <Text style={s.hint}>Validating repository links ensures high-fidelity build logs.</Text>
+          </View>
+
+        </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#000000',
-  },
-  scrollContent: {
-    paddingBottom: Spacing['2xl'],
-  },
+const s = StyleSheet.create({
+  container: { flex: 1, backgroundColor: '#0F0F0B' },
   header: {
-    paddingHorizontal: Spacing.lg,
-    paddingTop: Spacing.xl,
-    marginBottom: Spacing.xl,
-  },
-  title: {
-    fontFamily: 'monospace',
-    fontSize: FontSizes['3xl'],
-    fontWeight: 'bold',
-    color: '#FFFFFF',
-    letterSpacing: 2,
-  },
-  subtitle: {
-    fontFamily: 'monospace',
-    fontSize: 10,
-    color: '#888888',
-    textTransform: 'uppercase',
-  },
-  projectSelector: {
-    paddingHorizontal: Spacing.lg,
-    marginBottom: Spacing.xl,
-  },
-  projectList: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: Spacing.sm,
-    marginTop: Spacing.sm,
-  },
-  projectItem: {
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
-    backgroundColor: '#111111',
-    borderWidth: 2,
-    borderColor: '#333333',
-  },
-  projectItemSelected: {
-    backgroundColor: '#8B8B8B',
-    borderColor: '#FFFFFF',
-  },
-  projectItemText: {
-    fontFamily: 'monospace',
-    fontSize: 10,
-    color: '#888888',
-  },
-  projectItemTextSelected: {
-    color: '#FFFFFF',
-    fontWeight: 'bold',
-  },
-  noProjectsText: {
-    fontFamily: 'monospace',
-    fontSize: 10,
-    color: '#FF5555',
-    marginTop: Spacing.sm,
-  },
-  imagePicker: {
-    width: '100%',
-    aspectRatio: 1,
-    backgroundColor: '#111111',
-    borderWidth: 4,
-    borderTopColor: '#FFFFFF',
-    borderLeftColor: '#FFFFFF',
-    borderBottomColor: '#222222',
-    borderRightColor: '#222222',
-    justifyContent: 'center',
     alignItems: 'center',
-    overflow: 'hidden',
-  },
-  previewImage: {
-    width: '100%',
-    height: '100%',
-  },
-  placeholderBox: {
-    alignItems: 'center',
-    gap: Spacing.sm,
-  },
-  placeholderText: {
-    fontFamily: 'monospace',
-    color: '#666666',
-    fontSize: 12,
-  },
-  form: {
+    justifyContent: 'space-between',
     padding: Spacing.lg,
-    gap: Spacing.xl,
+    borderBottomWidth: 1,
+    borderBottomColor: '#222',
   },
-  inputGroup: {
-    gap: Spacing.xs,
+  headerTitle: { color: '#FFF', fontSize: 16, fontWeight: '800', letterSpacing: 1.5, fontFamily: Platform.OS === 'ios' ? 'Inter' : 'monospace' },
+  backBtn: { padding: 4 },
+  postBtn: { backgroundColor: Colors.accent.glow, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 8 },
+  postBtnDisabled: { backgroundColor: '#333', opacity: 0.5 },
+  postBtnText: { color: '#000', fontWeight: '800', fontSize: 14 },
+  scroll: { padding: Spacing.lg },
+  section: { marginBottom: 24 },
+  projectList: { flexDirection: 'row', paddingHorizontal: 4, gap: 12 },
+  projectCard: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: Radius.full,
+    backgroundColor: '#1A1A1A',
+    borderWidth: 1,
+    borderColor: '#333',
+    marginRight: 8,
   },
-  label: {
-    fontFamily: 'monospace',
-    fontSize: 10,
-    color: '#888888',
-    letterSpacing: 1.5,
+  projectCardActive: {
+    backgroundColor: Colors.accent.primary,
+    borderColor: Colors.accent.glow,
   },
-  inputWrap: {
-    backgroundColor: '#222222',
-    borderWidth: 2,
-    borderTopColor: '#000000',
-    borderLeftColor: '#000000',
-    borderBottomColor: '#444444',
-    borderRightColor: '#444444',
+  projectTitle: {
+    color: '#888',
+    fontSize: 12,
+    fontWeight: '800',
+    fontFamily: Platform.OS === 'ios' ? 'Inter' : 'monospace',
   },
-  input: {
-    fontFamily: 'monospace',
-    color: '#FFFFFF',
-    fontSize: FontSizes.base,
-    padding: Spacing.md,
-  },
-  multilineInput: {
-    minHeight: 100,
-    textAlignVertical: 'top',
-  },
-  submitButton: {
-    marginTop: Spacing.md,
-    backgroundColor: '#8B8B8B',
-    paddingVertical: Spacing.lg,
+  noProjectsContainer: {
     alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 4,
-    borderTopColor: '#FFFFFF',
-    borderLeftColor: '#FFFFFF',
-    borderBottomColor: '#333333',
-    borderRightColor: '#333333',
+    paddingVertical: 10,
+    gap: 12,
   },
-  disabledButton: {
-    opacity: 0.6,
+  createProjectBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    borderColor: 'rgba(168, 85, 247, 0.4)',
+    backgroundColor: 'rgba(168, 85, 247, 0.1)',
   },
-  submitButtonText: {
+  createProjectBtnText: {
+    color: Colors.accent.glow,
+    fontSize: 11,
+    fontWeight: '700',
     fontFamily: 'monospace',
-    color: '#FFFFFF',
-    fontSize: FontSizes.lg,
-    fontWeight: 'bold',
   },
+  noneText: { color: '#444', fontSize: 11, fontFamily: 'monospace', textAlign: 'center' },
+  entryCard: { padding: 20, marginBottom: 24 },
+  inputHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 16 },
+  inputMeta: { flex: 1 },
+  username: { color: '#FFF', fontSize: 14, fontWeight: '800' },
+  timestamp: { color: '#555', fontSize: 10, fontWeight: '600' },
+  textInput: { color: '#EEE', fontSize: 16, minHeight: 100, textAlignVertical: 'top', marginBottom: 20 },
+  mediaBox: { width: '100%', aspectRatio: 16 / 9, backgroundColor: '#111', borderRadius: 12, overflow: 'hidden', borderWidth: 1, borderColor: '#222' },
+  placeholder: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 10 },
+  placeholderTxt: { color: '#444', fontSize: 10, fontWeight: '800', letterSpacing: 1 },
+  imageWrap: { flex: 1 },
+  preview: { width: '100%', height: '100%' },
+  changeBadge: { position: 'absolute', bottom: 12, right: 12, backgroundColor: 'rgba(0,0,0,0.6)', padding: 8, borderRadius: 20, borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)' },
+  githubInput: { marginBottom: 8 },
+  hint: { color: '#444', fontSize: 10, fontStyle: 'italic' },
 });

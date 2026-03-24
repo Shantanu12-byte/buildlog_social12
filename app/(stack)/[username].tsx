@@ -30,6 +30,8 @@ export default function PublicProfileScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [notFound, setNotFound] = useState(false);
   const [isOwner, setIsOwner] = useState(false);
+  const [isFollowing, setIsFollowing] = useState(false);
+  const [followLoading, setFollowLoading] = useState(false);
 
   const fetchProfileData = useCallback(async () => {
     if (!username) return;
@@ -51,7 +53,19 @@ export default function PublicProfileScreen() {
       }
 
       setProfile(prof);
-      if (user?.id === prof.id) setIsOwner(true);
+      if (user?.id === prof.id) {
+        setIsOwner(true);
+      } else if (user?.id) {
+        // 1.1 Check if already following
+        const { data: followData } = await supabase
+          .from('followers')
+          .select('id')
+          .eq('follower_id', user.id)
+          .eq('following_id', prof.id)
+          .maybeSingle();
+        
+        setIsFollowing(!!followData);
+      }
 
       // 2. Fetch Stats
       const [projRes, buildsRes, followersRes, hypesRes] = await Promise.all([
@@ -78,6 +92,57 @@ export default function PublicProfileScreen() {
   useEffect(() => {
     fetchProfileData();
   }, [fetchProfileData]);
+
+  const handleFollowToggle = async () => {
+    if (followLoading || !profile) return;
+    setFollowLoading(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        router.push('/(auth)/login');
+        return;
+      }
+
+      if (isFollowing) {
+        const { error } = await supabase
+          .from('followers')
+          .delete()
+          .eq('follower_id', user.id)
+          .eq('following_id', profile.id);
+        
+        if (!error) {
+          setIsFollowing(false);
+          setStats(prev => ({ ...prev, followers: Math.max(0, prev.followers - 1) }));
+        }
+      } else {
+        const { error } = await supabase
+          .from('followers')
+          .insert({
+            follower_id: user.id,
+            following_id: profile.id
+          });
+        
+        if (!error) {
+          setIsFollowing(true);
+          setStats(prev => ({ ...prev, followers: prev.followers + 1 }));
+          
+          // Create a notification for the followed user
+          await supabase.from('notifications').insert({
+            user_id: profile.id,
+            type: 'follow',
+            title: 'New Recruiter',
+            content: `@${user.user_metadata?.username || 'Someone'} is now tracking your builds.`,
+            sender_id: user.id,
+            metadata: { username: user.user_metadata?.username }
+          });
+        }
+      }
+    } catch (err) {
+      console.error('Follow Toggle Error:', err);
+    } finally {
+      setFollowLoading(false);
+    }
+  };
 
   const onRefresh = () => {
     setRefreshing(true);
@@ -124,6 +189,7 @@ export default function PublicProfileScreen() {
         <View style={s.profileCard}>
           <Avatar 
             username={profile?.username || ''} 
+            uri={profile?.avatar_url}
             size={80} 
           />
           <Text style={s.name}>{profile?.username}</Text>
@@ -150,12 +216,30 @@ export default function PublicProfileScreen() {
               <Text style={s.editBtnTxt}>Edit Profile</Text>
             </TouchableOpacity>
           ) : (
-            <TouchableOpacity 
-              style={s.editBtn} 
-              onPress={() => router.push({ pathname: '/(stack)/messages', params: { targetUserId: profile.id } } as any)}
-            >
-              <Text style={s.editBtnTxt}>Message</Text>
-            </TouchableOpacity>
+            <View style={s.actionRow}>
+              <TouchableOpacity 
+                style={[s.followBtn, isFollowing && s.followingBtn]} 
+                onPress={handleFollowToggle}
+                disabled={followLoading}
+              >
+                {followLoading ? (
+                  <ActivityIndicator size="small" color="#FFF" />
+                ) : (
+                  <>
+                    <Feather name={isFollowing ? "check" : "user-plus"} size={16} color="#FFF" />
+                    <Text style={s.editBtnTxt}>{isFollowing ? 'Following' : 'Follow'}</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
+                style={s.msgBtn} 
+                onPress={() => router.push({ pathname: '/(stack)/messages', params: { targetUserId: profile.id } } as any)}
+              >
+                <Feather name="message-square" size={16} color="#FFF" />
+                <Text style={s.editBtnTxt}>Message</Text>
+              </TouchableOpacity>
+            </View>
           )}
         </View>
 
@@ -232,6 +316,18 @@ const s = StyleSheet.create({
   
   editBtn: { backgroundColor: ACCENT_PURPLE, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 14, marginTop: 20 },
   editBtnTxt: { color: '#FFF', fontSize: 14, fontWeight: '700' },
+
+  actionRow: { flexDirection: 'row', gap: 12, marginTop: 20, width: '100%' },
+  followBtn: { 
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    backgroundColor: ACCENT_PURPLE, paddingVertical: 12, borderRadius: 14 
+  },
+  followingBtn: { backgroundColor: '#333' },
+  msgBtn: { 
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    backgroundColor: '#1A1A1A', paddingVertical: 12, borderRadius: 14,
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)'
+  },
 
   linksSection: { marginTop: 30 },
   sectionTitle: { color: '#444', fontSize: 11, fontWeight: '900', letterSpacing: 1, marginBottom: 16 },

@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, TextInput, ActivityIndicator, Alert, Animated, Easing, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Colors, Typography, Spacing, Radius } from '@/constants/theme';
+import { Colors, Typography, Spacing, Radius, Shadows } from '@/constants/theme';
 import { Feather, FontAwesome5 } from '@expo/vector-icons';
 import LottieView from 'lottie-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Audio } from 'expo-av';
+import { useAudioPlayer } from 'expo-audio';
 import { supabase } from '@/lib/supabase';
 import { useUserStore } from '@/store/userStore';
 import { COURSE_DATA } from '@/constants/courseData';
@@ -77,6 +77,10 @@ export default function LearnScreen() {
   const [tutorText, setTutorText] = useState('');
   const [tutorSnippet, setTutorSnippet] = useState<string | null>(null);
 
+  // Audio Players
+  const successPlayer = useAudioPlayer('https://www.myinstants.com/media/sounds/level-up-191997.mp3');
+  const victoryPlayer = useAudioPlayer('https://www.myinstants.com/media/sounds/victory-royal_1.mp3');
+
   useEffect(() => {
     loadProgress();
   }, []);
@@ -133,25 +137,11 @@ export default function LearnScreen() {
   };
 
   const playVictorySound = async () => {
-    try {
-      const { sound } = await Audio.Sound.createAsync(
-        { uri: 'https://www.myinstants.com/media/sounds/victory-royal_1.mp3' }
-      );
-      await sound.playAsync();
-    } catch (e) {
-      console.log('Victory sound fail:', e);
-    }
+    victoryPlayer.play();
   };
 
   const playSuccessSound = async () => {
-    try {
-      const { sound } = await Audio.Sound.createAsync(
-        { uri: 'https://www.myinstants.com/media/sounds/level-up-191997.mp3' }
-      );
-      await sound.playAsync();
-    } catch (e) {
-      console.log('Success sound fail:', e);
-    }
+    successPlayer.play();
   };
 
   const submitAnswer = async (optIdx: number) => {
@@ -334,7 +324,7 @@ export default function LearnScreen() {
         </TouchableOpacity>
 
         {showConfetti && (
-          <View style={[StyleSheet.absoluteFill, { zIndex: 999, pointerEvents: 'none' }]}>
+          <View style={[StyleSheet.absoluteFill, { zIndex: 999, pointerEvents: 'none' } as any]}>
             <LottieView
               ref={animationRef}
               source={{ uri: 'https://lottie.host/7ae6588f-4ba0-42f5-b6d1-cd4cd1540854/D5eJ0lWe36.json' }}
@@ -454,7 +444,11 @@ const styles = StyleSheet.create({
   surveyHeader: { color: Colors.accent.glow, textAlign: 'center', letterSpacing: 4, fontSize: 12, marginBottom: 40, fontFamily: 'monospace' },
   optionsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.md, marginTop: Spacing.lg, justifyContent: 'center' },
   surveyOption: { paddingHorizontal: 16, paddingVertical: 14, borderWidth: 1, borderColor: '#333', backgroundColor: '#111', width: '45%', alignItems: 'center', borderRadius: 8 },
-  surveyOptionSelected: { borderColor: Colors.accent.primary, backgroundColor: 'rgba(57,255,20,0.1)', shadowColor: Colors.accent.primary, shadowOpacity: 0.5, shadowRadius: 10 },
+  surveyOptionSelected: { 
+    borderColor: Colors.accent.primary, 
+    backgroundColor: 'rgba(57,255,20,0.1)',
+    ...Shadows.accent
+  },
   surveyOptionText: { color: '#888', fontWeight: 'bold', fontFamily: 'monospace' },
   surveyOptionTextSelected: { color: Colors.accent.glow },
   startBtn: { marginTop: 60, backgroundColor: Colors.accent.primary, padding: 18, alignItems: 'center', borderRadius: 4, shadowColor: Colors.accent.glow, shadowOpacity: 0.6, shadowRadius: 15 },
@@ -470,11 +464,7 @@ const styles = StyleSheet.create({
     marginBottom: 20, 
     borderWidth: 1, 
     borderColor: '#222',
-    elevation: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8
+    ...Shadows.soft
   },
   cardHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 20 },
   iconBox: { width: 48, height: 48, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },

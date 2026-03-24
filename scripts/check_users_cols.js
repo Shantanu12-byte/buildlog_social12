@@ -4,7 +4,7 @@ const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYm
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 async function check() {
-  const { data, error } = await supabase.from('profiles').select('*').limit(1);
+  const { data, error } = await supabase.from('users').select('*').limit(1);
   if (data && data.length > 0) {
     console.log(Object.keys(data[0]));
   }

@@ -3,7 +3,7 @@
  * Frontend service for fetching automated GitHub project data.
  */
 
-const BACKEND_URL = 'http://localhost:5000'; // Update as needed for production
+const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL || 'http://localhost:5000'; // Fallback for development
 
 export interface GitHubProject {
   id: number;

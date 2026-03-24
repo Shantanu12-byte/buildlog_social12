@@ -27,6 +27,7 @@ interface DMRoom {
   other_user?: {
     id: string;
     username: string;
+    avatar_url?: string;
     public_key?: string;
   };
 }
@@ -58,6 +59,7 @@ export default function InboxScreen() {
   const [myKeys, setMyKeys] = useState<KeyPair | null>(null);
 
   const channelRef = useRef<any>(null);
+  const notifChannelRef = useRef<any>(null);
   const flatRef = useRef<FlatList>(null);
 
   const fetchUser = async () => {
@@ -102,7 +104,7 @@ export default function InboxScreen() {
 
     const { data: profileData } = await supabase
       .from('profiles')
-      .select('id, username, public_key')
+      .select('id, username, avatar_url, public_key')
       .in('id', Array.from(userIds));
 
     const profileMap = new Map(profileData?.map(p => [p.id, p]));
@@ -146,7 +148,7 @@ export default function InboxScreen() {
     if (existing) {
       const { data: pData } = await supabase
         .from('profiles')
-        .select('id, username, public_key')
+        .select('id, username, avatar_url, public_key')
         .in('id', [existing.user1_id, existing.user2_id]);
       const map = new Map(pData?.map(p => [p.id, p]));
 
@@ -174,7 +176,7 @@ export default function InboxScreen() {
       if (freshRoom) {
         const { data: pData } = await supabase
           .from('profiles')
-          .select('id, username, public_key')
+          .select('id, username, avatar_url, public_key')
           .in('id', [freshRoom.user1_id, freshRoom.user2_id]);
         const map = new Map(pData?.map(p => [p.id, p]));
         return { ...freshRoom, other_user: freshRoom.user1_id === user.id ? map.get(freshRoom.user2_id) : map.get(freshRoom.user1_id) };
@@ -201,6 +203,22 @@ export default function InboxScreen() {
         const room = await findOrCreateRoom(targetUserId);
         if (room) openRoom(room);
       }
+      setLoading(false);
+      
+      // Setup Real-time for Notifications (Scrolls)
+      if (notifChannelRef.current) supabase.removeChannel(notifChannelRef.current);
+      notifChannelRef.current = supabase
+        .channel(`notifs:${u.id}`)
+        .on('postgres_changes', { 
+          event: 'INSERT', 
+          schema: 'public', 
+          table: 'notifications', 
+          filter: `user_id=eq.${u.id}` 
+        },
+          payload => {
+            setScrolls(prev => [payload.new as SecretScroll, ...prev]);
+          }
+        ).subscribe();
     }
     setLoading(false);
   };
@@ -209,7 +227,7 @@ export default function InboxScreen() {
     if (!user) return [];
     const { data } = await supabase
       .from('dm_rooms')
-      .select('*, user1:profiles!user1_id(id, username, public_key), user2:profiles!user2_id(id, username, public_key)')
+      .select('*, user1:profiles!user1_id(id, username, avatar_url, public_key), user2:profiles!user2_id(id, username, avatar_url, public_key)')
       .or(`user1_id.eq.${user.id},user2_id.eq.${user.id}`);
     
     if (data) {
@@ -226,6 +244,11 @@ export default function InboxScreen() {
       if (channelRef.current) {
         supabase.removeChannel(channelRef.current).then(() => {
           channelRef.current = null;
+        });
+      }
+      if (notifChannelRef.current) {
+        supabase.removeChannel(notifChannelRef.current).then(() => {
+          notifChannelRef.current = null;
         });
       }
     };
@@ -319,7 +342,7 @@ export default function InboxScreen() {
           <TouchableOpacity onPress={() => setSelectedRoom(null)}>
             <Feather name="chevron-left" size={24} color={Colors.cyber.accent} />
           </TouchableOpacity>
-          <Avatar username={selectedRoom.other_user?.username || 'user'} size={32} style={{ marginHorizontal: 10 }} />
+          <Avatar username={selectedRoom.other_user?.username || 'user'} uri={selectedRoom.other_user?.avatar_url} size={32} style={{ marginHorizontal: 10 }} />
           <Text style={s.headerTitle}>{selectedRoom.other_user?.username.toUpperCase()}</Text>
         </View>
 
@@ -402,7 +425,7 @@ export default function InboxScreen() {
             </TouchableOpacity>
           ) : (
             <TouchableOpacity style={s.roomCard} onPress={() => openRoom(item)}>
-              <Avatar username={item.other_user?.username || 'u'} size={40} />
+              <Avatar username={item.other_user?.username || 'u'} uri={item.other_user?.avatar_url} size={40} />
               <View style={{ flex: 1, marginLeft: 15 }}>
                 <Text style={s.roomTitle}>{item.other_user?.username.toUpperCase()}</Text>
                 <Text style={s.roomLastMsg} numberOfLines={1}>{item.last_message || 'SECURE_CHANNEL_READY'}</Text>

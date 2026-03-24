@@ -7,17 +7,17 @@ import {
 import { useRouter } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { Colors, Typography, Spacing, Radius } from '@/constants/theme';
-import { FeedPostCard as PostCard, FeedPost as Post } from '@/components/FeedPostCard';
-import { LoadingScreen, EmptyState } from '@/components/ui/UI';
+import LogEntryFeedItem from '@/components/LogEntryFeedItem';
+import { LoadingScreen } from '@/components/ui/UI';
 import { Feather } from '@expo/vector-icons';
-import { checkRateLimit } from '@/lib/rateLimit';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function FeedScreen() {
   const router = useRouter();
   const { width } = useWindowDimensions();
   const isWeb = width > 768;
 
-  const [posts, setPosts] = useState<Post[]>([]);
+  const [posts, setPosts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [user, setUser] = useState<any>(null);
@@ -38,23 +38,7 @@ export default function FeedScreen() {
         schema: 'public', 
         table: 'posts' 
       }, async (payload) => {
-        // Fetch full profile info for the new post
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('username, avatar_url')
-          .eq('id', payload.new.user_id)
-          .single();
-          
-        const newPost = {
-          ...payload.new,
-          username: payload.new.username || profile?.username || 'builder',
-          userAvatar: profile?.avatar_url,
-        } as Post;
-        
-        setPosts(prev => {
-          if (prev.find(p => p.id === newPost.id)) return prev;
-          return [newPost, ...prev];
-        });
+        fetchPosts(true);
       })
       .subscribe();
 
@@ -70,7 +54,7 @@ export default function FeedScreen() {
 
   async function fetchPosts(reset = false) {
     if (reset) {
-      if (!refreshing) setLoading(true); // Don't show full loading screen on pull-to-refresh
+      if (!refreshing) setLoading(true);
       setPage(0);
       setHasMore(true);
     } else {
@@ -92,8 +76,12 @@ export default function FeedScreen() {
         const mapped = data.map((p: any) => ({
           ...p,
           username: p.users?.username || p.username || 'builder',
-          userAvatar: p.users?.avatar_url,
-          cheers: p.likes_count ?? 0,
+          avatar_url: p.users?.avatar_url,
+          // Map schema fields to component props
+          title: p.projectTitle || p.title || 'untitled project',
+          description: p.caption || p.description || 'show',
+          likes: p.likes_count ?? 0,
+          comments: p.comments ?? 0, // Using p.comments from schema
         }));
         setPosts(prev => reset ? mapped : [...prev, ...mapped]);
         setHasMore(data.length === PAGE_SIZE);
@@ -104,140 +92,105 @@ export default function FeedScreen() {
     } finally {
       if (reset) setLoading(false);
       setLoadingMore(false);
+      setRefreshing(false);
     }
   }
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     await fetchPosts(true);
-    setRefreshing(false);
   }, []);
 
-  async function handleLike(postId: string) {
+  const handleLike = async (postId: string) => {
     if (!user) return;
-    if (!checkRateLimit('like', 5, 10000)) { // 5 likes per 10 seconds
-      return;
+
+    // Optimistic UI update
+    setPosts(prev => prev.map(p => p.id === postId ? { 
+      ...p, 
+      likes: (p.likes || 0) + (p.isLiked ? -1 : 1), 
+      isLiked: !p.isLiked 
+    } : p));
+    
+    try {
+      const isCurrentlyLiked = posts.find(p => p.id === postId)?.isLiked;
+      
+      if (isCurrentlyLiked) {
+        // Unlike: Remove from likes table
+        await supabase
+          .from('likes')
+          .delete()
+          .eq('post_id', postId)
+          .eq('user_id', user.id);
+      } else {
+        // Like: Insert into likes table
+        await supabase
+          .from('likes')
+          .insert({ post_id: postId, user_id: user.id });
+      }
+    } catch (err) {
+      console.error('handleLike error:', err);
+      // Revert optimistic update on error
+      fetchPosts(true);
     }
-    const post = posts.find(p => p.id === postId) as any;
-    if (!post) return;
+  };
 
-    const alreadyLiked = post.liked_by_user;
+  const handleComment = (id: string) => {
+    router.push(`/post/${id}` as any);
+  };
 
-    setPosts(prev => prev.map(p => {
-      if (p.id === postId) {
-        return { 
-          ...p, 
-          liked_by_user: !alreadyLiked, 
-          cheers: (p.cheers ?? 0) + (alreadyLiked ? -1 : 1) 
-        } as any;
-      }
-      return p;
-    }));
-
-    if (alreadyLiked) {
-      await supabase
-        .from('likes')
-        .delete()
-        .match({ post_id: postId, user_id: user.id });
-    } else {
-      await supabase
-        .from('likes')
-        .insert({ post_id: postId, user_id: user.id });
-    }
-  }
-
-  function handleComment(postId: string) {
-    router.push(`/post/${postId}` as any);
-  }
-
-  if (loading) return <LoadingScreen />;
-
-  const renderFeed = () => (
-    <FlatList
-      data={posts}
-      keyExtractor={item => item.id}
-      showsVerticalScrollIndicator={false}
-      refreshControl={
-        <RefreshControl
-          refreshing={refreshing}
-          onRefresh={onRefresh}
-          tintColor={Colors.accent.primary}
-          colors={[Colors.accent.primary]}
-        />
-      }
-      ListHeaderComponent={() => (
-        <View>
-          {/* Trending Challenges Strip */}
-          <View style={s.challengeStrip}>
-            <Text style={s.stripTitle}>TRENDING CHALLENGES</Text>
-            <View style={s.challengeCards}>
-              {[
-                { title: 'Build REST API', count: 142, level: 'Beginner', color: Colors.pills.campus },
-                { title: 'Clone Netflix', count: 89, level: 'Mid', color: Colors.pills.challenge },
-                { title: 'E2EE Chat', count: 34, level: 'Hard', color: Colors.pills.building },
-              ].map((ch, i) => (
-                <TouchableOpacity key={i} style={s.challengeCard} activeOpacity={0.75}>
-                  <Text style={s.challengeTitle} numberOfLines={1}>{ch.title}</Text>
-                  <Text style={s.challengeCount}>{ch.count} building</Text>
-                  <View style={[s.levelPill, { backgroundColor: ch.color.bg, borderColor: ch.color.border }]}>
-                    <Text style={[s.levelText, { color: ch.color.text }]}>{ch.level}</Text>
-                  </View>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </View>
-        </View>
-      )}
-      ListEmptyComponent={
-        <EmptyState
-          title="No posts yet"
-          subtitle="Be the first to share what you're building"
-        />
-      }
-      renderItem={({ item }) => (
-        <PostCard
-          post={item}
-          onLikePress={handleLike}
-          onCommentPress={handleComment}
-        />
-      )}
-      onEndReached={() => fetchPosts()}
-      onEndReachedThreshold={0.5}
-      ListFooterComponent={
-        loadingMore ? (
-          <View style={{ padding: 20, alignItems: 'center' }}>
-            <ActivityIndicator color={Colors.accent.primary} />
-          </View>
-        ) : null
-      }
-    />
-  );
+  if (loading && !refreshing) return <LoadingScreen />;
 
   return (
     <SafeAreaView style={s.container}>
-      <StatusBar barStyle="light-content" backgroundColor={Colors.bg.primary} />
+      <StatusBar barStyle="light-content" backgroundColor="#090909" />
 
-      {!isWeb && (
-        <View style={s.topBar}>
-          <Text style={s.logo}>build<Text style={{ color: Colors.accent.primary }}>log</Text></Text>
-          <View style={s.topBarRight}>
-            <TouchableOpacity
-              style={s.iconBtn}
-              onPress={() => router.push('/search' as any)}
-            >
-              <Feather name="search" size={20} color={Colors.text.secondary} />
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={s.iconBtn}
-              onPress={() => router.push('/(stack)/messages' as any)}
-            >
-              <Feather name="message-square" size={20} color={Colors.text.secondary} />
-            </TouchableOpacity>
-          </View>
+      {/* Professional Header */}
+      <View style={s.topBar}>
+        <Text style={s.logo}>build<Text style={{ color: Colors.accent.primary }}>log</Text></Text>
+        <View style={s.topBarRight}>
+          <TouchableOpacity
+            style={s.iconBtn}
+            onPress={() => router.push('/(tabs)/search' as any)}
+          >
+            <Feather name="search" size={20} color={Colors.text.primary} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={s.iconBtn}
+            onPress={() => router.push('/(stack)/messages' as any)}
+          >
+            <Feather name="lock" size={20} color={Colors.text.primary} />
+          </TouchableOpacity>
         </View>
-      )}
+      </View>
 
-      {renderFeed()}
+      <FlatList
+        data={posts}
+        keyExtractor={item => item.id}
+        renderItem={({ item }) => (
+          <LogEntryFeedItem
+            post={{
+              ...item,
+              userAvatar: item.avatar_url // Map avatar_url to userAvatar for the component
+            }}
+            onHypePress={() => handleLike(item.id)}
+            onCommentPress={() => handleComment(item.id)}
+            onSharePress={() => {}}
+          />
+        )}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.accent.primary} />
+        }
+        onEndReached={() => fetchPosts()}
+        onEndReachedThreshold={0.5}
+        ListFooterComponent={
+          loadingMore ? (
+            <View style={{ padding: 20, alignItems: 'center' }}>
+              <ActivityIndicator color={Colors.accent.primary} />
+            </View>
+          ) : null
+        }
+      />
     </SafeAreaView>
   );
 }
@@ -245,174 +198,36 @@ export default function FeedScreen() {
 const s = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.bg.primary,
+    backgroundColor: '#090909',
   },
   topBar: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.md,
-    borderBottomWidth: 0.5,
-    borderBottomColor: Colors.border.subtle,
-    backgroundColor: Colors.bg.primary,
+    paddingHorizontal: Spacing.xl,
+    paddingVertical: Spacing.lg,
+    borderBottomWidth: 1,
+    borderBottomColor: '#1A1A1A',
+    backgroundColor: '#090909',
   },
   logo: {
     fontSize: Typography.sizes.xl,
-    fontWeight: '600',
+    fontWeight: '900',
     color: Colors.text.primary,
-    letterSpacing: -0.5,
+    letterSpacing: -1,
   },
   topBarRight: {
     flexDirection: 'row',
-    gap: Spacing.sm,
+    gap: Spacing.md,
   },
   iconBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: Colors.bg.secondary,
-    borderWidth: 0.5,
-    borderColor: Colors.border.default,
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: '#111',
     alignItems: 'center',
     justifyContent: 'center',
-  },
-
-  // Stories
-  storiesContainer: {
-    borderBottomWidth: 0.5,
-    borderBottomColor: Colors.border.subtle,
-    backgroundColor: Colors.bg.primary,
-  },
-  storiesList: {
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.md,
-    gap: Spacing.md,
-  },
-  storyItem: {
-    alignItems: 'center',
-    gap: 5,
-    width: 52,
-  },
-  storyRing: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    padding: 2,
-    backgroundColor: Colors.bg.tertiary,
-    borderWidth: 1.5,
-    borderColor: Colors.border.default,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  storyRingActive: {
-    borderColor: Colors.accent.primary,
-  },
-  storyName: {
-    color: Colors.text.tertiary,
-    fontSize: Typography.sizes.xs,
-    textAlign: 'center',
-  },
-
-  // Challenge strip
-  challengeStrip: {
-    padding: Spacing.lg,
-    backgroundColor: Colors.bg.primary,
-    borderBottomWidth: 0.5,
-    borderBottomColor: Colors.border.subtle,
-    marginBottom: 6,
-  },
-  stripTitle: {
-    color: Colors.text.tertiary,
-    fontSize: Typography.sizes.xs,
-    fontWeight: '500',
-    letterSpacing: 0.8,
-    marginBottom: Spacing.sm,
-  },
-  challengeCards: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  challengeCard: {
-    flex: 1,
-    backgroundColor: Colors.bg.secondary,
-    borderWidth: 0.5,
-    borderColor: Colors.border.subtle,
-    borderRadius: Radius.md,
-    padding: Spacing.md,
-  },
-  challengeTitle: {
-    color: Colors.text.primary,
-    fontSize: Typography.sizes.sm,
-    fontWeight: '500',
-    marginBottom: 3,
-  },
-  challengeCount: {
-    color: Colors.text.tertiary,
-    fontSize: Typography.sizes.xs,
-    marginBottom: 6,
-  },
-  levelPill: {
-    alignSelf: 'flex-start',
-    paddingHorizontal: 7,
-    paddingVertical: 2,
-    borderRadius: Radius.full,
-    borderWidth: 0.5,
-  },
-  levelText: {
-    fontSize: Typography.sizes.xs,
-    fontWeight: '500',
-  },
-
-  // Web layout
-  webContainer: {
-    flex: 1,
-    flexDirection: 'row',
-    backgroundColor: Colors.bg.primary,
-  },
-  sidebar: {
-    width: 220,
-    backgroundColor: Colors.bg.primary,
-    borderRightWidth: 0.5,
-    borderRightColor: Colors.border.subtle,
-    padding: Spacing.xl,
-    paddingTop: 48,
-  },
-  sidebarItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.md,
-    paddingVertical: Spacing.md,
-    paddingHorizontal: Spacing.sm,
-    borderRadius: Radius.md,
-    marginBottom: 4,
-  },
-  sidebarIcon: {
-    fontSize: 18,
-    color: Colors.text.secondary,
-    width: 24,
-    textAlign: 'center',
-  },
-  sidebarLabel: {
-    color: Colors.text.secondary,
-    fontSize: Typography.sizes.base,
-  },
-  sidebarUser: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.sm,
-    marginTop: 'auto',
-    paddingTop: Spacing.xl,
-    borderTopWidth: 0.5,
-    borderTopColor: Colors.border.subtle,
-  },
-  sidebarUserName: {
-    color: Colors.text.secondary,
-    fontSize: Typography.sizes.sm,
-    flex: 1,
-  },
-  webMain: {
-    flex: 1,
-    maxWidth: 680,
+    borderWidth: 1,
+    borderColor: '#222',
   },
 });

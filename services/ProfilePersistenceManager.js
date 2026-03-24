@@ -22,11 +22,12 @@ export async function updateProfileWithSkillsData(profile, newSkillData) {
     const trophyKey = `trophy_${topic}_${level}`;
     let newTrophy = null;
     
-    if (score === total) {
+    if (score === total && total > 0) {
       newTrophy = {
         id: trophyKey,
-        name: `${topic} ${level} Master`,
-        icon: "🏆",
+        topic: topic,
+        tier: level,
+        name: `${topic} ${level} Master 🏆`,
         awardedAt: new Date().toISOString(),
         description: `Achieved a perfect score in the BuildLog ${topic} ${level} Skills Lab!`
       };
@@ -34,7 +35,6 @@ export async function updateProfileWithSkillsData(profile, newSkillData) {
       const currentTrophiesJson = await AsyncStorage.getItem('user_trophies');
       const currentTrophies = currentTrophiesJson ? JSON.parse(currentTrophiesJson) : [];
       
-      // Prevent duplicate trophies
       if (!currentTrophies.some(t => t.id === trophyKey)) {
         currentTrophies.push(newTrophy);
         await AsyncStorage.setItem('user_trophies', JSON.stringify(currentTrophies));
@@ -49,5 +49,37 @@ export async function updateProfileWithSkillsData(profile, newSkillData) {
   } catch (error) {
     console.error('ProfilePersistenceManager Error:', error);
     return null;
+  }
+}
+
+/**
+ * Fetches localized repository cards for a user.
+ * Includes campus selection requirement for 'Campus communities' lock.
+ * @param {string} userId 
+ */
+export async function fetchUserProjects(userId) {
+  try {
+    const cachedRepos = await AsyncStorage.getItem(`repos_${userId}`);
+    let repos = cachedRepos ? JSON.parse(cachedRepos) : [];
+    
+    // Mocking campus lock logic
+    const userCampus = await AsyncStorage.getItem('user_selected_campus');
+    
+    if (!userCampus) {
+      return { 
+        error: 'CAMPUS_LOCK', 
+        message: 'Please select your campus community to unlock regional projects.' 
+      };
+    }
+
+    // Filter or tag repos based on campus
+    return repos.map(repo => ({
+      ...repo,
+      campusBadge: userCampus,
+      isPrivate: false
+    }));
+  } catch (error) {
+    console.error('fetchUserProjects Error:', error);
+    return [];
   }
 }

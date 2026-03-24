@@ -43,10 +43,20 @@ export const Colors = {
     dim: 'rgba(0, 255, 65, 0.1)',
   },
 
+  // RAG (Red, Amber, Green) for technical achievements
+  rag: {
+    success: { bg: 'rgba(35,134,54,0.15)', border: 'rgba(35,134,54,0.3)', text: '#3FB950' },
+    warning: { bg: 'rgba(210,153,34,0.15)', border: 'rgba(210,153,34,0.3)', text: '#D29922' },
+    error: { bg: 'rgba(248,81,70,0.15)', border: 'rgba(248,81,70,0.3)', text: '#F85146' },
+    neutral: { bg: 'rgba(139,148,158,0.15)', border: 'rgba(139,148,158,0.3)', text: '#8B949E' },
+  },
+
   github: {
     green: '#2EA043',
+    blue: '#388BFD',
     bg: '#0D1117',
     border: '#30363D',
+    text: '#C9D1D9',
   },
 
   // Flattened Aliases for backward compatibility
@@ -82,6 +92,7 @@ export const Shadows = {
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 2,
+    ...(Platform.OS === 'web' ? { boxShadow: '0 2px 4px rgba(0,0,0,0.1)' } : {})
   },
   accent: {
     shadowColor: '#00FF41',
@@ -89,6 +100,7 @@ export const Shadows = {
     shadowOpacity: 0.5,
     shadowRadius: 10,
     elevation: 5,
+    ...(Platform.OS === 'web' ? { boxShadow: '0 0 10px rgba(0, 255, 65, 0.5)' } : {})
   }
 };
 
