@@ -196,6 +196,30 @@ export default function CompleteProfileScreen() {
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [earnedBadges, setEarnedBadges] = useState<Badge[]>([]);
 
+  // ── Pre-fill Username from Auth Metadata ────────────────────
+  useEffect(() => {
+    const prefillFromAuth = async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user && !username) {
+          // GitHub often provides 'user_name' or 'full_name' in metadata
+          const raw = user.user_metadata?.user_name || user.user_metadata?.full_name || '';
+          if (raw) {
+            const clean = sanitizeUsername(raw);
+            if (clean.length >= 3) {
+              setUsername(clean);
+              setIsLoadingAvailability(true);
+              validateUsername(clean);
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('[CompleteProfile] Pre-fill error:', err);
+      }
+    };
+    prefillFromAuth();
+  }, []); // Run once on mount
+
   // ── Debounced Validation ────────────────────────────────────
   const validateUsername = useCallback(
     debounce(async (raw: string) => {
