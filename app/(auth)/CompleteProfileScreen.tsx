@@ -25,7 +25,7 @@ import { Button, Avatar, SectionHeader } from '../../components/ui/UI';
 import { sanitizeUsername, sanitizeBio, sanitizeUrl, isValidUsername } from '@/lib/sanitize';
 
 // ── Constants ────────────────────────────────────────────────
-const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL || 'http://localhost:5000';
+
 const CACHE_KEY = '@buildlog_username_cache';
 
 const ALL_STACKS = [
@@ -249,32 +249,34 @@ export default function CompleteProfileScreen() {
         return;
       }
 
-      // Call backend API
+      // Query Supabase directly (faster, no backend dependency)
       setUsernameStatus('checking');
       setIsLoadingAvailability(true);
 
       try {
-        const res = await fetch(`${BACKEND_URL}/api/user/validate-username`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ username: clean }),
-        });
+        const { data, error: dbError } = await supabase
+          .from('profiles')
+          .select('id')
+          .eq('username', clean)
+          .maybeSingle();
 
-        const json = await res.json();
-
-        if (!res.ok) {
-          setUsernameStatus('invalid');
+        if (dbError) {
+          console.error('[CompleteProfile] DB Validation Error:', dbError);
+          setUsernameStatus('error');
           setSuggestions([]);
-        } else if (json.available) {
-          setUsernameStatus('available');
-          setSuggestions([]);
-          await setCachedResult(clean, true);
-        } else {
+        } else if (data) {
+          // Found someone else with this username
           setUsernameStatus('taken');
           setSuggestions(generateSuggestions(clean));
           await setCachedResult(clean, false);
+        } else {
+          // No match -> available
+          setUsernameStatus('available');
+          setSuggestions([]);
+          await setCachedResult(clean, true);
         }
-      } catch {
+      } catch (err) {
+        console.error('[CompleteProfile] Validation exception:', err);
         setUsernameStatus('error');
         setSuggestions([]);
       } finally {
