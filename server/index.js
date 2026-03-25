@@ -8,7 +8,10 @@ const githubDataFixRoutes = require('./routes/githubDataFix');
 const campusCommunityRoutes = require('./routes/campusCommunity');
 const userOnboardingRoutes = require('./routes/userOnboarding');
 const userProfileRoutes = require('./routes/userRoutes');
+const pushNotificationRoutes = require('./routes/pushNotifications');
+const chatRoutes = require('./routes/chat');
 const { initChatService } = require('./ChatServiceController');
+const { initStreakReminder } = require('./cron/streakReminder');
 
 const app = express();
 const server = http.createServer(app);
@@ -23,13 +26,16 @@ app.use('/api/user/projects', githubPortfolioRoutes);
 app.use('/api/user/github', githubDataFixRoutes);
 app.use('/api/user/campus', campusCommunityRoutes);
 app.use('/api/user/profile', userProfileRoutes);
+app.use('/api/user/push', pushNotificationRoutes);
 app.use('/api/user', userOnboardingRoutes);
+app.use('/api/chat', chatRoutes);
 
 app.get('/health', (req, res) => {
   res.json({ status: 'ok' });
 });
 
 initChatService(server);
+initStreakReminder();
 
 server.listen(PORT, () => {
   console.log(`BuildLog Backend running on port ${PORT}`);

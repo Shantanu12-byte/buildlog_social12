@@ -1,245 +1,190 @@
-import React, { useEffect, useState } from 'react';
-import { 
-  View, Text, ScrollView, TouchableOpacity, 
-  StyleSheet, ActivityIndicator, Dimensions 
-} from 'react-native';
-import * as WebBrowser from 'expo-web-browser';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Feather, FontAwesome5 } from '@expo/vector-icons';
-import { Colors, Typography, Spacing, Radius } from '@/constants/theme';
+import React, { useEffect, useState, useRef } from 'react';
+import { View, ActivityIndicator } from 'react-native';
 
-const NEWS_CACHE_KEY = '@buildlog_news_cache';
+// Memory cache for news
+let newsCache: { data: NewsItem[], timestamp: number } | null = null;
 const CACHE_EXPIRY = 30 * 60 * 1000; // 30 minutes
-const { width } = Dimensions.get('window');
 
-interface NewsItem {
-  id: number;
+export interface NewsItem {
+  id: string | number;
   title: string;
   url: string;
   time: number;
   source: string;
   tag: string;
+  score?: number;
+  comments?: number;
+  text?: string;
+  description?: string;
+  canonical_url?: string; // For Dev.to fallback
 }
 
-function getSourceFromUrl(url: string): string {
-  if (!url) return 'Hacker News';
-  try {
-    const domain = url.split('/')[2];
-    return domain.startsWith('www.') ? domain.slice(4) : domain;
-  } catch {
-    return 'Web';
-  }
+const DEVTO_TAGS = [
+  'javascript', 'webdev', 'react', 'python',
+  'ai', 'opensource', 'devops', 'programming',
+  'typescript', 'beginners', 'career', 'node'
+];
+
+const BASE_DEVTO = 'https://dev.to/api/articles';
+
+function isStrictlyDevRelated(story: { title: string }) {
+  const title = story.title.toLowerCase();
+  
+  // FIX 7 - Stricter Filtering
+  if (title.split(' ').length <= 1) return false;
+  if (title.length < 20) return false;
+  
+  const BLACKLIST_KEYWORDS = [
+    'exercise', 'tutorial', 'quiz', 'problem', 'solution', 
+    'practice', 'homework', 'assignment', 'query', 'sql console'
+  ];
+  if (BLACKLIST_KEYWORDS.some(kw => title.includes(kw))) return false;
+
+  const STRICT_DEV_KEYWORDS = [
+    'javascript', 'typescript', 'python', 'rust', 'golang', 'react', 'vue', 'nextjs', 'nodejs',
+    'css', 'html', 'tailwind', 'api', 'github', 'git', 'coding', 'programming', 'devops',
+    'docker', 'kubernetes', 'aws', 'llm', 'gpt', 'claude', 'gemini', 'ai model', 'machine learning'
+  ];
+  return STRICT_DEV_KEYWORDS.some(kw => title.includes(kw));
 }
 
-function getTagFromTitle(title: string): string {
+function isBlacklisted(url?: string) {
+  if (!url) return false;
+  const NEWS_SITE_BLACKLIST = ['bbc', 'cnn', 'guardian', 'nytimes', 'reuters', 'bloomberg'];
+  return NEWS_SITE_BLACKLIST.some(site => url.toLowerCase().includes(site));
+}
+
+function getCategory(title: string) {
   const t = title.toLowerCase();
-  if (t.includes('ai') || t.includes('gpt') || t.includes('llm') || t.includes('open-ai')) return 'AI';
-  if (t.includes('web') || t.includes('js') || t.includes('react') || t.includes('browser')) return 'Web';
-  if (t.includes('opensource') || t.includes('open source') || t.includes('github')) return 'Open Source';
+  if (t.match(/llm|gpt|claude|gemini|ai model|machine learning|neural/)) return 'AI/ML';
+  if (t.match(/react|vue|angular|css|html|frontend|nextjs/)) return 'Web Dev';
+  if (t.match(/github|open source|repository|git/)) return 'Open Source';
+  if (t.match(/docker|kubernetes|aws|devops|linux|cloud/)) return 'DevOps';
+  if (t.match(/python|rust|golang|java|typescript|javascript/)) return 'Languages';
   return 'Dev';
 }
 
-function formatTimeAgo(timestamp: number): string {
-  const diffInSeconds = Math.floor(Date.now() / 1000 - timestamp);
-  if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}m ago`;
-  if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)}h ago`;
-  return `${Math.floor(diffInSeconds / 86400)}d ago`;
+function normalizeHN(d: any): NewsItem {
+  const source = d.url ? d.url.split('/')[2].replace('www.', '') : 'Hacker News';
+  return {
+    id: d.id,
+    title: d.title,
+    url: d.url || `https://news.ycombinator.com/item?id=${d.id}`,
+    time: d.time,
+    source: source,
+    tag: getCategory(d.title),
+    score: d.score,
+    comments: d.descendants,
+    description: d.text || ''
+  };
 }
 
-export default function DevNewsFeed() {
-  const [news, setNews] = useState<NewsItem[]>([]);
-  const [loading, setLoading] = useState(true);
+function normalizeDevTo(d: any): NewsItem {
+  return {
+    id: `devto-${d.id}`,
+    title: d.title,
+    url: d.url,
+    canonical_url: d.canonical_url,
+    time: Math.floor(new Date(d.published_at).getTime() / 1000),
+    source: 'dev.to',
+    tag: getCategory(d.title),
+    score: d.public_reactions_count, // Dev.to reactions
+    comments: d.comments_count,
+    description: d.description
+  };
+}
+
+export default function DevNewsFeed({ 
+  onOpenReader,
+  onRefreshStart,
+  onRefreshEnd,
+  forceRefreshKey = 0
+}: { 
+  onOpenReader?: (data: NewsItem[], updatedText?: string) => void,
+  onRefreshStart?: () => void,
+  onRefreshEnd?: () => void,
+  forceRefreshKey?: number
+}) {
+  const [loading, setLoading] = useState(false);
+  const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
-    loadNews();
+    loadAllNews();
+    intervalRef.current = setInterval(() => loadAllNews(true), CACHE_EXPIRY) as unknown as NodeJS.Timeout;
+    return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
   }, []);
 
-  const loadNews = async () => {
+  useEffect(() => { if (forceRefreshKey > 0) loadAllNews(true); }, [forceRefreshKey]);
+
+  const loadAllNews = async (force: boolean = false) => {
+    if (loading) return;
     try {
-      const cachedData = await AsyncStorage.getItem(NEWS_CACHE_KEY);
-      if (cachedData) {
-        const { data, timestamp } = JSON.parse(cachedData);
-        if (Date.now() - timestamp < CACHE_EXPIRY) {
-          setNews(data);
-          setLoading(false);
-          return;
-        }
+      if (!force && newsCache && (Date.now() - newsCache.timestamp < CACHE_EXPIRY)) {
+        if (onOpenReader) onOpenReader(newsCache.data);
+        return;
       }
-      fetchFromHN();
-    } catch (e) {
-      fetchFromHN();
+      setLoading(true);
+      if (onRefreshStart) onRefreshStart();
+      const news = await fetchFreshNews();
+      newsCache = { data: news, timestamp: Date.now() };
+      if (onOpenReader) onOpenReader(news, "Updated just now");
+      if (onRefreshEnd) onRefreshEnd();
+      setLoading(false);
+    } catch (err) {
+      console.error('loadAllNews error:', err);
+      setLoading(false);
+      if (onRefreshEnd) onRefreshEnd();
     }
   };
 
-  const fetchFromHN = async () => {
+  const fetchFreshNews = async (): Promise<NewsItem[]> => {
     try {
-      const res = await fetch('https://hacker-news.firebaseio.com/v0/topstories.json');
-      const ids = await res.json();
-      const top10 = ids.slice(0, 10);
+      // 1. Fetch from Dev.to tags separately
+      const urls = DEVTO_TAGS.map(tag => `${BASE_DEVTO}?tag=${tag}&top=1&per_page=5`);
+      const devToResults = await Promise.all(urls.map(u => fetch(u).then(r => r.json())));
+      const devToItems = devToResults.flat()
+        .filter(d => (d.public_reactions_count || d.positive_reactions_count || 0) >= 5)
+        .map(normalizeDevTo)
+        .filter(d => isStrictlyDevRelated(d));
 
-      const items = await Promise.all(
-        top10.map(async (id: number) => {
+      // 2. Fetch from HN with 50+ upvote quality filter
+      const hnRes = await fetch('https://hacker-news.firebaseio.com/v0/topstories.json');
+      const hnIds = await hnRes.json();
+      const hnTop50 = hnIds.slice(0, 50);
+
+      const hnItemsRaw = await Promise.all(
+        hnTop50.map(async (id: number) => {
           const itemRes = await fetch(`https://hacker-news.firebaseio.com/v0/item/${id}.json`);
-          const d = await itemRes.json();
-          return {
-            id: d.id,
-            title: d.title,
-            url: d.url || `https://news.ycombinator.com/item?id=${d.id}`,
-            time: d.time,
-            source: getSourceFromUrl(d.url),
-            tag: getTagFromTitle(d.title),
-          };
+          return itemRes.json();
         })
       );
 
-      setNews(items);
-      setLoading(false);
-      
-      // Save to cache
-      await AsyncStorage.setItem(NEWS_CACHE_KEY, JSON.stringify({
-        data: items,
-        timestamp: Date.now()
-      }));
+      const hnItems = hnItemsRaw
+        .filter(d => d && d.score >= 50 && isStrictlyDevRelated(d) && !isBlacklisted(d.url))
+        .map(normalizeHN);
+
+      // 3. Merge and Deduplicate
+      const merged = [...devToItems, ...hnItems];
+      merged.sort((a, b) => b.time - a.time);
+
+      const seenTitles = new Set();
+      const finalNews: NewsItem[] = [];
+
+      for (const item of merged) {
+        const normalizedTitle = item.title.toLowerCase().trim().slice(0, 40);
+        if (!seenTitles.has(normalizedTitle)) {
+          seenTitles.add(normalizedTitle);
+          finalNews.push(item);
+        }
+        if (finalNews.length >= 25) break;
+      }
+
+      return finalNews;
     } catch (err) {
-      console.error('Fetch news error:', err);
-      setLoading(false);
+      console.error('fetchFreshNews error:', err);
+      return [];
     }
   };
 
-  const handleOpenNews = (url: string) => {
-    WebBrowser.openBrowserAsync(url);
-  };
-
-  if (loading) {
-    return (
-      <View style={s.loaderSection}>
-        <ActivityIndicator color="#FF6600" />
-        <Text style={s.loaderText}>FETCHING_TECH_PULSE...</Text>
-      </View>
-    );
-  }
-
-  return (
-    <View style={s.container}>
-      <View style={s.headerRow}>
-        <Text style={s.title}>TODAY_IN_TECH</Text>
-        <Feather name="trending-up" size={14} color="#FF6600" />
-      </View>
-      <ScrollView 
-        horizontal 
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={s.scrollContent}
-        snapToInterval={width * 0.8 + 15}
-        decelerationRate="fast"
-      >
-        {news.map((item) => (
-          <TouchableOpacity 
-            key={item.id} 
-            style={s.card} 
-            activeOpacity={0.8}
-            onPress={() => handleOpenNews(item.url)}
-          >
-            <View style={s.cardHeader}>
-              <View style={s.tagPill}>
-                <Text style={s.tagText}>{item.tag.toUpperCase()}</Text>
-              </View>
-              <Text style={s.timeText}>{formatTimeAgo(item.time)}</Text>
-            </View>
-            <Text style={s.newsTitle} numberOfLines={2}>{item.title}</Text>
-            <View style={s.cardFooter}>
-              <Feather name="globe" size={10} color="#888" style={{ marginRight: 4 }} />
-              <Text style={s.sourceText}>{item.source}</Text>
-            </View>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
-    </View>
-  );
+  return null;
 }
-
-const s = StyleSheet.create({
-  container: {
-    paddingVertical: Spacing.lg,
-    backgroundColor: '#090909',
-  },
-  headerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: Spacing.xl,
-    marginBottom: Spacing.md,
-    gap: 8,
-  },
-  title: {
-    fontFamily: 'monospace',
-    fontSize: 12,
-    fontWeight: '800',
-    color: '#FF6600',
-    letterSpacing: 1.5,
-  },
-  loaderSection: {
-    height: 140,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-  },
-  loaderText: {
-    fontFamily: 'monospace',
-    fontSize: 10,
-    color: '#888',
-  },
-  scrollContent: {
-    paddingHorizontal: Spacing.xl,
-    gap: 15,
-  },
-  card: {
-    width: width * 0.8,
-    backgroundColor: '#151515',
-    borderRadius: 16,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: '#222',
-  },
-  cardHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 8,
-  },
-  tagPill: {
-    backgroundColor: 'rgba(255,102,0,0.1)',
-    borderRadius: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderWidth: 0.5,
-    borderColor: 'rgba(255,102,0,0.3)',
-  },
-  tagText: {
-    color: '#FF6600',
-    fontSize: 9,
-    fontWeight: 'bold',
-    fontFamily: 'monospace',
-  },
-  timeText: {
-    color: '#666',
-    fontSize: 10,
-    fontFamily: 'monospace',
-  },
-  newsTitle: {
-    color: '#FFF',
-    fontSize: 15,
-    fontWeight: '700',
-    lineHeight: 20,
-    marginBottom: 12,
-  },
-  cardFooter: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 'auto',
-  },
-  sourceText: {
-    color: '#888',
-    fontSize: 11,
-    fontFamily: 'monospace',
-    textDecorationLine: 'underline',
-  },
-});

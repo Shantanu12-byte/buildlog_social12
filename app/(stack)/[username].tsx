@@ -183,6 +183,18 @@ export default function PublicProfileScreen() {
             sender_id: user.id,
             metadata: { username: user.user_metadata?.username }
           });
+
+          // Trigger Web Push Notification
+          if (Platform.OS === 'web') {
+            fetch(`${BACKEND_URL}/api/user/push/notify/follow`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                targetUserId: profile.id,
+                followerUsername: user.user_metadata?.username || 'Someone',
+              }),
+            }).catch(e => console.error('Push Notify Error (Follow):', e));
+          }
         }
       }
     } catch (err) {

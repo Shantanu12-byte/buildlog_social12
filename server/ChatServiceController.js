@@ -1,4 +1,5 @@
 const { Server } = require("socket.io");
+const { cleanText, isFiltered } = require("./utils/contentFilter");
 
 const ALLOWED_CAMPUSES = ['ram_meghe_eng', 'sipna_eng'];
 
@@ -47,7 +48,17 @@ function initChatService(server) {
     socket.on('sendMessage', ({ groupId, message, userId }) => {
       // Validate the user is in the room
       if (socket.rooms.has(groupId)) {
-        io.to(groupId).emit('newMessage', { groupId, message, userId, timestamp: new Date() });
+        // Apply Zero-Cost Profanity Filter
+        const filteredMessage = cleanText(message);
+        const wasFiltered = isFiltered(message);
+
+        io.to(groupId).emit('newMessage', { 
+          groupId, 
+          message: filteredMessage, 
+          userId, 
+          wasFiltered, // Metadata flag for frontend feedback
+          timestamp: new Date() 
+        });
       } else {
         socket.emit('error_alert', { message: 'You must join the group before sending messages.' });
       }

@@ -90,6 +90,21 @@ export default function MainFeed() {
 
       if (error) throw error;
       
+      // Trigger Web Push Notification
+      const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL || 'http://localhost:5000';
+      const currentUser = (await supabase.auth.getUser()).data.user;
+      if (currentUser && Platform.OS === 'web') {
+        fetch(`${BACKEND_URL}/api/user/push/notify/hype`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            targetUserId: post.user_id, // Trending posts view might have user_id or author_id
+            hypedByUsername: currentUser.user_metadata?.username || 'Someone',
+            postTitle: post.title || 'a post',
+          }),
+        }).catch(e => console.error('Push Notify Error (Hype):', e));
+      }
+      
     } catch (error) {
       console.error('Error liking post:', error);
       // Revert optimistic update on error

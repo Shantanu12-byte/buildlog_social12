@@ -91,10 +91,29 @@ export default function NewPostScreen() {
     setIsUploading(true);
     isCurrentlyUploading.current = true;
 
+    // 1. Zero-Cost Profanity Filter Bridge (Local Node Backend)
+    let processedCaption = caption.trim();
+    let wasFiltered = false;
+
+    try {
+      const filterResponse = await fetch('http://localhost:5000/api/chat/clean', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: caption.trim() })
+      });
+      const filterData = await filterResponse.json();
+      if (filterData.wasFiltered) {
+        processedCaption = filterData.cleaned;
+        wasFiltered = true;
+      }
+    } catch (e) {
+      console.warn('Content filter service unavailable, using raw caption.');
+    }
+
     try {
       if (!user) throw new Error('Auth session lost. Please login again.');
 
-      // 1. Process and Upload Image
+      // 2. Process and Upload Image
       const processedImage = await processImage(imageUri);
       const response = await fetch(processedImage.uri);
       const blob = await response.blob();
@@ -111,7 +130,7 @@ export default function NewPostScreen() {
         .from('post-images')
         .getPublicUrl(filePath);
 
-      // 2. Insert Post
+      // 3. Insert Post
       const selectedProject = projects.find(p => p.id === selectedProjectId);
       
       const { error: insertError } = await supabase
@@ -123,13 +142,21 @@ export default function NewPostScreen() {
           project_id: selectedProjectId,
           projectTitle: selectedProject?.title || '', // Match camelCase schema
           image_url: publicUrl,
-          caption: githubUrl.trim() ? `${caption.trim()}\n\n🔗 ${githubUrl.trim()}` : caption.trim(),
+          caption: githubUrl.trim() ? `${processedCaption}\n\n🔗 ${githubUrl.trim()}` : processedCaption,
         });
 
       if (insertError) throw insertError;
 
-      Alert.alert('Post Success', 'Your log entry has been broadcasted.');
-      router.replace('/(tabs)');
+      if (wasFiltered) {
+        Alert.alert(
+          'Community Guidelines',
+          'Keep it professional, Builder! Your caption was filtered to follow community guidelines.',
+          [{ text: 'Got it', onPress: () => router.replace('/(tabs)') }]
+        );
+      } else {
+        Alert.alert('Post Success', 'Your log entry has been broadcasted.');
+        router.replace('/(tabs)');
+      }
     } catch (error: any) {
       console.error('Post failed:', error);
       Alert.alert('Post Failed', error.message || 'An error occurred during verification.');

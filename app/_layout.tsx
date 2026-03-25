@@ -11,6 +11,7 @@ import { WebSidebar } from '@/components/WebSidebar';
 import { MinecraftLoader } from '@/components/MinecraftLoader';
 import { Colors } from '@/constants/theme';
 import { AuthProvider, useAuth } from '@/context/AuthContext';
+import { registerPushNotifications } from '@/lib/push-notifications';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import * as Notifications from 'expo-notifications';
@@ -146,7 +147,9 @@ function InnerRootLayout() {
       const inAuthGroup = segs.includes('(auth)');
 
       if (!session) {
-        if (!inAuthGroup) {
+        // Allow public access to /u/[username]
+        const isPublicRoute = segs[0] === 'u';
+        if (!inAuthGroup && !isPublicRoute) {
           router.replace('/(auth)/login');
         }
       } else {
@@ -162,6 +165,10 @@ function InnerRootLayout() {
           // Sync local context with database status
           if (profile && profile.onboarding_complete !== isOnboardingFinished) {
             updateOnboardingStatus(!!profile.onboarding_complete);
+          }
+
+          if (profile?.id && Platform.OS === 'web') {
+            registerPushNotifications(profile.id);
           }
 
           const isOnboarded = !!profile?.onboarding_complete;
