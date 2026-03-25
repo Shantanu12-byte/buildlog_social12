@@ -36,6 +36,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const updateOnboardingStatus = (status: boolean) => {
     setIsOnboardingFinished(status);
+    AsyncStorage.setItem('onboarding_complete', status ? 'true' : 'false').catch(e => 
+      console.error('Error saving onboarding status:', e)
+    );
   };
 
   return (

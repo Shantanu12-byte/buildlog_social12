@@ -48,7 +48,8 @@ export default function NewPostScreen() {
       
       if (!error && data) {
         setProjects(data);
-        if (data.length > 0) setSelectedProjectId(data[0].id);
+        // Default to null (Generic Log) to satisfy the "post without project" requirement
+        setSelectedProjectId(null);
       }
     } catch (e) {
       console.error('Init error:', e);
@@ -82,10 +83,8 @@ export default function NewPostScreen() {
 
   const handlePost = async () => {
     if (isCurrentlyUploading.current) return;
-    console.log('handlePost triggered');
-    if (!imageUri || !caption.trim() || !selectedProjectId) {
-      console.log('Incomplete fields:', { imageUri, caption: !!caption.trim(), selectedProjectId });
-      Alert.alert('Incomplete Log', 'Please select a project, add proof (image), and write a summary.');
+    if (!imageUri || !caption.trim()) {
+      Alert.alert('Incomplete Log', 'Please add proof (image) and write a summary.');
       return;
     }
 
@@ -93,7 +92,6 @@ export default function NewPostScreen() {
     isCurrentlyUploading.current = true;
 
     try {
-      console.log('User check...', user?.id);
       if (!user) throw new Error('Auth session lost. Please login again.');
 
       // 1. Process and Upload Image
@@ -181,6 +179,14 @@ export default function NewPostScreen() {
                 showsHorizontalScrollIndicator={false}
                 contentContainerStyle={s.projectList}
               >
+                <TouchableOpacity 
+                  onPress={() => setSelectedProjectId(null)}
+                  style={[s.projectCard, selectedProjectId === null && s.projectCardActive]}
+                >
+                  <Text style={[s.projectTitle, selectedProjectId === null && { color: '#000' }]}>
+                    GENERIC_LOG
+                  </Text>
+                </TouchableOpacity>
                 {projects.map(p => (
                   <TouchableOpacity 
                     key={p.id}
@@ -195,6 +201,14 @@ export default function NewPostScreen() {
               </ScrollView>
             ) : (
               <View style={s.noProjectsContainer}>
+                <TouchableOpacity 
+                  onPress={() => setSelectedProjectId(null)}
+                  style={[s.projectCard, selectedProjectId === null && s.projectCardActive, { marginBottom: 12 }]}
+                >
+                  <Text style={[s.projectTitle, selectedProjectId === null && { color: '#000' }]}>
+                    GENERIC_LOG (SELECTED)
+                  </Text>
+                </TouchableOpacity>
                 <Text style={s.noneText}>NO_ACTIVE_PROJECTS_FOUND</Text>
                 <TouchableOpacity 
                   style={s.createProjectBtn}

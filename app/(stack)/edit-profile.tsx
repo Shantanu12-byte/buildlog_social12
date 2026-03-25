@@ -21,6 +21,7 @@ export default function EditProfileScreen() {
   const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [userId, setUserId] = useState<string | null>(null);
+  const [originalUsername, setOriginalUsername] = useState('');
   const [skills, setSkills] = useState('');
   const [selectedLanguages, setSelectedLanguages] = useState<string[]>([]);
   const { updateUserProfile } = useUserStore();
@@ -55,6 +56,7 @@ export default function EditProfileScreen() {
           console.error('Error fetching profile:', profileError);
         } else if (profile) {
           setUsername(profile.username || '');
+          setOriginalUsername(profile.username || '');
           setBio(profile.bio || '');
           setGithubUrl(profile.github_url || '');
           setLinkedinUrl(profile.linkedin_url || '');
@@ -111,13 +113,11 @@ export default function EditProfileScreen() {
   };
 
   const handleSave = async () => {
-    console.log('🔘 BUTTON_CLICKED: SAVE_PROFILE pressed');
     if (!username.trim()) {
       Alert.alert('Error', 'Username cannot be empty');
       return;
     }
 
-    console.log('💾 PROFILE_SAVE_START: Initiating characterize update...');
     setIsSaving(true);
     try {
       let finalAvatarUrl = avatarUrl;
@@ -125,7 +125,6 @@ export default function EditProfileScreen() {
       // 1. Handle Avatar Upload if it's a new local image
       const isNewLocalImage = avatarUrl && (avatarUrl.startsWith('file://') || avatarUrl.startsWith('blob:') || avatarUrl.startsWith('data:'));
       if (isNewLocalImage) {
-        console.log('📸 AVATAR_UPLOAD: Compressing and processing image...');
         const processedImage = await processImage(avatarUrl);
         const response = await fetch(processedImage.uri);
         const blob = await response.blob();
@@ -145,14 +144,12 @@ export default function EditProfileScreen() {
         finalAvatarUrl = urlData.publicUrl;
       }
 
-      console.log('📸 AVATAR_COMPLETE: Final URL:', finalAvatarUrl);
 
       const skillsArray = skills.split(',')
         .map(skill => skill.trim())
         .filter(skill => skill.length > 0);
 
       // 2. Update Global State (Store handles DB sync internally)
-      console.log('🔄 SYNC_START: Updating character data in global store...');
       await updateUserProfile({
         username: username.trim(),
         bio: bio.trim(),
@@ -163,9 +160,18 @@ export default function EditProfileScreen() {
         languages: selectedLanguages,
       });
       
-      console.log('✨ SYNC_COMPLETE: Profile logic finished.');
 
-      Alert.alert('QUEST_UPDATED', 'CHARACTER_DATA_SYNCED', [{ text: 'OK', onPress: () => router.back() }]);
+      Alert.alert('QUEST_UPDATED', 'CHARACTER_DATA_SYNCED', [{ 
+        text: 'OK', 
+        onPress: () => {
+          if (username.trim() !== originalUsername && originalUsername !== '') {
+            // Username changed — navigate to new profile URL
+            router.replace({ pathname: '/profile/[username]', params: { username: username.trim() } } as any);
+          } else {
+            router.back();
+          }
+        } 
+      }]);
     } catch (error: any) {
       console.error('Save error:', error);
       Alert.alert('Error', error.message || 'Failed to save profile');

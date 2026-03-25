@@ -5,7 +5,7 @@ import {
   RefreshControl, Image, Modal, FlatList,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { Colors, Typography, Spacing, Radius, Shadows } from '@/constants/theme';
 import { Avatar, LoadingScreen } from '@/components/ui/UI';
@@ -15,6 +15,7 @@ import { GitHubProject } from '@/services/githubPortfolio';
 import { ProfilePortfolioController } from '@/services/ProfilePortfolioController';
 import LogEntryFeedItem from '@/components/LogEntryFeedItem';
 import { fetchUserProjects } from '@/services/ProfilePersistenceManager';
+import { useUserStore } from '@/store/userStore';
 
 // ─── Constants & Colors ─────────────────────────────────────────
 const PROFILE_BG = '#0F0F0B'; // Premium deep black/brown tint
@@ -23,7 +24,7 @@ const ACCENT_PURPLE = '#5D3FD3';
 
 export default function ProfileScreen() {
   const router = useRouter();
-  
+  const { userProfile, fetchUserProfile: syncStore } = useUserStore();
   const [profile, setProfile] = useState<any>(null);
   const [stats, setStats] = useState({ projects: 0, builds: 0, followers: 0, collabs: 0, streak: 0, timeSpent: 0 });
   const [loading, setLoading] = useState(true);
@@ -38,6 +39,7 @@ export default function ProfileScreen() {
   const [followersModalVisible, setFollowersModalVisible] = useState(false);
   const [followersList, setFollowersList] = useState<any[]>([]);
   const [followersLoading, setFollowersLoading] = useState(false);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
   const fetchProfileData = useCallback(async () => {
     try {
@@ -47,45 +49,47 @@ export default function ProfileScreen() {
         router.replace('/(auth)/login');
         return;
       }
+      setCurrentUserId(user.id);
       
       // Initial fallback to metadata to prevent 'builder' flicker
       if (!profile && user.user_metadata?.username) {
         setProfile({ username: user.user_metadata.username });
       }
 
-      // Single Consolidated Query: Profile + Stats + Recent Posts
-      // This replaces 7 individual REST calls with 1.
-      const { data, error } = await supabase
+      // 1. Fetch Core Profile
+      const { data: profileData, error: profileError } = await supabase
         .from('profiles')
-        .select(`
-          *,
-          posts_count:posts(count),
-          builds_count:quest_logs(count),
-          following_count:followers!follower_id(count),
-          followers_count:followers!following_id(count),
-          recent_posts:posts(*)
-        `)
+        .select('*')
         .eq('id', user.id)
-        .order('created_at', { foreignTable: 'posts', ascending: false })
-        .limit(30, { foreignTable: 'posts' })
-        .single();
+        .maybeSingle();
       
-      if (error) throw error;
+      if (profileError) throw profileError;
       
-      if (data) {
-        setProfile(data);
-        if (data.verified_skills) {
-          setVerifiedSkills(data.verified_skills);
+      if (profileData) {
+        setProfile(profileData);
+        // Sync with global store if it's the current user
+        if (profileData.id === user.id) {
+           useUserStore.getState().fetchUserProfile(); 
         }
-        setPosts(data.recent_posts || []);
+        if (profileData.verified_skills) {
+          setVerifiedSkills(profileData.verified_skills);
+        }
+
+        // 2. Parallel Secondary Fetches (Counts & Posts)
+        // Split because DB schema may lack formal foreign key relationships for auto-joins
+        const [postsRes, followersRes, followingRes] = await Promise.all([
+          supabase.from('posts').select('*', { count: 'exact' }).eq('author_id', user.id).order('created_at', { ascending: false }).limit(30),
+          supabase.from('followers').select('id', { count: 'exact' }).eq('following_id', user.id),
+          supabase.from('followers').select('id', { count: 'exact' }).eq('follower_id', user.id),
+        ]);
+
+        if (postsRes.data) setPosts(postsRes.data);
         
-        // Map stats from the nested count arrays
         setStats(prev => ({
           ...prev,
-          projects: data.posts_count?.[0]?.count || 0,
-          builds: data.builds_count?.[0]?.count || 0,
-          followers: data.followers_count?.[0]?.count || 0,
-          following: data.following_count?.[0]?.count || 0, // Using internal state mapping
+          projects: postsRes.count || 0,
+          followers: followersRes.count || 0,
+          following: followingRes.count || 0,
           streak: prev.streak, // Preserve local streak
           timeSpent: prev.timeSpent
         }));
@@ -143,7 +147,6 @@ export default function ProfileScreen() {
           setGithubProjects(repoData.projects || []);
         }
       } catch (repoErr) {
-        console.log('GitHub sync skipping:', repoErr);
       } finally {
         setIsSyncingGithub(false);
       }
@@ -155,6 +158,12 @@ export default function ProfileScreen() {
       setRefreshing(false);
     }
   }, [router]);
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchProfileData();
+    }, [fetchProfileData])
+  );
 
   useEffect(() => {
     fetchProfileData();
@@ -214,9 +223,18 @@ export default function ProfileScreen() {
 
   if (loading) return <LoadingScreen />;
 
-  const userMetadata = profile?.user_metadata || (profile as any)?._user_metadata;
-  const displayName = profile?.full_name || userMetadata?.full_name || profile?.username || userMetadata?.username || 'Builder';
-  const username = profile?.username || userMetadata?.username || 'builder';
+  // Prioritize store for current user to enable instant updates
+  const isOwnProfile = (profile?.id === currentUserId) || (!profile && currentUserId);
+  // Merged profile, ensuring we don't overwrite a valid avatar_url with null from stale store
+  const activeProfile = isOwnProfile ? { 
+    ...profile, 
+    ...userProfile,
+    avatar_url: userProfile?.avatar_url || profile?.avatar_url 
+  } : profile;
+
+  const userMetadata = activeProfile?.user_metadata || (activeProfile as any)?._user_metadata;
+  const displayName = activeProfile?.full_name || userMetadata?.full_name || activeProfile?.username || userMetadata?.username || 'Builder';
+  const username = activeProfile?.username || userMetadata?.username || 'builder';
 
   return (
     <SafeAreaView style={s.container}>
@@ -241,8 +259,8 @@ export default function ProfileScreen() {
         {/* Identity */}
         <View style={s.identity}>
           <Avatar 
-            username={profile?.username || 'builder'} 
-            uri={profile?.avatar_url}
+            username={activeProfile?.username || 'builder'} 
+            uri={activeProfile?.avatar_url}
             size={90} 
             style={s.avatar} 
           />
@@ -250,21 +268,21 @@ export default function ProfileScreen() {
           <Text style={s.handleText}>@{username}</Text>
           
           <Text style={s.bioText}>
-            {profile?.bio || 'Building the future, one core at a time.'}
+            {activeProfile?.bio || 'Building the future, one core at a time.'}
           </Text>
 
           {/* Social Pills */}
           <View style={s.socialRow}>
             <TouchableOpacity 
               style={[s.socialPill, { backgroundColor: 'rgba(93, 63, 211, 0.1)' }]}
-              onPress={() => profile?.github_url && Linking.openURL(profile.github_url)}
+              onPress={() => activeProfile?.github_url && Linking.openURL(activeProfile.github_url)}
             >
               <FontAwesome5 name="github" size={14} color={ACCENT_PURPLE} />
               <Text style={[s.socialText, { color: ACCENT_PURPLE }]}>GitHub</Text>
             </TouchableOpacity>
             <TouchableOpacity 
               style={[s.socialPill, { backgroundColor: 'rgba(52, 211, 153, 0.1)' }]}
-              onPress={() => profile?.linkedin_url && Linking.openURL(profile.linkedin_url)}
+              onPress={() => activeProfile?.linkedin_url && Linking.openURL(activeProfile.linkedin_url)}
             >
               <FontAwesome5 name="linkedin" size={14} color="#34D399" />
               <Text style={[s.socialText, { color: '#34D399' }]}>LinkedIn</Text>
@@ -275,7 +293,7 @@ export default function ProfileScreen() {
           <View style={s.campusSection}>
             <View style={s.campusInfo}>
               <Text style={s.campusLabel}>CAMPUS</Text>
-              <Text style={s.campusValue}>{profile?.campus_name || 'Not Joined'}</Text>
+              <Text style={s.campusValue}>{activeProfile?.campus_name || 'Not Joined'}</Text>
             </View>
           </View>
         </View>
@@ -310,10 +328,6 @@ export default function ProfileScreen() {
           <TouchableOpacity style={s.actionBtnHalf} onPress={() => router.push('/(stack)/edit-profile')}>
             <Feather name="edit-2" size={16} color={ACCENT_PURPLE} />
             <Text style={s.actionBtnText}>Edit</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={s.actionBtnHalf} onPress={() => router.push('/devcard')}>
-            <FontAwesome5 name="id-card" size={16} color={ACCENT_PURPLE} />
-            <Text style={s.actionBtnText}>Card</Text>
           </TouchableOpacity>
         </View>
 
@@ -526,7 +540,7 @@ export default function ProfileScreen() {
                     }}
                     activeOpacity={0.8}
                   >
-                    <Avatar username={item.username} uri={item.avatar_url} size={44} />
+                    <Avatar username={item.username} uri={item.avatar_url || null} size={44} /> {/* Removed UI-Avatars fallback */}
                     <View style={s.followerInfo}>
                       <Text style={s.followerName}>@{item.username}</Text>
                       {item.bio ? <Text style={s.followerBio} numberOfLines={1}>{item.bio}</Text> : null}

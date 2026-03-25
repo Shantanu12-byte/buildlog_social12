@@ -6,6 +6,8 @@ const githubAuthRoutes = require('./routes/githubAuth');
 const githubPortfolioRoutes = require('./routes/githubPortfolio');
 const githubDataFixRoutes = require('./routes/githubDataFix');
 const campusCommunityRoutes = require('./routes/campusCommunity');
+const userOnboardingRoutes = require('./routes/userOnboarding');
+const userProfileRoutes = require('./routes/userRoutes');
 const { initChatService } = require('./ChatServiceController');
 
 const app = express();
@@ -20,6 +22,8 @@ app.use('/api/auth/github', githubAuthRoutes);
 app.use('/api/user/projects', githubPortfolioRoutes);
 app.use('/api/user/github', githubDataFixRoutes);
 app.use('/api/user/campus', campusCommunityRoutes);
+app.use('/api/user/profile', userProfileRoutes);
+app.use('/api/user', userOnboardingRoutes);
 
 app.get('/health', (req, res) => {
   res.json({ status: 'ok' });

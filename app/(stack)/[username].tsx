@@ -25,6 +25,8 @@ export default function PublicProfileScreen() {
     builds: 0,
     followers: 0,
     hypes: 0,
+    forks: 0,
+    stars: 0,
   });
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -32,55 +34,101 @@ export default function PublicProfileScreen() {
   const [isOwner, setIsOwner] = useState(false);
   const [isFollowing, setIsFollowing] = useState(false);
   const [followLoading, setFollowLoading] = useState(false);
+  const [badges, setBadges] = useState<any[]>([]);
+  const [portfolio, setPortfolio] = useState<any[]>([]);
+  const [insight, setInsight] = useState('');
+
+  const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL || 'http://localhost:5000';
 
   const fetchProfileData = useCallback(async () => {
     if (!username) return;
     
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      
-      // 1. Fetch Profile by Username
-      const { data: prof, error: pErr } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('username', username)
-        .single();
-      
-      if (pErr || !prof) {
-        setNotFound(true);
-        setLoading(false);
-        return;
+
+      // ── Try consolidated backend API first (cached, single call) ──
+      let apiSuccess = false;
+      try {
+        const res = await fetch(`${BACKEND_URL}/api/user/profile/${username}`);
+        if (res.ok) {
+          const payload = await res.json();
+          setProfile(payload.user);
+          setStats({
+            projects: payload.stats.projects.value,
+            builds: payload.stats.builds.value,
+            followers: payload.stats.followers.value,
+            hypes: payload.stats.hypes.value,
+            forks: payload.stats.forks.value,
+            stars: payload.stats.stars.value,
+          });
+          setBadges(payload.badges || []);
+          setPortfolio(payload.portfolio || []);
+          setInsight(payload.insight || '');
+
+          if (user?.id === payload.user.id) {
+            setIsOwner(true);
+          } else if (user?.id) {
+            const { data: followData } = await supabase
+              .from('followers')
+              .select('id')
+              .eq('follower_id', user.id)
+              .eq('following_id', payload.user.id)
+              .maybeSingle();
+            setIsFollowing(!!followData);
+          }
+          apiSuccess = true;
+        } else if (res.status === 404) {
+          setNotFound(true);
+          setLoading(false);
+          return;
+        }
+      } catch {
+        // Backend unavailable — fall through to direct Supabase
       }
 
-      setProfile(prof);
-      if (user?.id === prof.id) {
-        setIsOwner(true);
-      } else if (user?.id) {
-        // 1.1 Check if already following
-        const { data: followData } = await supabase
-          .from('followers')
-          .select('id')
-          .eq('follower_id', user.id)
-          .eq('following_id', prof.id)
-          .maybeSingle();
+      // ── Fallback: direct Supabase queries ──
+      if (!apiSuccess) {
+        const { data: prof, error: pErr } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('username', username)
+          .single();
         
-        setIsFollowing(!!followData);
+        if (pErr || !prof) {
+          setNotFound(true);
+          setLoading(false);
+          return;
+        }
+
+        setProfile(prof);
+        if (user?.id === prof.id) {
+          setIsOwner(true);
+        } else if (user?.id) {
+          const { data: followData } = await supabase
+            .from('followers')
+            .select('id')
+            .eq('follower_id', user.id)
+            .eq('following_id', prof.id)
+            .maybeSingle();
+          setIsFollowing(!!followData);
+        }
+
+        const [projRes, buildsRes, followersRes, hypesRes] = await Promise.all([
+          supabase.from('posts').select('id', { count: 'exact', head: true }).eq('user_id', prof.id),
+          supabase.from('quest_logs').select('id', { count: 'exact', head: true }).eq('user_id', prof.id),
+          supabase.from('followers').select('id', { count: 'exact', head: true }).eq('following_id', prof.id),
+          supabase.from('likes').select('id', { count: 'exact', head: true }).eq('post_owner_id', prof.id),
+        ]);
+
+        setStats({
+          projects: projRes.count || 0,
+          builds: buildsRes.count || 0,
+          followers: followersRes.count || 0,
+          hypes: hypesRes.count || 0,
+          forks: prof?.fork_count || 0,
+          stars: prof?.star_count || 0,
+        });
       }
-
-      // 2. Fetch Stats
-      const [projRes, buildsRes, followersRes, hypesRes] = await Promise.all([
-        supabase.from('posts').select('id', { count: 'exact', head: true }).eq('user_id', prof.id),
-        supabase.from('quest_logs').select('id', { count: 'exact', head: true }).eq('user_id', prof.id),
-        supabase.from('followers').select('id', { count: 'exact', head: true }).eq('following_id', prof.id),
-        supabase.from('likes').select('id', { count: 'exact', head: true }).eq('post_owner_id', prof.id),
-      ]);
-
-      setStats({
-        projects: projRes.count || 0,
-        builds: buildsRes.count || 0,
-        followers: followersRes.count || 0,
-        hypes: hypesRes.count || 0,
-      });
     } catch (err: any) {
       console.error('Error fetching public profile:', err.message);
     } finally {
@@ -206,7 +254,27 @@ export default function PublicProfileScreen() {
             <StatItem label="Builds" value={stats.builds} />
             <StatItem label="Followers" value={stats.followers} />
             <StatItem label="⚡ Hypes" value={stats.hypes} />
+            <StatItem label="⑂ Forks" value={stats.forks} />
+            <StatItem label="★ Stars" value={stats.stars} />
           </View>
+
+          {/* Badges */}
+          {badges.length > 0 && (
+            <View style={s.badgesSection}>
+              {badges.map((b: any) => (
+                <View key={b.id} style={s.badgeChip}>
+                  <Text style={s.badgeIcon}>{b.icon}</Text>
+                  <Text style={s.badgeLabel}>{b.label}</Text>
+                  {b.tier && <Text style={s.badgeTier}>{b.tier.toUpperCase()}</Text>}
+                </View>
+              ))}
+            </View>
+          )}
+
+          {/* Insight */}
+          {insight !== '' && (
+            <Text style={s.insightText}>{insight}</Text>
+          )}
 
           {isOwner ? (
             <TouchableOpacity 
@@ -343,4 +411,19 @@ const s = StyleSheet.create({
   notFoundSub: { color: '#666', fontSize: 14, marginTop: 10, textAlign: 'center', paddingHorizontal: 40 },
   backBtn: { marginTop: 30, backgroundColor: '#333', paddingHorizontal: 24, paddingVertical: 12, borderRadius: 12 },
   backBtnText: { color: '#FFF', fontWeight: '700' },
+
+  // Badges
+  badgesSection: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 16, justifyContent: 'center' },
+  badgeChip: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    backgroundColor: 'rgba(93, 63, 211, 0.1)', borderWidth: 1,
+    borderColor: 'rgba(93, 63, 211, 0.25)', borderRadius: 999,
+    paddingHorizontal: 10, paddingVertical: 4,
+  },
+  badgeIcon: { fontSize: 14 },
+  badgeLabel: { color: ACCENT_PURPLE, fontSize: 11, fontWeight: '700' },
+  badgeTier: { color: '#666', fontSize: 9, fontWeight: '800', letterSpacing: 0.5, marginLeft: 2 },
+
+  // Insight
+  insightText: { color: '#888', fontSize: 12, fontStyle: 'italic', textAlign: 'center', marginTop: 12, paddingHorizontal: 10, lineHeight: 18 },
 });

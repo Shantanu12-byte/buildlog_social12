@@ -20,7 +20,6 @@ export default function LoginScreen() {
   const router = useRouter();
 
   // ── State (preserved) ─────────────────────────────────────
-  const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -29,7 +28,7 @@ export default function LoginScreen() {
 
   // ── Auth Logic (preserved) ─────────────────────────────────
   async function handleAuth() {
-    if (!email || !password || (mode === 'signup' && !username)) {
+    if (!email || !password) {
       setError('Please fill in all fields');
       return;
     }
@@ -66,20 +65,9 @@ export default function LoginScreen() {
         const { data, error } = await supabase.auth.signUp({ 
           email, 
           password,
-          options: {
-            data: { username: username.toLowerCase().trim() } // Store in user metadata
-          }
         });
         if (error) throw error;
         
-        // Optionally create profile entry immediately if metadata-trigger is not set up
-        if (data.user) {
-          await supabase.from('profiles').insert({
-            id: data.user.id,
-            username: username.toLowerCase().trim(),
-          });
-        }
-
         router.replace('/(auth)/CompleteProfileScreen' as any);
       }
     } catch (err: any) {
@@ -146,15 +134,6 @@ export default function LoginScreen() {
 
           {/* Form */}
           <View style={s.form}>
-            {mode === 'signup' && (
-              <Input
-                label="Username"
-                value={username}
-                onChangeText={setUsername}
-                placeholder="username"
-                autoCapitalize="none"
-              />
-            )}
             <Input
               label="Email"
               value={email}

@@ -8,15 +8,15 @@ const supabase = createClient(supabaseUrl, supabaseAnonKey);
 async function checkTables() {
   console.log('--- TABLE AUDIT ---');
   
-  const tables = ['profiles', 'followers', 'notifications', 'dm_rooms', 'messages', 'posts', 'quest_logs'];
-  
-  for (const table of tables) {
-    const { data, error, count } = await supabase.from(table).select('id', { count: 'exact', head: true }).limit(1);
-    if (error) {
-      console.log(`[ ] ${table}: ERROR (${error.message})`);
-    } else {
-      console.log(`[x] ${table}: OK (Count: ${count})`);
-    }
+  const { data, error } = await supabase.from('posts').select('*').limit(1).single();
+  if (error) {
+    console.log(`[ ] posts: ERROR (${error.message})`);
+  } else {
+    console.log('[x] posts: OK');
+    console.log('--- COLUMNS ---');
+    Object.keys(data).forEach(key => console.log(key));
+    console.log('--- SAMPLE DATA ---');
+    console.log(JSON.stringify(data, null, 2));
   }
 }
 

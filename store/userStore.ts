@@ -27,6 +27,7 @@ interface UserState {
   userProfile: UserProfile | null;
   userId: string | null;
   isLoading: boolean;
+  profileFetched: boolean; // Flag to prevent infinite fetch loops
   isEnderMode: boolean;
   fetchUserProfile: () => Promise<void>;
   updateUserProfile: (profile: Partial<UserProfile>) => Promise<void>;
@@ -39,6 +40,7 @@ export const useUserStore = create<UserState>((set, get) => ({
   userProfile: null,
   userId: null,
   isLoading: false,
+  profileFetched: false,
   isEnderMode: false,
 
   fetchUserProfile: async () => {
@@ -61,9 +63,13 @@ export const useUserStore = create<UserState>((set, get) => ({
       
       if (data) {
         set({ userProfile: data });
+      } else {
+        set({ userProfile: null });
       }
+      set({ profileFetched: true });
     } catch (error) {
       console.error("fetchUserProfile Error:", error);
+      set({ profileFetched: true }); // Even on error, we mark as fetched to stop loop
     } finally {
       set({ isLoading: false });
     }
@@ -73,8 +79,11 @@ export const useUserStore = create<UserState>((set, get) => ({
     const currentProfile = get().userProfile;
     if (!currentProfile) return;
 
+    // Redundant cache-busting removed (handled in Avatar component)
+    let finalData = { ...newData };
+
     // Optimistic Update
-    const updatedProfile = { ...currentProfile, ...newData };
+    const updatedProfile = { ...currentProfile, ...finalData };
     set({ userProfile: updatedProfile });
 
     try {
@@ -85,6 +94,34 @@ export const useUserStore = create<UserState>((set, get) => ({
         });
 
       if (error) throw error;
+      
+      // Sync Auth Metadata
+      await supabase.auth.updateUser({
+        data: { 
+          username: updatedProfile.username,
+          avatar_url: updatedProfile.avatar_url 
+        }
+      });
+
+      // Invalidate Backend Cache (Both old and new if renamed)
+      try {
+        const backendUrl = process.env.EXPO_PUBLIC_BACKEND_URL || 'http://localhost:5000';
+        const usernamesToInvalidate = [updatedProfile.username];
+        if (currentProfile.username && currentProfile.username !== updatedProfile.username) {
+          usernamesToInvalidate.push(currentProfile.username);
+        }
+
+        await Promise.all(usernamesToInvalidate.map(name => 
+          fetch(`${backendUrl}/api/user/profile/invalidate`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username: name }),
+          })
+        ));
+        console.log(`🚀 AUTH_SYNC_COMPLETE & CACHE_CLEARED: ${usernamesToInvalidate.join(', ')}`);
+      } catch (cacheErr) {
+        console.warn("Backend cache invalidation failed (non-critical):", cacheErr);
+      }
     } catch (error) {
       console.error("updateUserProfile Error:", error);
       throw error; // Re-throw for UI error handling
@@ -112,5 +149,5 @@ export const useUserStore = create<UserState>((set, get) => ({
     }
   },
 
-  clearUser: () => set({ userProfile: null, userId: null }),
+  clearUser: () => set({ userProfile: null, userId: null, profileFetched: false }),
 }));

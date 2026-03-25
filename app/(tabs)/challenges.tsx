@@ -15,7 +15,7 @@ import TutorModal from '@/components/TutorModal';
 import { getTutoringFeedback } from '@/services/TutorController';
 import { manageLanguageProgress } from '@/services/AsyncProgressManager';
 
-export default function LearnScreen() {
+export default function ChallengesScreen() {
   const { userProfile, updateUserProfile } = useUserStore();
   const [loading, setLoading] = useState(true);
   
@@ -117,13 +117,9 @@ export default function LearnScreen() {
     const questions = (COURSE_DATA as any)[topic]?.[level];
     
     if (!questions) {
-      Alert.alert('Module Unavailable', `We are still compiling the ${topic} ${level} modules. Try HTML, CSS or Python!`);
+      Alert.alert('Quest Unavailable', `We are still compiling the ${topic} ${level} challenges.`);
       return;
     }
-
-    // Complexity mapping: 1 for Beginner, 2 for Pro, 3 for Expert
-    const complexity = level === 'Beginner' ? '1' : level === 'Pro' ? '2' : '3';
-    console.log(`Starting ${topic} ${level} (Complexity: ${complexity})`);
 
     setLearningFocus(topic);
     setSkillLevel(level);
@@ -228,7 +224,7 @@ export default function LearnScreen() {
     return (
       <View style={styles.center}>
         <ActivityIndicator size="large" color={Colors.accent.primary} />
-        <Text style={styles.loadingText}>Compiling Modules...</Text>
+        <Text style={styles.loadingText}>Loading Quests...</Text>
       </View>
     );
   }
@@ -238,7 +234,7 @@ export default function LearnScreen() {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.dashboardContainer}>
-          <Text style={styles.headerTitle}>CHOOSE YOUR PATH</Text>
+          <Text style={styles.headerTitle}>DARE TO CHALLENGE</Text>
           <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 60 }}>
             {TOPICS.map((topic, index) => {
               const bgBeg = learningStats[`${topic}_Beginner`] || 0;
@@ -263,11 +259,11 @@ export default function LearnScreen() {
                     onPress={() => startRound(topic, 'Beginner')}
                   >
                     <View style={[styles.iconBox, { backgroundColor: `${color}20` }]}>
-                      <Feather name={(TOPIC_ICONS as any)[topic]} size={24} color={color} />
+                      <FontAwesome5 name={(TOPIC_ICONS as any)[topic]} size={20} color={color} />
                     </View>
                     <View style={{ flex: 1, marginLeft: 16 }}>
                       <Text style={styles.cardTopicTitle}>{topic}</Text>
-                      <Text style={styles.cardTopicSub}>{overall}% Overall Progress</Text>
+                      <Text style={styles.cardTopicSub}>{overall}% XP Earned</Text>
                     </View>
                     <View style={styles.overallRing}>
                       <Text style={[styles.overallText, { color }]}>{overall}%</Text>
@@ -309,10 +305,10 @@ export default function LearnScreen() {
     return (
       <SafeAreaView style={styles.center}>
         <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
-          <Feather name={roundScore === 5 ? "star" : "award"} size={80} color={roundScore === 5 ? Colors.accent.glow : "#888"} />
+          <Feather name={roundScore === 5 ? "zap" : "award"} size={80} color={roundScore === 5 ? Colors.accent.glow : "#888"} />
         </Animated.View>
         <Text style={[styles.title, { marginTop: Spacing.xl }]}>
-          {roundScore === 5 ? "PERFECT SCORE!" : "ROUND COMPLETE"}
+          {roundScore === 5 ? "CHALLENGE CONQUERED!" : "QUEST COMPLETE"}
         </Text>
         <Text style={styles.subtitle}>You scored {roundScore}/5 in {learningFocus} {skillLevel}.</Text>
         
@@ -320,7 +316,7 @@ export default function LearnScreen() {
           style={styles.nextBtnCorrect} 
           onPress={() => { setLearningFocus(null); setSkillLevel(null); }}
         >
-          <Text style={styles.submitBtnText}>BACK TO DASHBOARD</Text>
+          <Text style={styles.submitBtnText}>RETURN TO QUESTS</Text>
         </TouchableOpacity>
 
         {showConfetti && (
@@ -350,7 +346,7 @@ export default function LearnScreen() {
         >
             <Feather name="arrow-left" size={24} color="#888" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>{learningFocus} • {skillLevel}</Text>
+        <Text style={styles.headerTitle}>{learningFocus} QUEST • {skillLevel}</Text>
         <AnimatedProgressBar progress={questionIndex / 5} />
       </View>
 
@@ -384,13 +380,13 @@ export default function LearnScreen() {
             <View style={styles.feedbackContainer}>
               {isCorrect ? (
                 <>
-                  <Text style={styles.feedbackCorrectTitle}>Correct!</Text>
-                  <Text style={styles.feedbackText}>Module processed successfully.</Text>
+                  <Text style={styles.feedbackCorrectTitle}>Success!</Text>
+                  <Text style={styles.feedbackText}>Knowledge verified.</Text>
                 </>
               ) : (
                 <>
-                  <Text style={styles.feedbackWrongTitle}>Incorrect</Text>
-                  <Text style={styles.feedbackText}>The correct answer was: {currentQ.options[currentQ.answer]}</Text>
+                  <Text style={styles.feedbackWrongTitle}>Failed</Text>
+                  <Text style={styles.feedbackText}>Correct syntax: {currentQ.options[currentQ.answer]}</Text>
                 </>
               )}
             </View>
@@ -408,7 +404,7 @@ export default function LearnScreen() {
             }}
             disabled={!selectedOption}
           >
-            <Text style={styles.submitBtnText}>SUBMIT ANSWER</Text>
+            <Text style={styles.submitBtnText}>VERIFY ANSWER</Text>
           </TouchableOpacity>
         ) : (
           <TouchableOpacity 
@@ -416,7 +412,7 @@ export default function LearnScreen() {
             onPress={handleNext}
           >
             <Text style={styles.submitBtnText}>
-              {questionIndex === 4 ? "FINISH ROUND" : "NEXT QUESTION"}
+              {questionIndex === 4 ? "COMPLETE QUEST" : "NEXT CHALLENGE"}
             </Text>
           </TouchableOpacity>
         )}
@@ -440,17 +436,6 @@ const styles = StyleSheet.create({
   title: { fontSize: 22, fontWeight: '800', color: '#FFF', fontFamily: 'monospace', textAlign: 'center' },
   subtitle: { fontSize: 13, color: '#888', textAlign: 'center', marginTop: Spacing.sm, fontFamily: 'monospace' },
   
-  surveyContainer: { flex: 1, padding: Spacing.xl, justifyContent: 'center' },
-  surveyHeader: { color: Colors.accent.glow, textAlign: 'center', letterSpacing: 4, fontSize: 12, marginBottom: 40, fontFamily: 'monospace' },
-  optionsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.md, marginTop: Spacing.lg, justifyContent: 'center' },
-  surveyOption: { paddingHorizontal: 16, paddingVertical: 14, borderWidth: 1, borderColor: '#333', backgroundColor: '#111', width: '45%', alignItems: 'center', borderRadius: 8 },
-  surveyOptionSelected: { 
-    borderColor: Colors.accent.primary, 
-    backgroundColor: 'rgba(57,255,20,0.1)',
-    ...Shadows.accent
-  },
-  surveyOptionText: { color: '#888', fontWeight: 'bold', fontFamily: 'monospace' },
-  surveyOptionTextSelected: { color: Colors.accent.glow },
   startBtn: { marginTop: 60, backgroundColor: Colors.accent.primary, padding: 18, alignItems: 'center', borderRadius: 4, shadowColor: Colors.accent.glow, shadowOpacity: 0.6, shadowRadius: 15 },
   startBtnText: { color: '#000', fontWeight: '900', fontSize: 16, letterSpacing: 2, fontFamily: 'monospace' },
   btnDisabled: { opacity: 0.5, shadowOpacity: 0 },
@@ -467,7 +452,7 @@ const styles = StyleSheet.create({
     ...Shadows.soft
   },
   cardHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 20 },
-  iconBox: { width: 48, height: 48, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
+  iconBox: { width: 44, height: 44, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
   cardTopicTitle: { color: '#FFF', fontSize: 18, fontWeight: '800', letterSpacing: 1 },
   cardTopicSub: { color: '#666', fontSize: 13, marginTop: 2 },
   overallRing: { width: 45, height: 45, borderRadius: 22.5, borderWidth: 2, borderColor: '#222', justifyContent: 'center', alignItems: 'center' },
@@ -481,9 +466,7 @@ const styles = StyleSheet.create({
 
   // Header
   header: { padding: Spacing.lg, borderBottomWidth: 1, borderBottomColor: '#1A1A1A', justifyContent: 'center' },
-  headerTitle: { color: '#888', fontSize: 12, fontWeight: '800', fontFamily: 'monospace', textAlign: 'center', marginBottom: Spacing.md, letterSpacing: 2 },
-  progressBar: { height: 4, backgroundColor: '#222', width: '100%', borderRadius: 2, overflow: 'hidden' },
-  progressFill: { height: '100%', backgroundColor: Colors.accent.primary },
+  headerTitle: { color: '#888', fontSize: 11, fontWeight: '800', fontFamily: 'monospace', textAlign: 'center', marginBottom: Spacing.md, letterSpacing: 2 },
   
   // Card
   scrollContent: { padding: Spacing.lg, paddingBottom: 100 },
@@ -497,27 +480,21 @@ const styles = StyleSheet.create({
   cardCorrect: { borderColor: '#1D9E75' },
   cardWrong: { borderColor: '#FF4444' },
 
-  questionText: { color: '#FFF', fontSize: 20, fontWeight: '700', lineHeight: 28 },
+  questionText: { color: '#FFF', fontSize: 18, fontWeight: '700', lineHeight: 26 },
   
   // Multiple Choice
   mcqContainer: { gap: Spacing.md, marginTop: Spacing.xl },
-  mcqBtn: { backgroundColor: '#1A1A1A', padding: 18, borderRadius: 12, borderWidth: 1, borderColor: '#333' },
-  mcqBtnSelected: { borderColor: Colors.accent.primary, backgroundColor: 'rgba(57,255,20,0.05)' },
-  mcqBtnCorrect: { borderColor: '#1D9E75', backgroundColor: 'rgba(29,158,117,0.1)' },
-  mcqBtnWrong: { borderColor: '#FF4444', backgroundColor: 'rgba(255,68,68,0.1)' },
-  mcqBtnText: { color: '#AAA', fontSize: 16, fontWeight: '600' },
-  mcqBtnTextSelected: { color: '#FFF' },
-
+  
   // Feedback
   feedbackContainer: { marginTop: Spacing.xl, padding: Spacing.lg, backgroundColor: '#0A0A0A', borderRadius: 8, borderWidth: 1, borderColor: '#222' },
-  feedbackCorrectTitle: { color: '#1D9E75', fontSize: 18, fontWeight: 'bold', fontFamily: 'monospace', marginBottom: 8 },
-  feedbackWrongTitle: { color: '#FF4444', fontSize: 18, fontWeight: 'bold', fontFamily: 'monospace', marginBottom: 8 },
-  feedbackText: { color: '#CCC', fontSize: 14, lineHeight: 20 },
+  feedbackCorrectTitle: { color: '#1D9E75', fontSize: 16, fontWeight: 'bold', fontFamily: 'monospace', marginBottom: 8 },
+  feedbackWrongTitle: { color: '#FF4444', fontSize: 16, fontWeight: 'bold', fontFamily: 'monospace', marginBottom: 8 },
+  feedbackText: { color: '#CCC', fontSize: 13, lineHeight: 18 },
 
   // Footer Buttons
   footer: { padding: Spacing.xl, backgroundColor: '#0A0A0A', borderTopWidth: 1, borderTopColor: '#222' },
   submitBtn: { backgroundColor: Colors.accent.primary, padding: 18, alignItems: 'center', borderRadius: 30 },
-  submitBtnText: { color: '#000', fontSize: 16, fontWeight: '900', letterSpacing: 1, fontFamily: 'monospace' },
+  submitBtnText: { color: '#000', fontSize: 15, fontWeight: '900', letterSpacing: 1, fontFamily: 'monospace' },
   nextBtnCorrect: { backgroundColor: '#1D9E75', padding: 18, alignItems: 'center', borderRadius: 30 },
   nextBtnWrong: { backgroundColor: '#FF4444', padding: 18, alignItems: 'center', borderRadius: 30 },
 });

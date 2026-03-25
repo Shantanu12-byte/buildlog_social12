@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Image } from 'expo-image';
 import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import { Colors, Typography, Spacing, Radius } from '../constants/theme';
+import UsernameLink from './UsernameLink';
 
 /**
  * LogEntryFeedItem - Professional 'Cyber-Noir' Project Card
@@ -48,7 +49,7 @@ export default function LogEntryFeedItem({
           />
         </View>
         <View style={s.headerInfo}>
-          <Text style={s.username}>{username}</Text>
+          <UsernameLink username={username} size="md" showBadge />
           <View style={s.metaRow}>
             <Text style={s.timestamp}>{timestamp}</Text>
             <View style={s.dot} />

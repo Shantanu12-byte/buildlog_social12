@@ -8,6 +8,7 @@ import { useRouter } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { Colors, Typography, Spacing, Radius } from '@/constants/theme';
 import LogEntryFeedItem from '@/components/LogEntryFeedItem';
+import DevNewsFeed from '@/components/DevNewsFeed';
 import { LoadingScreen } from '@/components/ui/UI';
 import { Feather } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -67,7 +68,7 @@ export default function FeedScreen() {
     try {
       const { data, error } = await supabase
         .from('trending_posts')
-        .select('*, users:user_id(username, avatar_url)')
+        .select('*, profiles:author_id(username, avatar_url)')
         .range(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE - 1);
 
       if (error) throw error;
@@ -75,13 +76,14 @@ export default function FeedScreen() {
       if (data) {
         const mapped = data.map((p: any) => ({
           ...p,
-          username: p.users?.username || p.username || 'builder',
-          avatar_url: p.users?.avatar_url,
+          username: p.profiles?.username || p.username || 'builder',
+          avatar_url: p.profiles?.avatar_url || p.avatar_url,
+          userAvatar: p.profiles?.avatar_url || p.avatar_url, // Explicit for FeedPostCard
           // Map schema fields to component props
           title: p.projectTitle || p.title || 'untitled project',
           description: p.caption || p.description || 'show',
           likes: p.likes_count ?? 0,
-          comments: p.comments ?? 0, // Using p.comments from schema
+          comments: p.comments ?? 0,
         }));
         setPosts(prev => reset ? mapped : [...prev, ...mapped]);
         setHasMore(data.length === PAGE_SIZE);
@@ -148,18 +150,6 @@ export default function FeedScreen() {
       <View style={s.topBar}>
         <Text style={s.logo}>build<Text style={{ color: Colors.accent.primary }}>log</Text></Text>
         <View style={s.topBarRight}>
-          <TouchableOpacity
-            style={s.iconBtn}
-            onPress={() => router.push('/(tabs)/search' as any)}
-          >
-            <Feather name="search" size={20} color={Colors.text.primary} />
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={s.iconBtn}
-            onPress={() => router.push('/(stack)/messages' as any)}
-          >
-            <Feather name="lock" size={20} color={Colors.text.primary} />
-          </TouchableOpacity>
         </View>
       </View>
 
@@ -177,6 +167,7 @@ export default function FeedScreen() {
             onSharePress={() => {}}
           />
         )}
+        ListHeaderComponent={<DevNewsFeed />}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.accent.primary} />

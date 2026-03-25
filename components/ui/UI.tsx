@@ -7,7 +7,7 @@
 import React from 'react';
 import {
   View, Text, TouchableOpacity, TextInput,
-  StyleSheet, ActivityIndicator, ViewStyle, TextStyle,
+  StyleSheet, ActivityIndicator, ViewStyle, TextStyle, Platform,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { Colors, Typography, Spacing, Radius, getAvatarColor, getInitials } from '../../constants/theme';
@@ -23,6 +23,27 @@ interface AvatarProps {
 }
 export function Avatar({ username, uri, size = 36, style }: AvatarProps) {
   const colors = getAvatarColor(username);
+  const [error, setError] = React.useState(false);
+
+  // Add cache-busting timestamp to Supabase URLs
+  const finalUri = React.useMemo(() => {
+    if (!uri || !uri.includes('supabase.co/storage/v1/object/public/avatars/')) return uri;
+    const separator = uri.includes('?') ? '&' : '?';
+    return `${uri}${separator}t=${Date.now()}`;
+  }, [uri]);
+
+  React.useEffect(() => {
+    if (finalUri) {
+      console.log(`[Avatar] Rendering for ${username}:`, finalUri.substring(0, 100));
+    }
+  }, [finalUri, username]);
+
+  const initials = (
+    <Text style={{ color: colors.text, fontSize: size * 0.35, fontWeight: '500' }}>
+      {getInitials(username)}
+    </Text>
+  );
+
   return (
     <View style={[{
       width: size, height: size, borderRadius: size / 2,
@@ -30,20 +51,21 @@ export function Avatar({ username, uri, size = 36, style }: AvatarProps) {
       alignItems: 'center', justifyContent: 'center',
       overflow: 'hidden',
     }, style]}>
-      {uri ? (
+      {(!!finalUri && finalUri.trim() !== '' && !error) ? (
         <View style={StyleSheet.absoluteFill}>
-           <Image 
-             source={{ uri }} 
-             style={{ width: '100%', height: '100%' }} 
-             contentFit="cover"
-             transition={200}
-           />
+          <Image 
+            source={{ uri: finalUri }} 
+            style={{ width: '100%', height: '100%' }} 
+            contentFit="cover"
+            transition={200}
+            {...(Platform.OS === 'web' ? { crossOrigin: 'anonymous' } : {})}
+            onError={(e) => {
+              console.warn(`[Avatar] Load Error for ${username}:`, e);
+              setError(true);
+            }}
+          />
         </View>
-      ) : (
-        <Text style={{ color: colors.text, fontSize: size * 0.35, fontWeight: '500' }}>
-          {getInitials(username)}
-        </Text>
-      )}
+      ) : initials}
     </View>
   );
 }

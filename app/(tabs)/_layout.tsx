@@ -61,23 +61,31 @@ export default function TabLayout() {
         options={{ title: 'Feed', tabBarIcon: ({ color }) => <Feather name="home" size={24} color={color} /> }} 
       />
       <Tabs.Screen 
-        name="search" 
-        options={{ href: null }} 
-      />
-      <Tabs.Screen 
         name="tavern" 
         options={{ title: 'Campus', tabBarIcon: ({ color }) => <Feather name="message-circle" size={24} color={color} /> }} 
       />
       <Tabs.Screen 
-        name="learn" 
+        name="challenges" 
         options={{ 
-          title: 'Learn', 
-          tabBarIcon: ({ color }) => <Feather name="book-open" size={24} color={color} />
+          title: 'Challenges', 
+          tabBarIcon: ({ color }) => <Feather name="zap" size={24} color={color} />
         }} 
       />
       <Tabs.Screen 
         name="profile" 
         options={{ title: 'Profile', tabBarIcon: ({ color }) => <Feather name="user" size={24} color={color} /> }} 
+      />
+      <Tabs.Screen 
+        name="search" 
+        options={{ href: null }} 
+      />
+      <Tabs.Screen 
+        name="inbox" 
+        options={{ href: null }} 
+      />
+      <Tabs.Screen 
+        name="learn" 
+        options={{ href: null }} 
       />
     </Tabs>
   );

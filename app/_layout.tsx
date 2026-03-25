@@ -44,7 +44,7 @@ export default function RootLayout() {
 }
 
 function InnerRootLayout() {
-  const { isOnboardingFinished, isLoading: authLoading } = useAuth();
+  const { isOnboardingFinished, isLoading: authLoading, updateOnboardingStatus } = useAuth();
   const [session, setSession] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [profileLoading, setProfileLoading] = useState(false);
@@ -52,7 +52,7 @@ function InnerRootLayout() {
   const { width } = useWindowDimensions();
   const isDesktop = Platform.OS === 'web' && width > 768;
 
-  const { userProfile, fetchUserProfile, updateUserProfile, initialize: initializeStore } = useUserStore();
+  const { userProfile, fetchUserProfile, updateUserProfile, initialize: initializeStore, profileFetched } = useUserStore();
 
   // 🔔 NOTIFICATION STATE
   const [expoPushToken, setExpoPushToken] = useState<string>('');
@@ -100,16 +100,13 @@ function InnerRootLayout() {
     checkNotificationPermission();
 
     notificationListener.current = Notifications.addNotificationReceivedListener(notification => {
-      console.log('🔔 NOTIFICATION_RECEIVED:', notification);
     });
 
     responseListener.current = Notifications.addNotificationResponseReceivedListener(response => {
       const data = response.notification.request.content.data;
-      if (data?.type === 'secret_scroll' || data?.screen === 'inbox') {
-        router.push({ 
-          pathname: '/(tabs)/inbox', 
-          params: { roomId: data?.roomId || data?.room_id } 
-        } as any);
+      if (data?.type === 'secret_scroll') {
+        // Notifications now stay on feed or go to specific post
+        router.push('/(tabs)/' as any);
       }
     });
 
@@ -142,12 +139,12 @@ function InnerRootLayout() {
 
   // 2. Secure Routing Logic
   useEffect(() => {
-    if (isLoading || authLoading) return;
-
-    const segs = segments as string[];
-    const inAuthGroup = segs.includes('(auth)');
-
     const handleRedirects = async () => {
+      if (isLoading || authLoading) return;
+
+      const segs = segments as string[];
+      const inAuthGroup = segs.includes('(auth)');
+
       if (!session) {
         if (!inAuthGroup) {
           router.replace('/(auth)/login');
@@ -155,14 +152,19 @@ function InnerRootLayout() {
       } else {
         try {
           let profile = userProfile;
-          if (!profile) {
+          if (!profile && !profileFetched) {
             setProfileLoading(true);
             await fetchUserProfile();
             profile = useUserStore.getState().userProfile;
             setProfileLoading(false);
           }
           
-          const isOnboarded = isOnboardingFinished || !!profile?.onboarding_complete;
+          // Sync local context with database status
+          if (profile && profile.onboarding_complete !== isOnboardingFinished) {
+            updateOnboardingStatus(!!profile.onboarding_complete);
+          }
+
+          const isOnboarded = !!profile?.onboarding_complete;
 
           if (!isOnboarded) {
             const onSetupScreen = segs.includes('CompleteProfileScreen');
@@ -170,7 +172,7 @@ function InnerRootLayout() {
               router.replace('/(auth)/CompleteProfileScreen');
             }
           } else {
-            const isAllowedRootScreen = segs.includes('devcard') || (segs.length === 1 && !segs[0].startsWith('('));
+            const isAllowedRootScreen = (segs.length === 1 && !segs[0].startsWith('('));
             const isAuthAllowedScreen = segs.includes('CampusOnboarding');
             if (!isAllowedRootScreen && ((inAuthGroup && !isAuthAllowedScreen) || segs.length === 0 || segs[0] === '')) {
               router.replace('/(tabs)');
@@ -183,7 +185,7 @@ function InnerRootLayout() {
     };
 
     handleRedirects();
-  }, [session, userProfile, isLoading, authLoading, segments, isOnboardingFinished]);
+  }, [session, userProfile, isLoading, authLoading, segments, isOnboardingFinished, profileFetched]);
 
   if (isLoading || profileLoading || authLoading) {
     return (

@@ -20,6 +20,7 @@ import { Feather } from '@expo/vector-icons';
 interface Developer {
   id: string;
   username: string;
+  avatar_url?: string | null;
   bio?: string;
   skills?: string[];
   college?: string;
@@ -29,6 +30,7 @@ interface Developer {
 interface SearchPost {
   id: string;
   username: string;
+  avatar_url?: string | null;
   project_name?: string;
   caption?: string;
   skills?: string[];
@@ -68,6 +70,7 @@ export default function SearchScreen() {
         const mapped = data.map((p: any) => ({
           ...p,
           username: p.profiles?.username || 'builder',
+          avatar_url: p.profiles?.avatar_url || null,
         }));
         setPosts(mapped);
       }
@@ -94,6 +97,7 @@ export default function SearchScreen() {
         const mapped = postRes.data.map((p: any) => ({
           ...p,
           username: p.profiles?.username || 'builder',
+          avatar_url: p.profiles?.avatar_url || null,
         }));
         setPosts(mapped);
       }
@@ -163,7 +167,7 @@ export default function SearchScreen() {
               activeOpacity={0.75}
               onPress={() => router.push(`/profile/${item.id}` as any)}
             >
-              <Avatar username={item.username} size={44} />
+              <Avatar username={item.username} uri={item.avatar_url} size={44} />
               <View style={{ flex: 1, marginLeft: Spacing.md }}>
                 <Text style={s.devName}>{item.username}</Text>
                 {item.bio && <Text style={s.devBio} numberOfLines={1}>{item.bio}</Text>}
@@ -207,7 +211,7 @@ export default function SearchScreen() {
               onPress={() => router.push(`/post/${item.id}` as any)}
             >
               <View style={s.projHeader}>
-                <Avatar username={item.username} size={30} />
+                <Avatar username={item.username} uri={item.avatar_url} size={30} />
                 <Text style={s.projUser}>{item.username}</Text>
                 {item.gravity_score !== undefined && item.gravity_score > 0 && (
                   <View style={s.gravBadge}>
