@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Platform } from 'react-native';
 import { Image } from 'expo-image';
 import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import { Colors, Typography, Spacing, Radius } from '../constants/theme';
@@ -139,6 +139,11 @@ const s = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#1A1A1A',
     marginBottom: 20,
+    ...(Platform.OS === 'web' && {
+      maxWidth: 600,
+      width: '100%',
+      alignSelf: 'center',
+    }),
   },
   header: {
     flexDirection: 'row',

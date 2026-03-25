@@ -6,6 +6,7 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { supabase } from '@/lib/supabase';
+import { useUserStore } from '@/store/userStore';
 import { Colors, Typography, Spacing, Radius } from '@/constants/theme';
 import LogEntryFeedItem from '@/components/LogEntryFeedItem';
 import DevNewsFeed from '@/components/DevNewsFeed';
@@ -26,12 +27,13 @@ import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-g
 
 export default function FeedScreen() {
   const router = useRouter();
-  const { width } = useWindowDimensions();
+  const { width: windowWidth } = useWindowDimensions();
+  const width = Platform.OS === 'web' ? Math.min(windowWidth, 600) : windowWidth;
   
   const [posts, setPosts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [user, setUser] = useState<any>(null);
+  const { userProfile, userId } = useUserStore();
   const [newsItems, setNewsItems] = useState<any[]>([]);
   const [activeTab, setActiveTab] = useState<'feed' | 'news'>('feed');
   const [newsStatus, setNewsStatus] = useState('');
@@ -44,7 +46,6 @@ export default function FeedScreen() {
   const PAGE_SIZE = 10;
 
   useEffect(() => {
-    fetchUser();
     fetchPosts(true);
 
     const channel = supabase
@@ -63,10 +64,6 @@ export default function FeedScreen() {
     };
   }, []);
 
-  async function fetchUser() {
-    const { data: { user } } = await supabase.auth.getUser();
-    setUser(user);
-  }
 
   async function fetchPosts(reset = false) {
     if (reset) {
@@ -127,7 +124,7 @@ export default function FeedScreen() {
   };
 
   const handleLike = async (postId: string) => {
-    if (!user) return;
+    if (!userId) return;
     setPosts(prev => prev.map(p => p.id === postId ? { 
       ...p, 
       likes: (p.likes || 0) + (p.isLiked ? -1 : 1), 
@@ -137,9 +134,9 @@ export default function FeedScreen() {
     try {
       const post = posts.find(p => p.id === postId);
       if (post?.isLiked) {
-        await supabase.from('likes').delete().eq('post_id', postId).eq('user_id', user.id);
+        await supabase.from('likes').delete().eq('post_id', postId).eq('user_id', userId);
       } else {
-        await supabase.from('likes').insert({ post_id: postId, user_id: user.id });
+        await supabase.from('likes').insert({ post_id: postId, user_id: userId });
       }
     } catch (err) {
       console.error('handleLike error:', err);
@@ -224,9 +221,18 @@ export default function FeedScreen() {
             </View>
           </View>
 
-          <TouchableOpacity style={s.iconBtn}>
-            <Feather name="bell" size={20} color="#666" />
-          </TouchableOpacity>
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <TouchableOpacity 
+              style={s.iconBtn} 
+              onPress={() => router.push('/(tabs)/search')}
+            >
+              <Feather name="search" size={20} color="#666" />
+            </TouchableOpacity>
+            
+            <TouchableOpacity style={s.iconBtn}>
+              <Feather name="bell" size={20} color="#666" />
+            </TouchableOpacity>
+          </View>
         </View>
 
         <GestureDetector gesture={panoGesture}>
@@ -254,9 +260,6 @@ export default function FeedScreen() {
                     }} 
                     onRefreshStart={() => setNewsRefreshing(true)}
                     onRefreshEnd={() => setNewsRefreshing(false)}
-                    // We can use a key or a prop to force refresh if needed, 
-                    // but loadAllNews is already called in useEffect.
-                    // For manual refresh, we can use a timestamp prop.
                     forceRefreshKey={refreshing ? Date.now() : 0}
                   />
                 }

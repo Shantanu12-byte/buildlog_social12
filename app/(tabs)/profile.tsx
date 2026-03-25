@@ -24,8 +24,8 @@ const ACCENT_PURPLE = '#5D3FD3';
 
 export default function ProfileScreen() {
   const router = useRouter();
-  const { userProfile, fetchUserProfile: syncStore } = useUserStore();
-  const [profile, setProfile] = useState<any>(null);
+  const { userProfile, userId, fetchUserProfile: syncStore } = useUserStore();
+  const [profile, setProfile] = useState<any>(userProfile);
   const [stats, setStats] = useState({ projects: 0, builds: 0, followers: 0, collabs: 0, streak: 0, timeSpent: 0 });
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -39,74 +39,45 @@ export default function ProfileScreen() {
   const [followersModalVisible, setFollowersModalVisible] = useState(false);
   const [followersList, setFollowersList] = useState<any[]>([]);
   const [followersLoading, setFollowersLoading] = useState(false);
-  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
   const fetchProfileData = useCallback(async () => {
+    if (!userId) {
+      router.replace('/(auth)/login');
+      return;
+    }
+
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const user = session?.user;
-      if (!user) {
-        router.replace('/(auth)/login');
-        return;
-      }
-      setCurrentUserId(user.id);
-      
-      // Initial fallback to metadata to prevent 'builder' flicker
-      if (!profile && user.user_metadata?.username) {
-        setProfile({ username: user.user_metadata.username });
-      }
-
-      // 1. Fetch Core Profile
-      const { data: profileData, error: profileError } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', user.id)
-        .maybeSingle();
-      
-      if (profileError) throw profileError;
-      
-      if (profileData) {
-        setProfile(profileData);
-        // Sync with global store if it's the current user
-        if (profileData.id === user.id) {
-           useUserStore.getState().fetchUserProfile(); 
+      // Update local profile state from store if available
+      if (userProfile) {
+        setProfile(userProfile);
+        if (userProfile.verified_skills) {
+          setVerifiedSkills(userProfile.verified_skills);
         }
-        if (profileData.verified_skills) {
-          setVerifiedSkills(profileData.verified_skills);
-        }
-
-        // 2. Parallel Secondary Fetches (Counts & Posts)
-        // Split because DB schema may lack formal foreign key relationships for auto-joins
-        const [postsRes, followersRes, followingRes] = await Promise.all([
-          supabase.from('posts').select('*', { count: 'exact' }).eq('author_id', user.id).order('created_at', { ascending: false }).limit(30),
-          supabase.from('followers').select('id', { count: 'exact' }).eq('following_id', user.id),
-          supabase.from('followers').select('id', { count: 'exact' }).eq('follower_id', user.id),
-        ]);
-
-        if (postsRes.data) setPosts(postsRes.data);
-        
-        setStats(prev => ({
-          ...prev,
-          projects: postsRes.count || 0,
-          followers: followersRes.count || 0,
-          following: followingRes.count || 0,
-          streak: prev.streak, // Preserve local streak
-          timeSpent: prev.timeSpent
-        }));
       }
 
-      // 4. Local Persistence (Flame Streak & Time)
-      let streakStr = await AsyncStorage.getItem('daily_streak');
-      let timeStr = await AsyncStorage.getItem('total_time_spent');
+      // 1. Parallel Secondary Fetches (Counts, Posts)
+      const fetchActions = [
+        supabase.from('posts').select('*', { count: 'exact' }).eq('author_id', userId).order('created_at', { ascending: false }).limit(30),
+        supabase.from('followers').select('id', { count: 'exact' }).eq('following_id', userId),
+        supabase.from('followers').select('id', { count: 'exact' }).eq('follower_id', userId),
+      ];
+
+      const [postsRes, followersRes, followingRes] = await Promise.all(fetchActions);
+
+      if (postsRes.data) setPosts(postsRes.data);
       
-      if (!streakStr) {
-          await AsyncStorage.setItem('daily_streak', '3');
-          streakStr = '3';
-      }
-      if (!timeStr) {
-          await AsyncStorage.setItem('total_time_spent', '145');
-          timeStr = '145';
-      }
+      setStats(prev => ({
+        ...prev,
+        projects: postsRes.count || 0,
+        followers: followersRes.count || 0,
+        following: followingRes.count || 0,
+      }));
+
+      // 2. Local Persistence (Flame Streak & Time)
+      const [streakStr, timeStr] = await Promise.all([
+        AsyncStorage.getItem('daily_streak'),
+        AsyncStorage.getItem('total_time_spent')
+      ]);
 
       setStats(prev => ({
         ...prev,
@@ -114,7 +85,7 @@ export default function ProfileScreen() {
         timeSpent: parseInt(timeStr || '145', 10)
       }));
 
-      // 6. Fetch Learning Stats (Local AsyncStorage)
+      // 3. Fetch Learning Stats (Local AsyncStorage)
       const allKeys = await AsyncStorage.getAllKeys();
       const progressKeys = allKeys.filter(k => k.startsWith('progress_'));
       const progressValues = await AsyncStorage.multiGet(progressKeys);
@@ -130,34 +101,28 @@ export default function ProfileScreen() {
           }
         });
         const avg = Math.round(sum / 3);
-        if (avg > 0) {
-          statsByTopic[topic] = { total: 100, done: avg };
-        }
+        if (avg > 0) statsByTopic[topic] = { total: 100, done: avg };
       });
       setLearningStats(statsByTopic);
 
-      // 5. Check GitHub Status
+      // 4. GitHub Integration
       setIsSyncingGithub(true);
-      try {
-        const status = await ProfilePortfolioController.checkGitHubStatus(user.id);
-        setGithubStatus(status);
-        
-        if (status.isConnected && status.hasSufficientScopes) {
-          const repoData = await ProfilePortfolioController.loadUserProjects(user.id);
-          setGithubProjects(repoData.projects || []);
-        }
-      } catch (repoErr) {
-      } finally {
-        setIsSyncingGithub(false);
+      const status = await ProfilePortfolioController.checkGitHubStatus(userId);
+      setGithubStatus(status);
+      
+      if (status.isConnected && status.hasSufficientScopes) {
+        const repoData = await ProfilePortfolioController.loadUserProjects(userId);
+        setGithubProjects(repoData.projects || []);
       }
 
     } catch (err: any) {
       console.error('Error fetching profile:', err.message);
     } finally {
+      setIsSyncingGithub(false);
       setLoading(false);
       setRefreshing(false);
     }
-  }, [router]);
+  }, [userId, userProfile, router]);
 
   useFocusEffect(
     useCallback(() => {
@@ -224,7 +189,7 @@ export default function ProfileScreen() {
   if (loading) return <LoadingScreen />;
 
   // Prioritize store for current user to enable instant updates
-  const isOwnProfile = (profile?.id === currentUserId) || (!profile && currentUserId);
+  const isOwnProfile = (profile?.id === userId) || (!profile && userId);
   // Merged profile, ensuring we don't overwrite a valid avatar_url with null from stale store
   const activeProfile = isOwnProfile ? { 
     ...profile, 

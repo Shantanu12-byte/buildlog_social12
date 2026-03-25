@@ -162,6 +162,14 @@ const s = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#0a0a0a',
+    ...(Platform.OS === 'web' && {
+      maxWidth: 600,
+      width: '100%',
+      alignSelf: 'center',
+      borderLeftWidth: 1,
+      borderRightWidth: 1,
+      borderColor: '#1a1a1a',
+    }),
   },
   header: {
     flexDirection: 'row',

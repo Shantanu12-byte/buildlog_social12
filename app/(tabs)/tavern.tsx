@@ -221,7 +221,7 @@ function ChatView({ room, messages, loading, userId, onSend, onBack }: {
 
 export default function TavernScreen() {
   const router = useRouter();
-  const { userProfile, updateUserProfile } = useUserStore();
+  const { userProfile, userId, updateUserProfile, profileFetched } = useUserStore();
 
   // ── State (preserved) ─────────────────────────────────────
   const [rooms, setRooms] = useState<Room[]>([]);
@@ -229,7 +229,6 @@ export default function TavernScreen() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(true);
   const [chatLoading, setChatLoading] = useState(false);
-  const [user, setUser] = useState<any>(null);
   const [activeTab, setActiveTab] = useState<TabType>('campus');
   const [campusSubTab, setCampusSubTab] = useState<'community' | 'leaderboard'>('community');
   const [isCampusPicking, setIsCampusPicking] = useState(false);
@@ -248,9 +247,8 @@ export default function TavernScreen() {
   }, []);
 
   async function initScreen() {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) { router.replace('/(auth)/login' as any); return; }
-    setUser(user);
+    if (!profileFetched) return;
+    if (!userId) { router.replace('/(auth)/login' as any); return; }
 
     // One-Time Campus Selection Flow
     if (!userProfile?.campus_id) {
@@ -262,14 +260,14 @@ export default function TavernScreen() {
   }
 
   async function handleSetCampus(campusId: string, campusName: string) {
-    if (!user) return;
+    if (!userId) return;
     setIsJoinLoading(true);
     try {
       const response = await fetch('http://localhost:5000/api/user/profile/set-campus', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          userId: user.id,
+          userId: userId,
           campusId,
           campusName
         })
@@ -311,7 +309,7 @@ export default function TavernScreen() {
   }
 
   async function handleCreateCommunity() {
-    if (!newRoomName.trim() || !user) return;
+    if (!newRoomName.trim() || !userId) return;
     const newRoom = {
       name: newRoomName.trim(),
       description: newRoomDesc.trim(),
@@ -368,7 +366,7 @@ export default function TavernScreen() {
   }, []);
 
   async function handleSend(text: string) {
-    if (!user || !selectedRoom) return;
+    if (!userId || !selectedRoom) return;
     
     let processedText = text;
     let wasFiltered = false;
@@ -391,8 +389,8 @@ export default function TavernScreen() {
 
     const newMsg = {
       room_id: selectedRoom.id,
-      sender_id: user.id,
-      sender_username: user.email?.split('@')[0] ?? 'user',
+      sender_id: userId,
+      sender_username: userProfile?.username || 'user',
       content: processedText,
       created_at: new Date().toISOString(),
     };
@@ -415,8 +413,14 @@ export default function TavernScreen() {
     return (
       <SafeAreaView style={s.container}>
         <StatusBar barStyle="light-content" />
-        <ChatView room={selectedRoom} messages={messages} loading={chatLoading} userId={user?.id ?? ''} onSend={handleSend}
-          onBack={() => { setSelectedRoom(null); if (channelRef.current) supabase.removeChannel(channelRef.current); }} />
+        <ChatView 
+          room={selectedRoom} 
+          messages={messages} 
+          loading={chatLoading} 
+          userId={userId || ''} 
+          onSend={handleSend}
+          onBack={() => { setSelectedRoom(null); if (channelRef.current) supabase.removeChannel(channelRef.current); }} 
+        />
       </SafeAreaView>
     );
   }

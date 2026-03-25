@@ -15,35 +15,11 @@ export default function SettingsScreen() {
   const clearUser = useUserStore(state => state.clearUser);
 
   const handleLogout = async () => {
-    const performLogout = async () => {
-      try {
-        await supabase.auth.signOut();
-        clearUser();
-        router.replace('/(auth)/login' as any);
-      } catch (err: any) {
-        if (Platform.OS === 'web') alert('Error signing out');
-        else Alert.alert('Error', 'An unexpected error occurred during sign out.');
-      }
-    };
-
-    if (Platform.OS === 'web') {
-      const confirmed = window.confirm('Are you sure you want to log out?');
-      if (confirmed) {
-        await performLogout();
-      }
-    } else {
-      Alert.alert(
-        'Log Out',
-        'Are you sure you want to log out?',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Log Out',
-            style: 'destructive',
-            onPress: performLogout,
-          },
-        ]
-      );
+    try {
+      await supabase.auth.signOut();
+    } catch (err: any) {
+      if (Platform.OS === 'web') alert('Error signing out');
+      else Alert.alert('Error', 'An unexpected error occurred during sign out.');
     }
   };
 

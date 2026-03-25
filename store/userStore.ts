@@ -21,6 +21,8 @@ interface UserProfile {
   campus_id?: string | null;
   campus_name?: string | null;
   is_joined_to_campus?: boolean;
+  verified_skills?: Record<string, any>;
+  is_public?: boolean;
 }
 
 interface UserState {
@@ -44,32 +46,32 @@ export const useUserStore = create<UserState>((set, get) => ({
   isEnderMode: false,
 
   fetchUserProfile: async () => {
+    // Prevent multiple parallel fetches
+    if (get().isLoading) return;
+    
     set({ isLoading: true });
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
-        set({ userProfile: null, userId: null, isLoading: false });
+        set({ userProfile: null, userId: null, isLoading: false, profileFetched: true });
         return;
       }
-      set({ userId: session.user.id });
+      
+      const userId = session.user.id;
+      set({ userId });
 
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
-        .eq('id', session.user.id)
+        .eq('id', userId)
         .maybeSingle();
 
       if (error) throw error;
       
-      if (data) {
-        set({ userProfile: data });
-      } else {
-        set({ userProfile: null });
-      }
-      set({ profileFetched: true });
+      set({ userProfile: data || null, profileFetched: true });
     } catch (error) {
       console.error("fetchUserProfile Error:", error);
-      set({ profileFetched: true }); // Even on error, we mark as fetched to stop loop
+      set({ profileFetched: true });
     } finally {
       set({ isLoading: false });
     }
@@ -79,23 +81,16 @@ export const useUserStore = create<UserState>((set, get) => ({
     const currentProfile = get().userProfile;
     if (!currentProfile) return;
 
-    // Redundant cache-busting removed (handled in Avatar component)
-    let finalData = { ...newData };
-
-    // Optimistic Update
-    const updatedProfile = { ...currentProfile, ...finalData };
+    const updatedProfile = { ...currentProfile, ...newData };
     set({ userProfile: updatedProfile });
 
     try {
       const { error } = await supabase
         .from('profiles')
-        .upsert({
-          ...updatedProfile,
-        });
+        .upsert(updatedProfile);
 
       if (error) throw error;
       
-      // Sync Auth Metadata
       await supabase.auth.updateUser({
         data: { 
           username: updatedProfile.username,
@@ -103,28 +98,22 @@ export const useUserStore = create<UserState>((set, get) => ({
         }
       });
 
-      // Invalidate Backend Cache (Both old and new if renamed)
-      try {
-        const backendUrl = process.env.EXPO_PUBLIC_BACKEND_URL || 'http://localhost:5000';
-        const usernamesToInvalidate = [updatedProfile.username];
-        if (currentProfile.username && currentProfile.username !== updatedProfile.username) {
-          usernamesToInvalidate.push(currentProfile.username);
-        }
-
-        await Promise.all(usernamesToInvalidate.map(name => 
-          fetch(`${backendUrl}/api/user/profile/invalidate`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ username: name }),
-          })
-        ));
-        console.log(`🚀 AUTH_SYNC_COMPLETE & CACHE_CLEARED: ${usernamesToInvalidate.join(', ')}`);
-      } catch (cacheErr) {
-        console.warn("Backend cache invalidation failed (non-critical):", cacheErr);
+      // Cache Invalidation (Non-blocking)
+      const backendUrl = process.env.EXPO_PUBLIC_BACKEND_URL || 'http://localhost:5000';
+      const usernames = [updatedProfile.username];
+      if (currentProfile.username && currentProfile.username !== updatedProfile.username) {
+        usernames.push(currentProfile.username);
       }
+
+      fetch(`${backendUrl}/api/user/profile/invalidate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ usernames }),
+      }).catch(() => {});
+      
     } catch (error) {
       console.error("updateUserProfile Error:", error);
-      throw error; // Re-throw for UI error handling
+      throw error;
     }
   },
 
@@ -140,14 +129,33 @@ export const useUserStore = create<UserState>((set, get) => ({
 
   initialize: async () => {
     try {
+      // 1. Load Ender Mode
       const val = await AsyncStorage.getItem('isEnderMode');
-      if (val !== null) {
-        set({ isEnderMode: JSON.parse(val) });
+      if (val !== null) set({ isEnderMode: JSON.parse(val) });
+
+      // 2. Initial Session Check
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        set({ userId: session.user.id });
+        await get().fetchUserProfile();
+      } else {
+        set({ profileFetched: true });
       }
+
+      // 3. Listen for Auth Changes
+      supabase.auth.onAuthStateChange(async (event, session) => {
+        if (event === 'SIGNED_IN' && session) {
+          set({ userId: session.user.id });
+          await get().fetchUserProfile();
+        } else if (event === 'SIGNED_OUT') {
+          get().clearUser();
+        }
+      });
     } catch (e) {
       console.error("Store Initialization Error:", e);
+      set({ profileFetched: true });
     }
   },
 
-  clearUser: () => set({ userProfile: null, userId: null, profileFetched: false }),
+  clearUser: () => set({ userProfile: null, userId: null, profileFetched: true, isLoading: false }),
 }));

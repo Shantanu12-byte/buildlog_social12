@@ -150,10 +150,10 @@ export default function DevNewsFeed({
       // 2. Fetch from HN with 50+ upvote quality filter
       const hnRes = await fetch('https://hacker-news.firebaseio.com/v0/topstories.json');
       const hnIds = await hnRes.json();
-      const hnTop50 = hnIds.slice(0, 50);
+      const hnTop25 = hnIds.slice(0, 25);
 
       const hnItemsRaw = await Promise.all(
-        hnTop50.map(async (id: number) => {
+        hnTop25.map(async (id: number) => {
           const itemRes = await fetch(`https://hacker-news.firebaseio.com/v0/item/${id}.json`);
           return itemRes.json();
         })

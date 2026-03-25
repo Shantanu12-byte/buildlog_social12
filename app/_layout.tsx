@@ -46,14 +46,19 @@ export default function RootLayout() {
 
 function InnerRootLayout() {
   const { isOnboardingFinished, isLoading: authLoading, updateOnboardingStatus } = useAuth();
-  const [session, setSession] = useState<any>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [profileLoading, setProfileLoading] = useState(false);
   const segments = useSegments();
   const { width } = useWindowDimensions();
   const isDesktop = Platform.OS === 'web' && width > 768;
 
-  const { userProfile, fetchUserProfile, updateUserProfile, initialize: initializeStore, profileFetched } = useUserStore();
+  const { 
+    userProfile, 
+    userId, 
+    fetchUserProfile, 
+    updateUserProfile, 
+    initialize: initializeStore, 
+    profileFetched,
+    isLoading: storeLoading
+  } = useUserStore();
 
   // 🔔 NOTIFICATION STATE
   const [expoPushToken, setExpoPushToken] = useState<string>('');
@@ -61,31 +66,15 @@ function InnerRootLayout() {
   const notificationListener = useRef<any>(null);
   const responseListener = useRef<any>(null);
 
-  // 1. Initialize Auth and Listen for Changes
+  // 1. Initialize Global Store once
   useEffect(() => {
     initializeStore();
-
-    const checkAuth = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      setSession(session);
-      if (session) getOrCreateKeyPair().catch(e => console.error('E2EE_INIT_ERROR:', e));
-      setIsLoading(false);
-    };
-
-    checkAuth();
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      setSession(session);
-      if (session) getOrCreateKeyPair().catch(e => console.error('E2EE_INIT_ERROR:', e));
-      setIsLoading(false);
-    });
-
-    return () => subscription.unsubscribe();
+    getOrCreateKeyPair().catch(e => console.error('E2EE_INIT_ERROR:', e));
   }, []);
 
   // 🔔 NOTIFICATION HANDLERS
   useEffect(() => {
-    if (!session || !userProfile) return;
+    if (!userId || !userProfile) return;
 
     const checkNotificationPermission = async () => {
       if (Platform.OS === 'web') return;
@@ -106,7 +95,6 @@ function InnerRootLayout() {
     responseListener.current = Notifications.addNotificationResponseReceivedListener(response => {
       const data = response.notification.request.content.data;
       if (data?.type === 'secret_scroll') {
-        // Notifications now stay on feed or go to specific post
         router.push('/(tabs)/' as any);
       }
     });
@@ -115,7 +103,7 @@ function InnerRootLayout() {
       notificationListener.current?.remove();
       responseListener.current?.remove();
     };
-  }, [session, userProfile]);
+  }, [userId, userProfile]);
 
   const registerForPushNotificationsAsync = async () => {
     if (Platform.OS === 'web') return;
@@ -130,7 +118,7 @@ function InnerRootLayout() {
       })).data;
 
       setExpoPushToken(token);
-      if (userProfile?.id) {
+      if (userId) {
         await updateUserProfile({ expo_push_token: token });
       }
     } catch (e) {
@@ -141,60 +129,50 @@ function InnerRootLayout() {
   // 2. Secure Routing Logic
   useEffect(() => {
     const handleRedirects = async () => {
-      if (isLoading || authLoading) return;
+      // Wait for store initialization and AuthContext
+      if (!profileFetched || authLoading) return;
 
       const segs = segments as string[];
       const inAuthGroup = segs.includes('(auth)');
+      const isPublicRoute = segs[0] === 'u';
 
-      if (!session) {
-        // Allow public access to /u/[username]
-        const isPublicRoute = segs[0] === 'u';
+      if (!userId) {
         if (!inAuthGroup && !isPublicRoute) {
           router.replace('/(auth)/login');
         }
       } else {
-        try {
-          let profile = userProfile;
-          if (!profile && !profileFetched) {
-            setProfileLoading(true);
-            await fetchUserProfile();
-            profile = useUserStore.getState().userProfile;
-            setProfileLoading(false);
-          }
-          
-          // Sync local context with database status
-          if (profile && profile.onboarding_complete !== isOnboardingFinished) {
-            updateOnboardingStatus(!!profile.onboarding_complete);
-          }
+        const profile = userProfile;
+        
+        // Sync local context with database status
+        if (profile && profile.onboarding_complete !== isOnboardingFinished) {
+          updateOnboardingStatus(!!profile.onboarding_complete);
+        }
 
-          if (profile?.id && Platform.OS === 'web') {
-            registerPushNotifications(profile.id);
-          }
+        if (profile?.id && Platform.OS === 'web') {
+          registerPushNotifications(profile.id);
+        }
 
-          const isOnboarded = !!profile?.onboarding_complete;
+        const isOnboarded = !!profile?.onboarding_complete;
 
-          if (!isOnboarded) {
-            const onSetupScreen = segs.includes('CompleteProfileScreen');
-            if (!onSetupScreen) {
-              router.replace('/(auth)/CompleteProfileScreen');
-            }
-          } else {
-            const isAllowedRootScreen = (segs.length === 1 && !segs[0].startsWith('('));
-            const isAuthAllowedScreen = segs.includes('CampusOnboarding');
-            if (!isAllowedRootScreen && ((inAuthGroup && !isAuthAllowedScreen) || segs.length === 0 || segs[0] === '')) {
-              router.replace('/(tabs)');
-            }
+        if (!isOnboarded) {
+          const onSetupScreen = segs.includes('CompleteProfileScreen');
+          if (!onSetupScreen) {
+            router.replace('/(auth)/CompleteProfileScreen');
           }
-        } catch (error) {
-          setProfileLoading(false);
+        } else {
+          const isAllowedRootScreen = (segs.length === 1 && !segs[0].startsWith('('));
+          const isAuthAllowedScreen = segs.includes('CampusOnboarding');
+          if (!isAllowedRootScreen && ((inAuthGroup && !isAuthAllowedScreen) || segs.length === 0 || segs[0] === '')) {
+            router.replace('/(tabs)');
+          }
         }
       }
     };
 
     handleRedirects();
-  }, [session, userProfile, isLoading, authLoading, segments, isOnboardingFinished, profileFetched]);
+  }, [userId, userProfile, authLoading, segments, isOnboardingFinished, profileFetched]);
 
-  if (isLoading || profileLoading || authLoading) {
+  if (!profileFetched || authLoading || storeLoading) {
     return (
       <View style={styles.loadingContainer}>
         <MinecraftLoader />
