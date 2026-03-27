@@ -23,6 +23,7 @@ import { useAuth } from '@/context/AuthContext';
 import { Colors, Typography, Spacing, Radius } from '../../constants/theme';
 import { Button, Avatar, SectionHeader } from '../../components/ui/UI';
 import { sanitizeUsername, sanitizeBio, sanitizeUrl, isValidUsername } from '@/lib/sanitize';
+import { useUserStore } from '@/store/userStore';
 
 // ── Constants ────────────────────────────────────────────────
 
@@ -176,6 +177,7 @@ async function setCachedResult(username: string, available: boolean) {
 export default function CompleteProfileScreen() {
   const router = useRouter();
   const { updateOnboardingStatus } = useAuth();
+  const { fetchUserProfile } = useUserStore();
 
   // ── State ──────────────────────────────────────────────────
   const [step, setStep] = useState(0);
@@ -398,6 +400,10 @@ export default function CompleteProfileScreen() {
       
       await AsyncStorage.setItem('onboarding_complete', 'true');
       updateOnboardingStatus(true);
+      
+      // Refresh global store to ensure navigation guards in _layout.tsx see the update
+      await fetchUserProfile();
+      
       router.replace('/(tabs)/' as any);
     } catch (err: any) {
       setError(err.message ?? 'Failed to save profile');

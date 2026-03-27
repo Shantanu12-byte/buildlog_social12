@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { supabase } from './lib/supabase';
@@ -21,38 +22,35 @@ export default function App() {
   const [onboardingComplete, setOnboardingComplete] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  // Unified Onboarding Check implementation
+  const checkOnboarding = async (userId) => {
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('onboarding_complete')
+        .eq('id', userId)
+        .maybeSingle();
+
+      if (error) throw error;
+      setOnboardingComplete(!!data?.onboarding_complete);
+    } catch (err) {
+      console.error('Onboarding check failed:', err);
+      // Fallback if no profile is found
+      if (onboardingComplete === null) setOnboardingComplete(false); 
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   useEffect(() => {
-    // 1. INITIAL_LOAD: Check for existing auth session
-    const initializeAuth = async () => {
-      try {
-        const { data: { session }, error } = await supabase.auth.getSession();
-        if (error) throw error;
-        
-        setSession(session);
-        if (session) {
-          // If logged in, check database for onboarding status
-          await checkUserOnboarding(session.user.id);
-        } else {
-          // No session, ready to show Login
-          setIsLoading(false);
-        }
-      } catch (err) {
-        console.error('AUTH_INIT_ERROR:', err);
-        setIsLoading(false);
-      }
-    };
-
-    initializeAuth();
-
-    // 2. AUTH_LISTENER: Hub for login/logout events
+    // 1. Single source of truth: Listen for auth state changes 
+    // This fires immediately on mount with the current session in Supabase v2.
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
       setSession(session);
       
       if (session) {
-        // Trigger onboarding check on fresh login or session refresh
-        await checkUserOnboarding(session.user.id);
+        await checkOnboarding(session.user.id);
       } else {
-        // Clear state on logout
         setOnboardingComplete(null);
         setIsLoading(false);
       }
@@ -63,33 +61,6 @@ export default function App() {
     };
   }, []);
 
-  /**
-   * checkUserOnboarding - Queries the profiles table to see if user has finished setup.
-   * @param {string} userId - The Supabase user UUID.
-   */
-  const checkUserOnboarding = async (userId) => {
-    try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('onboarding_complete')
-        .eq('id', userId)
-        .single();
-
-      if (error) throw error;
-      
-      setOnboardingComplete(!!data?.onboarding_complete);
-    } catch (err) {
-      console.error('ONBOARDING_CHECK_FAILURE:', err);
-      // Fallback to false to ensure user completes profile if check fails
-      setOnboardingComplete(false); 
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  /**
-   * TRAFFIC_COP: Conditional Rendering for Authentication Flow
-   */
   if (isLoading) {
     return (
       <View style={styles.splashContainer}>
@@ -102,13 +73,10 @@ export default function App() {
     <NavigationContainer>
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         {session === null ? (
-          // STEP 1: LOGGED_OUT (Auth Stack)
           <Stack.Screen name="Login" component={LoginScreen} />
         ) : onboardingComplete === false ? (
-          // STEP 2: ONBOARDING (Profile Setup)
           <Stack.Screen name="Interests" component={InterestsScreen} />
         ) : (
-          // STEP 3: MAIN_APP (Production Feed)
           <Stack.Screen name="MainFeed" component={MainFeed} />
         )}
       </Stack.Navigator>

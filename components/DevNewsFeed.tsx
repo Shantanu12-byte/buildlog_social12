@@ -1,9 +1,11 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { View, ActivityIndicator } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Memory cache for news
 let newsCache: { data: NewsItem[], timestamp: number } | null = null;
 const CACHE_EXPIRY = 30 * 60 * 1000; // 30 minutes
+const STORAGE_KEY = 'buildlog_dev_news_cache';
 
 export interface NewsItem {
   id: string | number;
@@ -19,10 +21,10 @@ export interface NewsItem {
   canonical_url?: string; // For Dev.to fallback
 }
 
+// Reduced to top 6 tags to minimize network requests (from 12)
 const DEVTO_TAGS = [
   'javascript', 'webdev', 'react', 'python',
-  'ai', 'opensource', 'devops', 'programming',
-  'typescript', 'beginners', 'career', 'node'
+  'ai', 'typescript'
 ];
 
 const BASE_DEVTO = 'https://dev.to/api/articles';
@@ -109,10 +111,29 @@ export default function DevNewsFeed({
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
+    // 1. Load from cache immediately for "Instant-on" experience
+    loadCachedNews();
+    
+    // 2. Fetch fresh news in background
     loadAllNews();
+    
     intervalRef.current = setInterval(() => loadAllNews(true), CACHE_EXPIRY) as unknown as NodeJS.Timeout;
     return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
   }, []);
+
+  const loadCachedNews = async () => {
+    try {
+      const cached = await AsyncStorage.getItem(STORAGE_KEY);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        // Serve cache even if expired, then update in background
+        if (onOpenReader) onOpenReader(parsed.data, "Loading fresh news...");
+        newsCache = parsed;
+      }
+    } catch (e) {
+      console.error('loadCachedNews error:', e);
+    }
+  };
 
   useEffect(() => { if (forceRefreshKey > 0) loadAllNews(true); }, [forceRefreshKey]);
 
@@ -123,11 +144,20 @@ export default function DevNewsFeed({
         if (onOpenReader) onOpenReader(newsCache.data);
         return;
       }
+      
       setLoading(true);
       if (onRefreshStart) onRefreshStart();
+      
       const news = await fetchFreshNews();
-      newsCache = { data: news, timestamp: Date.now() };
-      if (onOpenReader) onOpenReader(news, "Updated just now");
+      
+      if (news && news.length > 0) {
+        newsCache = { data: news, timestamp: Date.now() };
+        // Persist to storage
+        await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(newsCache));
+        
+        if (onOpenReader) onOpenReader(news, "Updated just now");
+      }
+      
       if (onRefreshEnd) onRefreshEnd();
       setLoading(false);
     } catch (err) {
@@ -147,13 +177,13 @@ export default function DevNewsFeed({
         .map(normalizeDevTo)
         .filter(d => isStrictlyDevRelated(d));
 
-      // 2. Fetch from HN with 50+ upvote quality filter
+      // 2. Fetch from HN with 50+ upvote quality filter (Reduced from top 25 to 15)
       const hnRes = await fetch('https://hacker-news.firebaseio.com/v0/topstories.json');
       const hnIds = await hnRes.json();
-      const hnTop25 = hnIds.slice(0, 25);
+      const hnTop15 = hnIds.slice(0, 15);
 
       const hnItemsRaw = await Promise.all(
-        hnTop25.map(async (id: number) => {
+        hnTop15.map(async (id: number) => {
           const itemRes = await fetch(`https://hacker-news.firebaseio.com/v0/item/${id}.json`);
           return itemRes.json();
         })

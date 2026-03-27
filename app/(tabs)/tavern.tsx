@@ -10,7 +10,7 @@ import React, { useEffect, useState, useRef, useCallback } from 'react';
 import {
   View, Text, FlatList, TouchableOpacity, TextInput,
   StyleSheet, SafeAreaView, StatusBar, KeyboardAvoidingView,
-  Platform, ActivityIndicator, Modal, Alert,
+  Platform, ActivityIndicator, Modal, Alert, ScrollView,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { supabase } from '@/lib/supabase';
@@ -30,6 +30,9 @@ interface Room {
   member_count?: number;
   last_message?: string;
   unread_count?: number;
+  rules?: string;
+  tags?: string[];
+  created_by?: string;
 }
 
 interface Message {
@@ -50,7 +53,19 @@ function formatTime(dateStr: string): string {
 
 
 
-function RoomCard({ room, isActive, onPress }: { room: Room; isActive: boolean; onPress: () => void }) {
+function RoomCard({
+  room,
+  isActive,
+  isJoined,
+  onPress,
+  onJoin
+}: {
+  room: Room;
+  isActive: boolean;
+  isJoined: boolean;
+  onPress: () => void;
+  onJoin: (roomId: string) => void;
+}) {
   const isGlobal = room.type === 'global';
   return (
     <TouchableOpacity style={[s.roomCard, isActive && s.roomCardActive]} onPress={onPress} activeOpacity={0.75}>
@@ -65,25 +80,52 @@ function RoomCard({ room, isActive, onPress }: { room: Room; isActive: boolean; 
       <View style={{ flex: 1, marginLeft: 16 }}>
         <View style={s.roomNameRow}>
           <Text style={s.roomName} numberOfLines={1}>{room.name}</Text>
-          <Text style={s.onlinePillText}>● {room.online_count ?? 0} live</Text>
         </View>
         <Text style={s.roomDesc} numberOfLines={1}>
           {room.description || (isGlobal ? 'Global public server' : 'Your campus community')}
         </Text>
+
+        <View style={s.roomStatsRow}>
+          <Text style={s.roomStatText}>👥 {room.member_count ?? 0} members</Text>
+          <Text style={s.roomStatSeparator}>·</Text>
+          <Text style={s.roomOnlineText}>● {room.online_count ?? 0} online</Text>
+        </View>
+      </View>
+
+      <View style={s.roomCardAction}>
+        {isJoined ? (
+          <View style={s.joinedPill}>
+            <Text style={s.joinedPillText}>Joined ✓</Text>
+          </View>
+        ) : (
+          <TouchableOpacity
+            style={s.joinBtnSmall}
+            onPress={(e) => {
+              e.stopPropagation();
+              onJoin(room.id);
+            }}
+          >
+            <Text style={s.joinBtnSmallText}>+ Join Room</Text>
+          </TouchableOpacity>
+        )}
       </View>
     </TouchableOpacity>
   );
 }
 
-function MessageBubble({ msg, isMe }: { msg: Message; isMe: boolean }) {
+function MessageBubble({ msg, isMe, onLongPress }: { msg: Message; isMe: boolean; onLongPress?: () => void }) {
   const initials = msg.sender_username.slice(0, 2).toUpperCase();
-  
+
   // FIX - Flagging Logic (URLs + Promotional keywords)
-  const isFlagged = msg.content.match(/https?:\/\//) && 
-                    msg.content.toLowerCase().match(/buy|sale|offer|win|free|promo|discount/);
+  const isFlagged = msg.content.match(/https?:\/\//) &&
+    msg.content.toLowerCase().match(/buy|sale|offer|win|free|promo|discount/);
 
   return (
-    <View style={[s.msgRow, isMe && s.msgRowMe]}>
+    <TouchableOpacity 
+      style={[s.msgRow, isMe && s.msgRowMe]} 
+      onLongPress={isMe ? onLongPress : undefined} 
+      activeOpacity={0.8}
+    >
       {!isMe && <Text style={s.senderName}>{msg.sender_username}</Text>}
       <View style={[s.bubbleRow, isMe && s.bubbleRowMe]}>
         {!isMe && (
@@ -93,7 +135,7 @@ function MessageBubble({ msg, isMe }: { msg: Message; isMe: boolean }) {
         )}
         <View style={{ flex: 1, alignItems: isMe ? 'flex-end' : 'flex-start' }}>
           <View style={[
-            s.bubble, 
+            s.bubble,
             isMe ? s.bubbleMe : s.bubbleThem,
             isFlagged && s.bubbleFlagged
           ]}>
@@ -105,14 +147,14 @@ function MessageBubble({ msg, isMe }: { msg: Message; isMe: boolean }) {
           {isFlagged && <Text style={s.flaggedText}>🚨 Flagged</Text>}
         </View>
       </View>
-    </View>
+    </TouchableOpacity>
   );
 }
 
 function DateSeparator({ date }: { date: string }) {
-  const label = new Date(date).toDateString() === new Date().toDateString() ? 'Today' : 
-                new Date(date).toDateString() === new Date(Date.now() - 86400000).toDateString() ? 'Yesterday' :
-                new Date(date).toLocaleDateString();
+  const label = new Date(date).toDateString() === new Date().toDateString() ? 'Today' :
+    new Date(date).toDateString() === new Date(Date.now() - 86400000).toDateString() ? 'Yesterday' :
+      new Date(date).toLocaleDateString();
   return (
     <View style={s.dateSeparator}>
       <View style={s.dateLine} />
@@ -122,9 +164,14 @@ function DateSeparator({ date }: { date: string }) {
   );
 }
 
-function ChatView({ room, messages, loading, userId, onSend, onBack }: {
+function ChatView({ 
+  room, messages, loading, userId, onSend, onBack, onViewMembers, onViewAbout, onLeave, onDeleteMessage 
+}: {
   room: Room; messages: Message[]; loading: boolean;
   userId: string; onSend: (t: string) => void; onBack: () => void;
+  onViewMembers: () => void; onViewAbout: () => void;
+  onLeave: () => void;
+  onDeleteMessage: (id: string) => void;
 }) {
   const [text, setText] = useState('');
   const flatRef = useRef<FlatList>(null);
@@ -146,7 +193,16 @@ function ChatView({ room, messages, loading, userId, onSend, onBack }: {
     return (
       <View>
         {showDate && <DateSeparator date={item.created_at} />}
-        <MessageBubble msg={item} isMe={item.sender_id === userId} />
+        <MessageBubble 
+          msg={item} 
+          isMe={item.sender_id === userId} 
+          onLongPress={() => {
+            Alert.alert('Delete Message', 'Delete this message for everyone?', [
+              { text: 'Cancel', style: 'cancel' },
+              { text: 'Delete', style: 'destructive', onPress: () => onDeleteMessage(item.id) }
+            ]);
+          }}
+        />
       </View>
     );
   };
@@ -157,8 +213,22 @@ function ChatView({ room, messages, loading, userId, onSend, onBack }: {
         <TouchableOpacity style={s.backBtn} onPress={onBack}>
           <Text style={s.backIcon}>←</Text>
         </TouchableOpacity>
-        <Text style={s.chatTitle}>{room.name}</Text>
-        <TouchableOpacity style={s.infoBtn}>
+        <TouchableOpacity style={{ flex: 1, alignItems: 'center' }} onPress={onViewAbout}>
+          <Text style={s.chatTitle}>{room.name}</Text>
+          <Text style={s.chatHeaderSub}>{room.member_count ?? 0} members</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={s.infoBtn} onPress={() => {
+          Alert.alert(
+            'Room Options',
+            'Choose an action',
+            [
+              { text: 'View Members', onPress: onViewMembers },
+              { text: 'About Room', onPress: onViewAbout },
+              { text: 'Leave Room', style: 'destructive', onPress: onLeave },
+              { text: 'Cancel', style: 'cancel' }
+            ]
+          );
+        }}>
           <Text style={s.infoBtnText}>⋮</Text>
         </TouchableOpacity>
       </View>
@@ -168,9 +238,9 @@ function ChatView({ room, messages, loading, userId, onSend, onBack }: {
         <Text style={s.onlineStripText}>ONLINE: {room.online_count ?? 0} · {room.name}</Text>
       </View>
 
-      <KeyboardAvoidingView 
-        style={{ flex: 1 }} 
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined} 
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
       >
         {loading ? (
@@ -204,10 +274,10 @@ function ChatView({ room, messages, loading, userId, onSend, onBack }: {
               multiline
               onSubmitEditing={handleSend}
             />
-            <TouchableOpacity 
-              style={[s.sendBtn, !!text.trim() && s.sendBtnActive]} 
-              onPress={handleSend} 
-              disabled={!text.trim()} 
+            <TouchableOpacity
+              style={[s.sendBtn, !!text.trim() && s.sendBtnActive]}
+              onPress={handleSend}
+              disabled={!text.trim()}
               activeOpacity={0.75}
             >
               <Text style={s.sendBtnText}>SEND</Text>
@@ -233,7 +303,25 @@ export default function TavernScreen() {
   const [campusSubTab, setCampusSubTab] = useState<'community' | 'leaderboard'>('community');
   const [isCampusPicking, setIsCampusPicking] = useState(false);
   const [isJoinLoading, setIsJoinLoading] = useState(false);
+  const [joinedRooms, setJoinedRooms] = useState<string[]>([]);
+  const [isJoinPromptVisible, setIsJoinPromptVisible] = useState(false);
+  const [roomForPrompt, setRoomForPrompt] = useState<Room | null>(null);
+
+  // Toast State
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  const showToast = (msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(null), 3000);
+  };
+
+  const [isMembersVisible, setIsMembersVisible] = useState(false);
+  const [isAboutVisible, setIsAboutVisible] = useState(false);
+  const [roomMembers, setRoomMembers] = useState<any[]>([]);
+  const [roomStats, setRoomStats] = useState<any>({ messageCount: 0 });
+
   const channelRef = useRef<any>(null);
+  const memberChannelRef = useRef<any>(null);
 
   useEffect(() => {
     initScreen();
@@ -255,45 +343,105 @@ export default function TavernScreen() {
       setIsCampusPicking(true);
     }
 
-    await fetchRooms();
+    await Promise.all([
+      fetchRooms(),
+      fetchJoinedRooms()
+    ]);
     setLoading(false);
+  }
+
+  async function fetchJoinedRooms() {
+    if (!userId) return;
+    const { data, error } = await supabase
+      .from('room_members')
+      .select('room_id')
+      .eq('user_id', userId);
+
+    if (!error && data) {
+      setJoinedRooms(data.map(j => j.room_id));
+    }
+  }
+
+  async function joinRoom(roomId: string, enterImmediately = false) {
+    if (!userId) return;
+    const { error } = await supabase
+      .from('room_members')
+      .insert({
+        room_id: roomId,
+        user_id: userId
+      });
+
+    if (!error) {
+      setJoinedRooms(prev => [...prev, roomId]);
+      // Update local room list member count optimistically
+      setRooms(prev => prev.map(r => r.id === roomId ? { ...r, member_count: (r.member_count ?? 0) + 1 } : r));
+
+      showToast('Joined successfully! 🎉');
+
+      if (enterImmediately) {
+        const room = rooms.find(r => r.id === roomId);
+        if (room) openRoom(room);
+      }
+    } else {
+      Alert.alert('Error', 'Failed to join room: ' + error.message);
+    }
+  }
+
+  async function leaveRoom(roomId: string) {
+    if (!userId) return;
+    const { error } = await supabase
+      .from('room_members')
+      .delete()
+      .eq('room_id', roomId)
+      .eq('user_id', userId);
+
+    if (!error) {
+      setJoinedRooms(prev => prev.filter(id => id !== roomId));
+      setRooms(prev => prev.map(r => r.id === roomId ? { ...r, member_count: Math.max(0, (r.member_count ?? 1) - 1) } : r));
+      setSelectedRoom(null);
+      if (channelRef.current) supabase.removeChannel(channelRef.current);
+      Alert.alert('Left', 'You have left the room.');
+    }
   }
 
   async function handleSetCampus(campusId: string, campusName: string) {
     if (!userId) return;
     setIsJoinLoading(true);
     try {
-      const response = await fetch('http://localhost:5000/api/user/profile/set-campus', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userId: userId,
-          campusId,
-          campusName
-        })
-      });
-
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.message || data.error || 'Failed to set campus');
-      }
-
-      // Update local store for immediate UI feedback
+      // 1. Update Profile in Supabase directly (Better than calling separate backend)
       await updateUserProfile({
         campus_id: campusId,
         campus_name: campusName,
         is_joined_to_campus: true
       });
 
+      // 2. Find and join the official campus chat room if it exists
+      const { data: rooms } = await supabase
+        .from('chat_rooms')
+        .select('id')
+        .eq('college', campusId)
+        .eq('type', 'campus');
+
+      if (rooms && rooms.length > 0) {
+        for (const r of rooms) {
+          await joinRoom(r.id);
+        }
+      }
+
       setIsCampusPicking(false);
-      Alert.alert('Welcome!', `You are now a verified member of ${campusName}.`);
       
+      if (Platform.OS === 'web') {
+        window.alert(`Welcome! You are now a verified member of ${campusName}.`);
+      } else {
+        Alert.alert('Welcome!', `You are now a verified member of ${campusName}.`);
+      }
+
       // Refresh rooms to include campus-specific ones
       await fetchRooms();
 
     } catch (err: any) {
       console.error('Set campus error:', err);
-      Alert.alert('Lock Failed', err.message);
+      Alert.alert('Join Failed', err.message || 'Could not join campus.');
     } finally {
       setIsJoinLoading(false);
     }
@@ -337,20 +485,32 @@ export default function TavernScreen() {
       setIsCreating(false);
       setNewRoomName('');
       setNewRoomDesc('');
+      // Auto join the created room
+      await joinRoom(data.id);
       openRoom(data);
     }
   }
+
+  const handleRoomPress = (room: Room) => {
+    if (joinedRooms.includes(room.id)) {
+      openRoom(room);
+    } else {
+      setRoomForPrompt(room);
+      setIsJoinPromptVisible(true);
+    }
+  };
 
   const openRoom = useCallback(async (room: Room) => {
     setSelectedRoom(room);
     setChatLoading(true);
     if (channelRef.current) supabase.removeChannel(channelRef.current);
+    if (memberChannelRef.current) supabase.removeChannel(memberChannelRef.current);
 
     const { data } = await supabase.from('messages').select('*').eq('room_id', room.id).order('created_at', { ascending: true }).limit(100);
     setMessages(data ?? []);
     setChatLoading(false);
 
-    // Realtime (preserved)
+    // Realtime Messages
     channelRef.current = supabase
       .channel(`room:${room.id}`)
       .on('postgres_changes', {
@@ -360,14 +520,79 @@ export default function TavernScreen() {
         filter: `room_id=eq.${room.id}`
       },
         payload => setMessages(prev => [...prev, payload.new as Message])
-      ).subscribe();
+      )
+      .on('postgres_changes', {
+        event: 'DELETE',
+        schema: 'public',
+        table: 'messages',
+        filter: `room_id=eq.${room.id}`
+      },
+        payload => setMessages(prev => prev.filter(m => m.id !== payload.old.id))
+      )
+      .subscribe();
+
+    // Realtime Member Count
+    memberChannelRef.current = supabase
+      .channel(`members:${room.id}`)
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'room_members',
+        filter: `room_id=eq.${room.id}`
+      }, () => {
+        fetchRoomDetails(room.id);
+      })
+      .subscribe();
 
     setRooms(prev => prev.map(r => r.id === room.id ? { ...r, unread_count: 0 } : r));
+    fetchRoomDetails(room.id);
   }, []);
+
+  async function fetchRoomDetails(roomId: string) {
+    // Member Count update in rooms list
+    const { data: roomData } = await supabase.from('chat_rooms').select('member_count, online_count').eq('id', roomId).single();
+    if (roomData) {
+      setRooms(prev => prev.map(r => r.id === roomId ? { ...r, ...roomData } : r));
+      setSelectedRoom(prev => prev?.id === roomId ? { ...prev, ...roomData } : prev);
+    }
+  }
+
+  async function fetchRoomMembers(roomId: string) {
+    const { data, error } = await supabase
+      .from('room_members')
+      .select(`
+        user_id,
+        joined_at,
+        profiles (
+          username,
+          avatar_url,
+          full_name,
+          last_seen
+        )
+      `)
+      .eq('room_id', roomId)
+      .order('joined_at', { ascending: true });
+
+    if (!error && data) {
+      setRoomMembers(data);
+    }
+  }
+
+  async function fetchRoomStats(roomId: string) {
+    const { count } = await supabase
+      .from('messages')
+      .select('*', { count: 'exact', head: true })
+      .eq('room_id', roomId);
+
+    setRoomStats({
+      messageCount: count || 0,
+      createdAt: selectedRoom?.id === roomId ? (selectedRoom as any).created_at : new Date().toISOString()
+    });
+  }
 
   async function handleSend(text: string) {
     if (!userId || !selectedRoom) return;
-    
+
     let processedText = text;
     let wasFiltered = false;
 
@@ -394,7 +619,7 @@ export default function TavernScreen() {
       content: processedText,
       created_at: new Date().toISOString(),
     };
-    
+
     await supabase.from('messages').insert(newMsg);
     setRooms(prev => prev.map(r => r.id === selectedRoom.id ? { ...r, last_message: processedText.slice(0, 50) } : r));
 
@@ -407,20 +632,193 @@ export default function TavernScreen() {
     }
   }
 
+  async function handleDeleteMessage(messageId: string) {
+    const { error } = await supabase.from('messages').delete().eq('id', messageId);
+    if (error) {
+      Alert.alert('Error', 'Failed to delete message: ' + error.message);
+    }
+    // Note: Local state updated via realtime listener
+  }
+
   if (loading) return <LoadingScreen />;
 
   if (selectedRoom) {
     return (
       <SafeAreaView style={s.container}>
         <StatusBar barStyle="light-content" />
-        <ChatView 
-          room={selectedRoom} 
-          messages={messages} 
-          loading={chatLoading} 
-          userId={userId || ''} 
+        <ChatView
+          room={selectedRoom}
+          messages={messages}
+          loading={chatLoading}
+          userId={userId || ''}
           onSend={handleSend}
-          onBack={() => { setSelectedRoom(null); if (channelRef.current) supabase.removeChannel(channelRef.current); }} 
+          onBack={() => {
+            setSelectedRoom(null);
+            if (channelRef.current) supabase.removeChannel(channelRef.current);
+            if (memberChannelRef.current) supabase.removeChannel(memberChannelRef.current);
+          }}
+          onViewMembers={() => {
+            fetchRoomMembers(selectedRoom.id);
+            setIsMembersVisible(true);
+          }}
+          onViewAbout={() => {
+            fetchRoomStats(selectedRoom.id);
+            setIsAboutVisible(true);
+          }}
+          onLeave={() => {
+            Alert.alert('Leave Room', 'Are you sure you want to leave this room?', [
+              { text: 'Cancel', style: 'cancel' },
+              { text: 'Leave', style: 'destructive', onPress: () => {
+                const roomId = selectedRoom.id;
+                leaveRoom(roomId);
+              }}
+            ]);
+          }}
+          onDeleteMessage={handleDeleteMessage}
         />
+
+        {/* Members Modal */}
+        <Modal visible={isMembersVisible} transparent animationType="slide">
+          <View style={s.modalOverlay}>
+            <View style={[s.modalContent, { height: '80%' }]}>
+              <View style={s.modalHeader}>
+                <TouchableOpacity onPress={() => setIsMembersVisible(false)}>
+                  <Text style={s.modalCloseText}>← Members ({roomMembers.length})</Text>
+                </TouchableOpacity>
+              </View>
+
+              <ScrollView showsVerticalScrollIndicator={false}>
+                <Text style={s.memberSectionTitle}>🟢 Online ({roomMembers.filter(m => {
+                  const lastSeen = m.profiles?.last_seen;
+                  if (!lastSeen) return false;
+                  return new Date().getTime() - new Date(lastSeen).getTime() < 5 * 60000;
+                }).length})</Text>
+
+                {roomMembers.filter(m => {
+                  const lastSeen = m.profiles?.last_seen;
+                  if (!lastSeen) return false;
+                  return new Date().getTime() - new Date(lastSeen).getTime() < 5 * 60000;
+                }).map((m, i) => (
+                  <View key={i} style={s.memberRow}>
+                    <View style={s.memberAvatar}>
+                      <Text style={s.memberAvatarText}>{(m.profiles?.username || 'U').slice(0, 1).toUpperCase()}</Text>
+                    </View>
+                    <Text style={s.memberUsername}>{m.profiles?.username}</Text>
+                    <View style={s.onlineDot} />
+                  </View>
+                ))}
+
+                <Text style={s.memberSectionTitle}>👥 All Members ({roomMembers.length})</Text>
+                {roomMembers.map((m, i) => (
+                  <View key={i} style={s.memberRow}>
+                    <View style={[s.memberAvatar, { backgroundColor: '#1f2937' }]}>
+                      <Text style={s.memberAvatarText}>{(m.profiles?.username || 'U').slice(0, 1).toUpperCase()}</Text>
+                    </View>
+                    <Text style={s.memberUsername}>{m.profiles?.username}</Text>
+                  </View>
+                ))}
+
+                <TouchableOpacity
+                  style={s.leaveBtn}
+                  onPress={() => {
+                    if (selectedRoom) {
+                      const roomId = selectedRoom.id;
+                      Alert.alert('Leave Room', 'Are you sure you want to leave this room?', [
+                        { text: 'Cancel', style: 'cancel' },
+                        {
+                          text: 'Leave', style: 'destructive', onPress: () => {
+                            leaveRoom(roomId);
+                            setIsMembersVisible(false);
+                          }
+                        }
+                      ]);
+                    }
+                  }}
+                >
+                  <Text style={s.leaveBtnText}>Leave Room</Text>
+                </TouchableOpacity>
+              </ScrollView>
+            </View>
+          </View>
+        </Modal>
+
+        {/* About Modal */}
+        <Modal visible={isAboutVisible} transparent animationType="slide">
+          <View style={s.modalOverlay}>
+            <View style={[s.modalContent, { height: '80%' }]}>
+              <View style={s.modalHeader}>
+                <TouchableOpacity onPress={() => setIsAboutVisible(false)}>
+                  <Text style={s.modalCloseText}>← About</Text>
+                </TouchableOpacity>
+              </View>
+
+              <ScrollView showsVerticalScrollIndicator={false}>
+                <View style={{ alignItems: 'center', marginVertical: 20 }}>
+                  <Text style={{ fontSize: 48 }}>{selectedRoom?.type === 'global' ? '🌐' : '🏛️'}</Text>
+                  <Text style={s.aboutTitle}>{selectedRoom?.name}</Text>
+                  <Text style={s.aboutHandle}>@{selectedRoom?.name.toLowerCase().replace(/\s/g, '_')}</Text>
+                </View>
+
+                <View style={s.aboutSection}>
+                  <Text style={s.aboutSectionTitle}>📋 Description</Text>
+                  <Text style={s.aboutSectionBody}>{selectedRoom?.description || 'No description provided.'}</Text>
+                </View>
+
+                <View style={s.aboutSection}>
+                  <Text style={s.aboutSectionTitle}>📌 Tags</Text>
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                    {(selectedRoom?.tags || ['Campus', 'Community']).map((tag: string, i: number) => (
+                      <View key={i} style={s.tagPill}>
+                        <Text style={s.tagText}>[{tag}]</Text>
+                      </View>
+                    ))}
+                  </View>
+                </View>
+
+                <View style={s.aboutSection}>
+                  <Text style={s.aboutSectionTitle}>📜 Rules</Text>
+                  <Text style={s.aboutSectionBody}>{selectedRoom?.rules || "1. Be respectful\n2. No spam\n3.Follow the chat rules"}</Text>
+                </View>
+
+                <View style={s.aboutSection}>
+                  <Text style={s.aboutSectionTitle}>📊 Stats</Text>
+                  <View style={s.statRow}>
+                    <Text style={s.statLabel}>👥 Members</Text>
+                    <Text style={s.statValue}>{selectedRoom?.member_count ?? 0}</Text>
+                  </View>
+                  <View style={s.statRow}>
+                    <Text style={s.statLabel}>💬 Messages</Text>
+                    <Text style={s.statValue}>{roomStats.messageCount}</Text>
+                  </View>
+                  <View style={s.statRow}>
+                    <Text style={s.statLabel}>📅 Created</Text>
+                    <Text style={s.statValue}>{new Date(roomStats.createdAt).toLocaleDateString(undefined, { month: 'short', year: 'numeric' })}</Text>
+                  </View>
+                </View>
+
+                <TouchableOpacity
+                  style={s.leaveBtn}
+                  onPress={() => {
+                    if (selectedRoom) {
+                      const roomId = selectedRoom.id;
+                      Alert.alert('Leave Room', 'Are you sure you want to leave this room?', [
+                        { text: 'Cancel', style: 'cancel' },
+                        {
+                          text: 'Leave', style: 'destructive', onPress: () => {
+                            leaveRoom(roomId);
+                            setIsAboutVisible(false);
+                          }
+                        }
+                      ]);
+                    }
+                  }}
+                >
+                  <Text style={s.leaveBtnText}>Leave Room</Text>
+                </TouchableOpacity>
+              </ScrollView>
+            </View>
+          </View>
+        </Modal>
       </SafeAreaView>
     );
   }
@@ -437,7 +835,7 @@ export default function TavernScreen() {
   return (
     <SafeAreaView style={s.container}>
       <StatusBar barStyle="light-content" />
-      
+
       {/* Header */}
       <View style={s.header}>
         <Text style={s.screenTitle}>The Tavern</Text>
@@ -450,10 +848,10 @@ export default function TavernScreen() {
       {/* Main Pill Toggle */}
       <View style={s.tabs}>
         {(['campus', 'global'] as TabType[]).map(tab => (
-          <TouchableOpacity 
-            key={tab} 
-            style={[s.tab, activeTab === tab && s.tabActive]} 
-            onPress={() => setActiveTab(tab)} 
+          <TouchableOpacity
+            key={tab}
+            style={[s.tab, activeTab === tab && s.tabActive]}
+            onPress={() => setActiveTab(tab)}
             activeOpacity={0.8}
           >
             <Text style={s.tabIcon}>{tab === 'campus' ? '🏫' : '🌐'}</Text>
@@ -467,14 +865,14 @@ export default function TavernScreen() {
       {/* Sub-tabs (Underlined) */}
       {activeTab === 'campus' && (
         <View style={s.subTabs}>
-          <TouchableOpacity 
-            style={[s.subTab, campusSubTab === 'community' && s.subTabActive]} 
+          <TouchableOpacity
+            style={[s.subTab, campusSubTab === 'community' && s.subTabActive]}
             onPress={() => setCampusSubTab('community')}
           >
             <Text style={[s.subTabText, campusSubTab === 'community' && s.subTabTextActive]}>Community</Text>
           </TouchableOpacity>
-          <TouchableOpacity 
-            style={[s.subTab, campusSubTab === 'leaderboard' && s.subTabActive]} 
+          <TouchableOpacity
+            style={[s.subTab, campusSubTab === 'leaderboard' && s.subTabActive]}
             onPress={() => setCampusSubTab('leaderboard')}
           >
             <Text style={[s.subTabText, campusSubTab === 'leaderboard' && s.subTabTextActive]}>Leaderboard</Text>
@@ -492,7 +890,7 @@ export default function TavernScreen() {
             <Text style={{ color: '#6b7280', fontSize: 14, textAlign: 'center', marginBottom: 24, lineHeight: 20 }}>
               You must select and officially join a campus community to access chat groups and projects.
             </Text>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={{ backgroundColor: '#7c3aed', paddingHorizontal: 24, paddingVertical: 12, borderRadius: 12 }}
               onPress={() => router.push('/(auth)/CampusOnboarding')}
             >
@@ -512,7 +910,7 @@ export default function TavernScreen() {
               <Text style={s.emptyTitle}>{activeTab === 'campus' ? 'No campus chats yet' : 'No global servers yet'}</Text>
               <Text style={s.emptySub}>{activeTab === 'campus' ? 'Join your college community or create one!' : 'Global servers coming soon'}</Text>
               {activeTab === 'campus' && (
-                <TouchableOpacity 
+                <TouchableOpacity
                   style={[s.modalBtnCreate, { marginTop: 20, paddingHorizontal: 30 }]}
                   onPress={() => setIsCreating(true)}
                 >
@@ -521,7 +919,15 @@ export default function TavernScreen() {
               )}
             </View>
           }
-          renderItem={({ item }) => <RoomCard room={item} isActive={false} onPress={() => openRoom(item)} />}
+          renderItem={({ item }) => (
+            <RoomCard
+              room={item}
+              isActive={false}
+              isJoined={joinedRooms.includes(item.id)}
+              onPress={() => handleRoomPress(item)}
+              onJoin={(id) => joinRoom(id)}
+            />
+          )}
         />
       )}
 
@@ -532,11 +938,51 @@ export default function TavernScreen() {
       )}
 
       {/* Campus Selection One-Time Flow */}
-      <CampusPicker 
+      <CampusPicker
         visible={isCampusPicking}
         isLoading={isJoinLoading}
         onConfirm={handleSetCampus}
       />
+
+      {/* Join Prompt Modal */}
+      <Modal visible={isJoinPromptVisible} transparent animationType="fade">
+        <View style={s.joinPromptOverlay}>
+          <View style={s.joinPromptContent}>
+            <Text style={s.joinPromptIcon}>{roomForPrompt?.type === 'global' ? '🌐' : '🏛️'}</Text>
+            <Text style={s.joinPromptTitle}>{roomForPrompt?.name}</Text>
+            <Text style={s.joinPromptSub}>
+              Join this room to start chatting with your campus community
+            </Text>
+
+            <View style={s.joinPromptStats}>
+              <Text style={s.joinPromptMembers}>👥 {roomForPrompt?.member_count ?? 0} members</Text>
+            </View>
+
+            <TouchableOpacity
+              style={s.joinPromptBtn}
+              onPress={() => {
+                if (roomForPrompt) {
+                  joinRoom(roomForPrompt.id, true);
+                  setIsJoinPromptVisible(false);
+                }
+              }}
+            >
+              <Text style={s.joinPromptBtnText}>Join & Enter →</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={s.joinPromptCancel} onPress={() => setIsJoinPromptVisible(false)}>
+              <Text style={s.joinPromptCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Toast Notification */}
+      {toastMessage && (
+        <View style={s.toastContainer}>
+          <Text style={s.toastText}>{toastMessage}</Text>
+        </View>
+      )}
 
       {/* Create Community Modal */}
       <Modal visible={isCreating} transparent animationType="slide">
@@ -580,50 +1026,50 @@ export default function TavernScreen() {
 
 const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0a0a0a' },
-  header: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    justifyContent: 'space-between', 
-    paddingHorizontal: 20, 
-    paddingTop: 16, 
-    paddingBottom: 20 
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 20
   },
-  screenTitle: { 
-    color: '#ffffff', 
-    fontSize: 28, 
-    fontWeight: '800', 
-    letterSpacing: -0.5 
+  screenTitle: {
+    color: '#ffffff',
+    fontSize: 28,
+    fontWeight: '800',
+    letterSpacing: -0.5
   },
-  liveIndicator: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    gap: 6, 
-    backgroundColor: '#052e16', 
-    borderWidth: 1, 
-    borderColor: '#16a34a', 
-    borderRadius: 20, 
-    paddingHorizontal: 10, 
-    paddingVertical: 4 
+  liveIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#052e16',
+    borderWidth: 1,
+    borderColor: '#16a34a',
+    borderRadius: 20,
+    paddingHorizontal: 10,
+    paddingVertical: 4
   },
   onlineDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#4ade80' },
   liveText: { color: '#4ade80', fontSize: 11, fontWeight: '700' },
-  
+
   // Pill Toggle
-  tabs: { 
-    flexDirection: 'row', 
-    marginHorizontal: 20, 
-    backgroundColor: '#111111', 
-    borderRadius: 12, 
+  tabs: {
+    flexDirection: 'row',
+    marginHorizontal: 20,
+    backgroundColor: '#111111',
+    borderRadius: 12,
     padding: 4,
     marginBottom: 16
   },
-  tab: { 
-    flex: 1, 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    justifyContent: 'center', 
-    gap: 6, 
-    paddingVertical: 10, 
+  tab: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 10,
     borderRadius: 10
   },
   tabActive: { backgroundColor: '#7c3aed' },
@@ -656,42 +1102,65 @@ const s = StyleSheet.create({
   },
 
   // Room Cards
-  roomCard: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
+  roomCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
     marginHorizontal: 20,
     marginBottom: 10,
-    padding: 16, 
+    padding: 16,
     backgroundColor: '#111111',
     borderRadius: 16,
     borderWidth: 1,
     borderColor: '#1f2937'
   },
   roomCardActive: { borderColor: '#7c3aed' },
-  roomIcon: { 
-    width: 48, 
-    height: 48, 
-    borderRadius: 12, 
-    alignItems: 'center', 
-    justifyContent: 'center', 
-    backgroundColor: '#4c1d95' 
+  roomIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#4c1d95'
   },
   roomIconText: { fontSize: 20 },
   roomNameRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 },
   roomName: { color: '#ffffff', fontSize: 16, fontWeight: '700', flex: 1 },
   onlinePillText: { color: '#4ade80', fontSize: 12, fontWeight: '600' },
   roomDesc: { color: '#6b7280', fontSize: 13, marginTop: 2 },
-  
-  unreadBadge: { 
+
+  roomStatsRow: { flexDirection: 'row', alignItems: 'center', marginTop: 8, gap: 8 },
+  roomStatText: { color: '#6b7280', fontSize: 12 },
+  roomStatSeparator: { color: '#374151', fontSize: 12 },
+  roomOnlineText: { color: '#4ade80', fontSize: 12, fontWeight: '600' },
+
+  roomCardAction: { marginLeft: 12, justifyContent: 'center' },
+  joinedPill: { backgroundColor: '#064e3b', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, borderWidth: 1, borderColor: '#065f46' },
+  joinedPillText: { color: '#4ade80', fontSize: 11, fontWeight: '700' },
+  joinBtnSmall: { backgroundColor: 'transparent', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12, borderWidth: 1, borderColor: '#7c3aed' },
+  joinBtnSmallText: { color: '#7c3aed', fontSize: 12, fontWeight: '700' },
+
+  joinPromptOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.9)', justifyContent: 'center', alignItems: 'center', padding: 24 },
+  joinPromptContent: { backgroundColor: '#111111', borderRadius: 24, padding: 32, width: '100%', alignItems: 'center', borderWidth: 1, borderColor: '#1f2937' },
+  joinPromptIcon: { fontSize: 48, marginBottom: 16 },
+  joinPromptTitle: { color: '#ffffff', fontSize: 24, fontWeight: '800', marginBottom: 8, textAlign: 'center' },
+  joinPromptSub: { color: '#6b7280', fontSize: 16, textAlign: 'center', marginBottom: 24, lineHeight: 24 },
+  joinPromptStats: { flexDirection: 'row', alignItems: 'center', marginBottom: 32 },
+  joinPromptMembers: { color: '#ffffff', fontSize: 16, fontWeight: '600' },
+  joinPromptBtn: { backgroundColor: '#7c3aed', width: '100%', paddingVertical: 16, borderRadius: 16, alignItems: 'center', marginBottom: 12 },
+  joinPromptBtnText: { color: '#ffffff', fontSize: 18, fontWeight: '700' },
+  joinPromptCancel: { paddingVertical: 12 },
+  joinPromptCancelText: { color: '#6b7280', fontSize: 16, fontWeight: '600' },
+
+  unreadBadge: {
     position: 'absolute',
     top: -5,
     right: -5,
-    minWidth: 18, 
-    height: 18, 
-    borderRadius: 9, 
-    backgroundColor: '#ef4444', 
-    alignItems: 'center', 
-    justifyContent: 'center' 
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: '#ef4444',
+    alignItems: 'center',
+    justifyContent: 'center'
   },
   unreadText: { color: '#fff', fontSize: 10, fontWeight: '800' },
 
@@ -702,69 +1171,70 @@ const s = StyleSheet.create({
 
   // Chat View
   chatView: { flex: 1, backgroundColor: '#0a0a0a' },
-  chatHeader: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    paddingHorizontal: 20, 
-    paddingVertical: 12, 
-    borderBottomWidth: 1, 
-    borderBottomColor: '#1f2937' 
+  chatHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#1f2937'
   },
+  chatHeaderSub: { color: '#6b7280', fontSize: 12, fontWeight: '500' },
   backBtn: { padding: 4, marginRight: 12 },
   backIcon: { color: '#ffffff', fontSize: 24 },
   chatTitle: { flex: 1, color: '#ffffff', fontSize: 16, fontWeight: '700', textAlign: 'center' },
   infoBtn: { padding: 4 },
   infoBtnText: { color: '#6b7280', fontSize: 20 },
 
-  onlineStrip: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    justifyContent: 'center', 
-    gap: 6, 
-    paddingVertical: 6, 
-    backgroundColor: '#0a0a0a', 
-    borderBottomWidth: 1, 
-    borderBottomColor: '#1f2937' 
+  onlineStrip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 6,
+    backgroundColor: '#0a0a0a',
+    borderBottomWidth: 1,
+    borderBottomColor: '#1f2937'
   },
   onlineStripText: { color: '#4ade80', fontSize: 11, fontWeight: '600' },
 
   msgList: { paddingHorizontal: 20, paddingVertical: 16, gap: 16 },
   chatLoading: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  
+
   msgRow: { marginBottom: 16 },
   msgRowMe: { alignItems: 'flex-end' },
-  
+
   senderName: { color: '#7c3aed', fontSize: 11, fontWeight: '700', marginBottom: 4, marginLeft: 44 },
-  
+
   bubbleRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 12 },
   bubbleRowMe: { flexDirection: 'row-reverse' },
-  
+
   avatarCircle: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#4c1d95', alignItems: 'center', justifyContent: 'center' },
   avatarText: { color: '#ffffff', fontSize: 12, fontWeight: '700' },
-  
-  bubble: { 
-    maxWidth: '75%', 
-    paddingHorizontal: 14, 
-    paddingVertical: 10, 
+
+  bubble: {
+    maxWidth: '75%',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
     borderWidth: 1,
     borderColor: '#1f2937'
   },
-  bubbleThem: { 
-    backgroundColor: '#1a1a2e', 
+  bubbleThem: {
+    backgroundColor: '#1a1a2e',
     borderRadius: 16,
-    borderTopLeftRadius: 4 
+    borderTopLeftRadius: 4
   },
-  bubbleMe: { 
-    backgroundColor: '#7c3aed', 
+  bubbleMe: {
+    backgroundColor: '#7c3aed',
     borderColor: '#7c3aed',
     borderRadius: 16,
-    borderTopRightRadius: 4 
+    borderTopRightRadius: 4
   },
   bubbleFlagged: { borderColor: '#ef4444' },
-  
+
   bubbleText: { color: '#e5e7eb', fontSize: 14, lineHeight: 20 },
   bubbleTextMe: { color: '#ffffff' },
-  
+
   bubbleTime: { color: '#4b5563', fontSize: 10, marginTop: 4 },
   bubbleTimeMe: { color: '#a78bfa', textAlign: 'right' },
   flaggedText: { color: '#ef4444', fontSize: 10, marginTop: 2, fontWeight: '600' },
@@ -789,38 +1259,38 @@ const s = StyleSheet.create({
     paddingRight: 6,
     paddingVertical: 6,
   },
-  msgInput: { 
-    flex: 1, 
-    color: '#ffffff', 
-    fontSize: 15, 
+  msgInput: {
+    flex: 1,
+    color: '#ffffff',
+    fontSize: 15,
     maxHeight: 100,
     paddingVertical: 4
   },
-  sendBtn: { 
-    paddingHorizontal: 16, 
-    paddingVertical: 8, 
-    borderRadius: 20, 
+  sendBtn: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
     backgroundColor: '#4b5563',
     marginLeft: 8
   },
   sendBtnActive: { backgroundColor: '#7c3aed' },
   sendBtnText: { color: '#ffffff', fontSize: 13, fontWeight: '700' },
 
-  fab: { 
-    position: 'absolute', 
-    bottom: 20, 
-    right: 20, 
-    width: 56, 
-    height: 56, 
-    borderRadius: 28, 
-    backgroundColor: '#7c3aed', 
-    alignItems: 'center', 
-    justifyContent: 'center', 
-    elevation: 8, 
-    shadowColor: '#7c3aed', 
-    shadowOffset: { width: 0, height: 4 }, 
-    shadowOpacity: 0.4, 
-    shadowRadius: 20 
+  fab: {
+    position: 'absolute',
+    bottom: 20,
+    right: 20,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#7c3aed',
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 8,
+    shadowColor: '#7c3aed',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 20
   },
   fabIcon: { color: '#fff', fontSize: 28, fontWeight: '300' },
 
@@ -833,4 +1303,41 @@ const s = StyleSheet.create({
   modalCancelText: { color: '#9ca3af', fontWeight: '600', fontSize: 16 },
   modalBtnCreate: { flex: 1, padding: 16, borderRadius: 12, backgroundColor: '#7c3aed', alignItems: 'center' },
   modalCreateText: { color: '#fff', fontWeight: '600', fontSize: 16 },
+
+  modalHeader: { marginBottom: 20 },
+  modalCloseText: { color: '#ffffff', fontSize: 18, fontWeight: '700' },
+  memberSectionTitle: { color: '#6b7280', fontSize: 14, fontWeight: '700', marginTop: 24, marginBottom: 16, textTransform: 'uppercase' },
+  memberRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 16, gap: 12 },
+  memberAvatar: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#4c1d95', alignItems: 'center', justifyContent: 'center' },
+  memberAvatarText: { color: '#ffffff', fontSize: 12, fontWeight: '700' },
+  memberUsername: { flex: 1, color: '#ffffff', fontSize: 16, fontWeight: '600' },
+  leaveBtn: { marginTop: 40, marginBottom: 20, paddingVertical: 16, borderRadius: 12, borderWidth: 1, borderColor: '#ef4444', alignItems: 'center' },
+  leaveBtnText: { color: '#ef4444', fontSize: 16, fontWeight: '700' },
+
+  aboutTitle: { color: '#ffffff', fontSize: 24, fontWeight: '800', marginTop: 12 },
+  aboutHandle: { color: '#7c3aed', fontSize: 14, fontWeight: '600' },
+  aboutSection: { backgroundColor: '#0a0a0a', borderWidth: 1, borderColor: '#1f2937', borderRadius: 16, padding: 16, marginTop: 20 },
+  aboutSectionTitle: { color: '#6b7280', fontSize: 14, fontWeight: '700', marginBottom: 12, textTransform: 'uppercase' },
+  aboutSectionBody: { color: '#ffffff', fontSize: 15, lineHeight: 22 },
+  statRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
+  statLabel: { color: '#6b7280', fontSize: 15 },
+  statValue: { color: '#ffffff', fontSize: 15, fontWeight: '700' },
+  tagPill: { backgroundColor: '#111111', paddingHorizontal: 4, paddingVertical: 2 },
+  tagText: { color: '#7c3aed', fontSize: 14, fontWeight: '600' },
+
+  // Toast
+  toastContainer: {
+    position: 'absolute',
+    bottom: 100,
+    left: 20,
+    right: 20,
+    backgroundColor: '#052e16',
+    borderWidth: 1,
+    borderColor: '#16a34a',
+    borderRadius: 12,
+    padding: 16,
+    alignItems: 'center',
+    zIndex: 9999
+  },
+  toastText: { color: '#4ade80', fontSize: 14, fontWeight: '700' },
 });

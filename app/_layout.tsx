@@ -152,7 +152,8 @@ function InnerRootLayout() {
           registerPushNotifications(profile.id);
         }
 
-        const isOnboarded = !!profile?.onboarding_complete;
+        // A user is considered onboarded if EITHER the DB says so OR local storage says so (as a fallback)
+        const isOnboarded = !!profile?.onboarding_complete || isOnboardingFinished;
 
         if (!isOnboarded) {
           const onSetupScreen = segs.includes('CompleteProfileScreen');

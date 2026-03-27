@@ -10,8 +10,8 @@ import { useUserStore } from '@/store/userStore';
 import { Colors, Typography, Spacing, Radius } from '@/constants/theme';
 
 const COLLEGES = [
-  { id: 'ram_meghe_eng', name: 'Prof Ram Meghe' },
-  { id: 'sipna_eng', name: 'Sipna College of Engineering' },
+  { id: 'ram_meghe_eng', name: 'Prof Ram Meghe (PRMITR)' },
+  { id: 'sipna_eng', name: 'Sipna College of Engineering (SCOET)' },
 ];
 
 export default function CampusOnboardingScreen() {
