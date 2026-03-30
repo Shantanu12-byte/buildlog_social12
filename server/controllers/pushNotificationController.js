@@ -15,14 +15,18 @@ webpush.setVapidDetails(
 async function subscribe(req, res) {
   const { userId, subscription } = req.body;
 
-  if (!userId || !subscription) {
+  if (!userId || !subscription || !subscription.endpoint) {
     return res.status(400).json({ error: 'userId and subscription are required' });
   }
 
   try {
     const { error } = await supabase
       .from('push_subscriptions')
-      .upsert({ user_id: userId, subscription }, { onConflict: 'user_id,subscription' });
+      .upsert({ 
+        user_id: userId, 
+        subscription: subscription,
+        endpoint: subscription.endpoint
+      }, { onConflict: 'endpoint' });
 
     if (error) throw error;
 
