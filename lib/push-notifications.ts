@@ -1,7 +1,7 @@
 import { Platform } from 'react-native';
 
 const VAPID_PUBLIC_KEY = 'BPCZ_tRb3cxK0dKea6HD_i1fNgkrfh_K3fUrOt31utrcpvQrwBw4HZ88QMX7ayPaqgfNwQDHOtbU2osEPPipulk';
-const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL || 'http://localhost:5000';
+const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL || 'https://buildlog-social12.onrender.com';
 
 function urlBase64ToUint8Array(base64String: string) {
   const padding = '='.repeat((4 - (base64String.length % 4)) % 4);

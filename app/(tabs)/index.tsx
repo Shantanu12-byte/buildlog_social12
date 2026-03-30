@@ -79,8 +79,9 @@ export default function FeedScreen() {
 
     try {
       const { data, error } = await supabase
-        .from('trending_posts')
+        .from('posts')
         .select('*, profiles:author_id(username, avatar_url)')
+        .order('created_at', { ascending: false })
         .range(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE - 1);
 
       if (error) throw error;

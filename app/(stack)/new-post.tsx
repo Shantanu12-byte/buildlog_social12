@@ -96,7 +96,8 @@ export default function NewPostScreen() {
     let wasFiltered = false;
 
     try {
-      const filterResponse = await fetch('http://localhost:5000/api/chat/clean', {
+      const backendUrl = process.env.EXPO_PUBLIC_BACKEND_URL || 'https://buildlog-social12.onrender.com';
+      const filterResponse = await fetch(`${backendUrl}/api/chat/clean`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text: caption.trim() })

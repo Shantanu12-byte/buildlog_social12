@@ -634,7 +634,7 @@ export default function TavernScreen() {
         const targetIds = memberData.map(m => m.user_id).filter(id => id !== userId);
         if (targetIds.length > 0) {
           const backendUrl = process.env.EXPO_PUBLIC_BACKEND_URL || 'http://localhost:5000';
-          fetch(`${backendUrl}/api/push/notify/chat`, {
+          fetch(`${backendUrl}/api/user/push/notify/chat`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
