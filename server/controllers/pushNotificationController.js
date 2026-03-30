@@ -96,10 +96,30 @@ async function sendTestNotification(req, res) {
     res.json({ success: true });
 }
 
+async function notifyChat(req, res) {
+  const { targetUserIds, senderUsername, roomName, message } = req.body;
+  if (!targetUserIds || !senderUsername || !roomName || !targetUserIds.length) {
+    return res.status(400).json({ error: 'Missing data' });
+  }
+
+  const notifications = targetUserIds.map(userId => 
+    sendPushNotification(
+      userId,
+      `New message in ${roomName}`,
+      `@${senderUsername}: ${message}`,
+      '/(tabs)/tavern'
+    )
+  );
+  
+  await Promise.all(notifications);
+  res.json({ success: true });
+}
+
 module.exports = {
   subscribe,
   sendPushNotification,
   sendTestNotification,
   notifyHype,
   notifyFollow,
+  notifyChat,
 };

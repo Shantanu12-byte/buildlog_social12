@@ -46,9 +46,6 @@ export const useUserStore = create<UserState>((set, get) => ({
   isEnderMode: false,
 
   fetchUserProfile: async () => {
-    // Prevent multiple parallel fetches
-    if (get().isLoading) return;
-    
     set({ isLoading: true });
     try {
       const { data: { session } } = await supabase.auth.getSession();
@@ -144,9 +141,11 @@ export const useUserStore = create<UserState>((set, get) => ({
 
       // 3. Listen for Auth Changes
       supabase.auth.onAuthStateChange(async (event, session) => {
-        if (event === 'SIGNED_IN' && session) {
-          set({ userId: session.user.id });
-          await get().fetchUserProfile();
+        if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && session) {
+          if (!get().userId) {
+            set({ userId: session.user.id });
+            await get().fetchUserProfile();
+          }
         } else if (event === 'SIGNED_OUT') {
           get().clearUser();
         }

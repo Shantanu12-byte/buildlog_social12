@@ -623,6 +623,33 @@ export default function TavernScreen() {
     await supabase.from('messages').insert(newMsg);
     setRooms(prev => prev.map(r => r.id === selectedRoom.id ? { ...r, last_message: processedText.slice(0, 50) } : r));
 
+    // Send push notifications to other members
+    try {
+      const { data: memberData } = await supabase
+        .from('room_members')
+        .select('user_id')
+        .eq('room_id', selectedRoom.id);
+        
+      if (memberData) {
+        const targetIds = memberData.map(m => m.user_id).filter(id => id !== userId);
+        if (targetIds.length > 0) {
+          const backendUrl = process.env.EXPO_PUBLIC_BACKEND_URL || 'http://localhost:5000';
+          fetch(`${backendUrl}/api/push/notify/chat`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              targetUserIds: targetIds,
+              senderUsername: userProfile?.username || 'user',
+              roomName: selectedRoom.name,
+              message: processedText
+            }),
+          }).catch(e => console.error('Failed pushing chat notification', e));
+        }
+      }
+    } catch (e) {
+      console.error('Error fetching members to notify', e);
+    }
+
     if (wasFiltered) {
       Alert.alert(
         'Community Guidelines',
@@ -663,6 +690,7 @@ export default function TavernScreen() {
           }}
           onViewAbout={() => {
             fetchRoomStats(selectedRoom.id);
+            fetchRoomMembers(selectedRoom.id);
             setIsAboutVisible(true);
           }}
           onLeave={() => {
@@ -796,12 +824,27 @@ export default function TavernScreen() {
                   </View>
                 </View>
 
+                <View style={{ marginTop: 24, marginBottom: 8 }}>
+                  <Text style={s.memberSectionTitle}>👥 Members ({roomMembers.length})</Text>
+                  {roomMembers.map((m, i) => (
+                    <View key={i} style={s.memberRow}>
+                      <View style={[s.memberAvatar, { backgroundColor: '#1f2937' }]}>
+                        <Text style={s.memberAvatarText}>{(m.profiles?.username || 'U').slice(0, 1).toUpperCase()}</Text>
+                      </View>
+                      <Text style={s.memberUsername}>{m.profiles?.username}</Text>
+                    </View>
+                  ))}
+                </View>
+
                 <TouchableOpacity
                   style={s.leaveBtn}
                   onPress={() => {
                     if (selectedRoom) {
                       const roomId = selectedRoom.id;
-                      Alert.alert('Leave Room', 'Are you sure you want to leave this room?', [
+                      Alert.alert(
+                        'Leave Room', 
+                        'Are you sure you want to leave this room?', 
+                      [
                         { text: 'Cancel', style: 'cancel' },
                         {
                           text: 'Leave', style: 'destructive', onPress: () => {

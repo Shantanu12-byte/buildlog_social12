@@ -173,7 +173,7 @@ function InnerRootLayout() {
     handleRedirects();
   }, [userId, userProfile, authLoading, segments, isOnboardingFinished, profileFetched]);
 
-  if (!profileFetched || authLoading || storeLoading) {
+  if (!profileFetched || authLoading) {
     return (
       <View style={styles.loadingContainer}>
         <MinecraftLoader />
