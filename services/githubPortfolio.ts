@@ -43,7 +43,6 @@ export async function fetchUserProjects(userId: string): Promise<GitHubPortfolio
     const data = await response.json();
     return data as GitHubPortfolioResponse;
   } catch (error) {
-    console.error('fetchUserProjects Error:', error);
     throw error;
   }
 }

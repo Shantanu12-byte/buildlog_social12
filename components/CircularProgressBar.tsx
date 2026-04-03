@@ -1,6 +1,8 @@
-import { View, Text, StyleSheet, ActivityIndicator, Platform } from 'react-native';
+import React from 'react';
+import { View, Text, StyleSheet, Platform } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Colors, FontSizes, Spacing } from '@/constants/theme';
+import { Typography, Spacing } from '@/constants/theme';
+import { useTheme } from '@/context/ThemeContext';
 
 interface CircularProgressBarProps {
   currentDay: number;
@@ -10,23 +12,29 @@ interface CircularProgressBarProps {
 }
 
 const SEGMENT_COUNT = 15;
-const NEON_CYAN = '#00F0FF';
-const NEON_PURPLE = 'rgba(160, 100, 255, 0.9)';
 
 export function CircularProgressBar({
   currentDay,
   totalDays,
   size = 200,
-  strokeWidth = 12,
 }: CircularProgressBarProps) {
+  const { theme, isDark } = useTheme();
+  const styles = React.useMemo(() => getStyles(theme, isDark), [theme, isDark]);
+  
   const progress = currentDay / totalDays;
   const filledSegments = Math.round(progress * SEGMENT_COUNT);
+  
+  const neonCyan = isDark ? '#00F0FF' : theme.purple;
+  const neonPurple = isDark ? 'rgba(160, 100, 255, 0.9)' : theme.purple;
 
   return (
     <View style={[styles.container, { width: size }]}>
       <View style={styles.trackWrapper}>
         <LinearGradient
-          colors={['rgba(0,240,255,0.15)', 'rgba(88,28,135,0.2)', 'rgba(0,240,255,0.15)']}
+          colors={isDark 
+            ? ['rgba(0,240,255,0.15)', 'rgba(88,28,135,0.2)', 'rgba(0,240,255,0.15)']
+            : [theme.bgInput, theme.bgInput, theme.bgInput]
+          }
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 0 }}
           style={styles.track}
@@ -36,7 +44,7 @@ export function CircularProgressBar({
               i < filledSegments ? (
                 <LinearGradient
                   key={i}
-                  colors={[NEON_CYAN, NEON_PURPLE]}
+                  colors={[neonCyan, neonPurple]}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 0 }}
                   style={[styles.segment, styles.segmentFilled]}
@@ -56,63 +64,69 @@ export function CircularProgressBar({
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    position: 'relative',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  trackWrapper: {
-    width: '100%',
-    borderRadius: 12,
-    overflow: 'hidden',
-    marginBottom: Spacing.md,
-    borderWidth: 1,
-    borderColor: 'rgba(0, 240, 255, 0.3)',
-  },
-  track: {
-    padding: 3,
-  },
-  segmentBar: {
-    flexDirection: 'row',
-    width: '100%',
-    height: 24,
-    gap: 2,
-  },
-  segment: {
-    flex: 1,
-    borderRadius: 4,
-  },
-  segmentFilled: {
-    elevation: 5,
-    ...(Platform.OS === 'web'
-      ? { boxShadow: '0 0 10px rgba(0,240,255,0.4)' }
-      : {
-          shadowColor: '#00F0FF',
-          shadowOffset: { width: 0, height: 0 },
-          shadowOpacity: 0.4,
-          shadowRadius: 10,
-        }
-    ),
-  },
-  segmentEmpty: {
-    backgroundColor: 'rgba(255,255,255,0.05)',
-  },
-  textContainer: {
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  dayNumber: {
-    color: Colors.textPrimary,
-    fontSize: FontSizes['4xl'],
-    fontWeight: 'bold',
-    textShadowColor: 'rgba(255,255,255,0.35)',
-    textShadowOffset: { width: 0, height: 0 },
-    textShadowRadius: 6,
-  },
-  dayLabel: {
-    color: Colors.textSecondary,
-    fontSize: FontSizes.base,
-    marginTop: -Spacing.xs,
-  },
-});
+function getStyles(theme: any, isDark: boolean) {
+  const accentColor = isDark ? '#00F0FF' : theme.purple;
+  
+  return StyleSheet.create({
+    container: {
+      position: 'relative',
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    trackWrapper: {
+      width: '100%',
+      borderRadius: 12,
+      overflow: 'hidden',
+      marginBottom: Spacing.md,
+      borderWidth: 1,
+      borderColor: isDark ? 'rgba(0, 240, 255, 0.3)' : theme.border,
+    },
+    track: {
+      padding: 3,
+    },
+    segmentBar: {
+      flexDirection: 'row',
+      width: '100%',
+      height: 24,
+      gap: 2,
+    },
+    segment: {
+      flex: 1,
+      borderRadius: 4,
+    },
+    segmentFilled: {
+      elevation: 5,
+      ...(Platform.OS === 'web'
+        ? { boxShadow: `0 0 10px ${accentColor}66` }
+        : {
+            shadowColor: accentColor,
+            shadowOffset: { width: 0, height: 0 },
+            shadowOpacity: 0.4,
+            shadowRadius: 10,
+          }
+      ),
+    },
+    segmentEmpty: {
+      backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)',
+    },
+    textContainer: {
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    dayNumber: {
+      color: theme.textPrimary,
+      fontSize: Typography.sizes['4xl'],
+      fontWeight: 'bold',
+      ...(isDark ? {
+        textShadowColor: 'rgba(255,255,255,0.35)',
+        textShadowOffset: { width: 0, height: 0 },
+        textShadowRadius: 6,
+      } : {}),
+    },
+    dayLabel: {
+      color: theme.textSecondary,
+      fontSize: Typography.sizes.base,
+      marginTop: -Spacing.xs,
+    },
+  });
+}

@@ -10,11 +10,15 @@ import * as ImagePicker from 'expo-image-picker';
 import { Feather } from '@expo/vector-icons';
 import { supabase } from '@/lib/supabase';
 import { processImage } from '@/lib/imageProcessor';
-import { Colors, Typography, Spacing, Radius } from '@/constants/theme';
+import { Typography, Spacing, Radius } from '@/constants/theme';
 import { Card, SectionHeader, Avatar, Input } from '@/components/ui/UI';
+import { useTheme } from '@/context/ThemeContext';
 
 export default function NewPostScreen() {
   const router = useRouter();
+  const { theme, isDark } = useTheme();
+  const s = React.useMemo(() => getStyles(theme, isDark), [theme, isDark]);
+
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [caption, setCaption] = useState('');
   const [githubUrl, setGithubUrl] = useState('');
@@ -48,12 +52,9 @@ export default function NewPostScreen() {
       
       if (!error && data) {
         setProjects(data);
-        // Default to null (Generic Log) to satisfy the "post without project" requirement
         setSelectedProjectId(null);
       }
-    } catch (e) {
-      console.error('Init error:', e);
-    } finally {
+    } catch (e) { } finally {
       setIsLoadingProjects(false);
     }
   }
@@ -76,9 +77,7 @@ export default function NewPostScreen() {
       if (!result.canceled && result.assets && result.assets.length > 0) {
         setImageUri(result.assets[0].uri);
       }
-    } catch (error) {
-      console.error('Picker error:', error);
-    }
+    } catch (error) { }
   };
 
   const handlePost = async () => {
@@ -91,7 +90,6 @@ export default function NewPostScreen() {
     setIsUploading(true);
     isCurrentlyUploading.current = true;
 
-    // 1. Zero-Cost Profanity Filter Bridge (Local Node Backend)
     let processedCaption = caption.trim();
     let wasFiltered = false;
 
@@ -107,14 +105,11 @@ export default function NewPostScreen() {
         processedCaption = filterData.cleaned;
         wasFiltered = true;
       }
-    } catch (e) {
-      console.warn('Content filter service unavailable, using raw caption.');
-    }
+    } catch (e) { }
 
     try {
       if (!user) throw new Error('Auth session lost. Please login again.');
 
-      // 2. Process and Upload Image
       const processedImage = await processImage(imageUri);
       const response = await fetch(processedImage.uri);
       const blob = await response.blob();
@@ -131,7 +126,6 @@ export default function NewPostScreen() {
         .from('post-images')
         .getPublicUrl(filePath);
 
-      // 3. Insert Post
       const selectedProject = projects.find(p => p.id === selectedProjectId);
       
       const { error: insertError } = await supabase
@@ -141,7 +135,7 @@ export default function NewPostScreen() {
           author_id: user.id,
           username: user.user_metadata?.username || 'builder',
           project_id: selectedProjectId,
-          projectTitle: selectedProject?.title || '', // Match camelCase schema
+          projectTitle: selectedProject?.title || '',
           image_url: publicUrl,
           caption: githubUrl.trim() ? `${processedCaption}\n\n🔗 ${githubUrl.trim()}` : processedCaption,
         });
@@ -158,9 +152,7 @@ export default function NewPostScreen() {
         Alert.alert('Post Success', 'Your log entry has been broadcasted.');
         router.replace('/(tabs)');
       }
-    } catch (error: any) {
-      console.error('Post failed:', error);
-      Alert.alert('Post Failed', error.message || 'An error occurred during verification.');
+    } catch (error: any) { Alert.alert('Post Failed', error.message || 'An error occurred during verification.');
     } finally {
       setIsUploading(false);
       isCurrentlyUploading.current = false;
@@ -169,12 +161,12 @@ export default function NewPostScreen() {
 
   return (
     <SafeAreaView style={s.container}>
-      <StatusBar barStyle="light-content" />
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={theme.bg} />
       
       {/* Header */}
       <View style={s.header}>
         <TouchableOpacity onPress={() => router.back()} style={s.backBtn}>
-          <Feather name="x" size={24} color="#FFF" />
+          <Feather name="x" size={24} color={theme.textPrimary} />
         </TouchableOpacity>
         <Text style={s.headerTitle}>LOG_ENTRY</Text>
         <TouchableOpacity 
@@ -183,7 +175,7 @@ export default function NewPostScreen() {
           style={[s.postBtn, (isUploading || !caption.trim() || !imageUri) && s.postBtnDisabled]}
         >
           {isUploading ? (
-            <ActivityIndicator size="small" color="#000" />
+            <ActivityIndicator size="small" color={isDark ? "#000" : "#FFF"} />
           ) : (
             <Text style={s.postBtnText}>POST</Text>
           )}
@@ -200,7 +192,7 @@ export default function NewPostScreen() {
           <View style={s.section}>
             <SectionHeader title="Select Project" />
             {isLoadingProjects ? (
-              <ActivityIndicator color={Colors.accent.primary} />
+              <ActivityIndicator color={theme.purple} />
             ) : projects.length > 0 ? (
               <ScrollView 
                 horizontal 
@@ -211,7 +203,7 @@ export default function NewPostScreen() {
                   onPress={() => setSelectedProjectId(null)}
                   style={[s.projectCard, selectedProjectId === null && s.projectCardActive]}
                 >
-                  <Text style={[s.projectTitle, selectedProjectId === null && { color: '#000' }]}>
+                  <Text style={[s.projectTitle, selectedProjectId === null && s.projectTitleActive]}>
                     GENERIC_LOG
                   </Text>
                 </TouchableOpacity>
@@ -221,7 +213,7 @@ export default function NewPostScreen() {
                     onPress={() => setSelectedProjectId(p.id)}
                     style={[s.projectCard, selectedProjectId === p.id && s.projectCardActive]}
                   >
-                    <Text style={[s.projectTitle, selectedProjectId === p.id && { color: '#000' }]}>
+                    <Text style={[s.projectTitle, selectedProjectId === p.id && s.projectTitleActive]}>
                       {p.title.toUpperCase()}
                     </Text>
                   </TouchableOpacity>
@@ -233,7 +225,7 @@ export default function NewPostScreen() {
                   onPress={() => setSelectedProjectId(null)}
                   style={[s.projectCard, selectedProjectId === null && s.projectCardActive, { marginBottom: 12 }]}
                 >
-                  <Text style={[s.projectTitle, selectedProjectId === null && { color: '#000' }]}>
+                  <Text style={[s.projectTitle, selectedProjectId === null && s.projectTitleActive]}>
                     GENERIC_LOG (SELECTED)
                   </Text>
                 </TouchableOpacity>
@@ -242,7 +234,7 @@ export default function NewPostScreen() {
                   style={s.createProjectBtn}
                   onPress={() => router.push('/(stack)/create-project')}
                 >
-                  <Feather name="plus" size={14} color={Colors.accent.glow} />
+                  <Feather name="plus" size={14} color={theme.purple} />
                   <Text style={s.createProjectBtnText}>START_NEW_PROJECT</Text>
                 </TouchableOpacity>
               </View>
@@ -262,7 +254,7 @@ export default function NewPostScreen() {
             <TextInput
               style={s.textInput}
               placeholder="What did you build today?"
-              placeholderTextColor="#555"
+              placeholderTextColor={theme.textMuted}
               multiline
               value={caption}
               onChangeText={setCaption}
@@ -280,7 +272,7 @@ export default function NewPostScreen() {
                 </View>
               ) : (
                 <View style={s.placeholder}>
-                  <Feather name="camera" size={32} color="#333" />
+                  <Feather name="camera" size={32} color={theme.textMuted} />
                   <Text style={s.placeholderTxt}>ATTACH_VISUAL_PROOF</Text>
                 </View>
               )}
@@ -306,21 +298,21 @@ export default function NewPostScreen() {
   );
 }
 
-const s = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0F0F0B' },
+const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: theme.bg },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     padding: Spacing.lg,
     borderBottomWidth: 1,
-    borderBottomColor: '#222',
+    borderBottomColor: theme.border,
   },
-  headerTitle: { color: '#FFF', fontSize: 16, fontWeight: '800', letterSpacing: 1.5, fontFamily: Platform.OS === 'ios' ? 'Inter' : 'monospace' },
+  headerTitle: { color: theme.textPrimary, fontSize: 16, fontWeight: '800', letterSpacing: 1.5, fontFamily: Platform.OS === 'ios' ? 'Inter' : 'monospace' },
   backBtn: { padding: 4 },
-  postBtn: { backgroundColor: Colors.accent.glow, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 8 },
-  postBtnDisabled: { backgroundColor: '#333', opacity: 0.5 },
-  postBtnText: { color: '#000', fontWeight: '800', fontSize: 14 },
+  postBtn: { backgroundColor: theme.purple, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 8 },
+  postBtnDisabled: { backgroundColor: theme.bgInput, opacity: 0.5 },
+  postBtnText: { color: isDark ? '#000' : '#FFF', fontWeight: '800', fontSize: 14 },
   scroll: { padding: Spacing.lg },
   section: { marginBottom: 24 },
   projectList: { flexDirection: 'row', paddingHorizontal: 4, gap: 12 },
@@ -328,20 +320,23 @@ const s = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: Radius.full,
-    backgroundColor: '#1A1A1A',
+    backgroundColor: theme.bgInput,
     borderWidth: 1,
-    borderColor: '#333',
+    borderColor: theme.border,
     marginRight: 8,
   },
   projectCardActive: {
-    backgroundColor: Colors.accent.primary,
-    borderColor: Colors.accent.glow,
+    backgroundColor: theme.purple,
+    borderColor: theme.purple,
   },
   projectTitle: {
-    color: '#888',
+    color: theme.textSecondary,
     fontSize: 12,
     fontWeight: '800',
     fontFamily: Platform.OS === 'ios' ? 'Inter' : 'monospace',
+  },
+  projectTitleActive: {
+    color: isDark ? '#000' : '#FFF',
   },
   noProjectsContainer: {
     alignItems: 'center',
@@ -356,28 +351,28 @@ const s = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: Radius.md,
     borderWidth: 1,
-    borderColor: 'rgba(168, 85, 247, 0.4)',
-    backgroundColor: 'rgba(168, 85, 247, 0.1)',
+    borderColor: theme.purpleGlow,
+    backgroundColor: isDark ? 'rgba(124,58,237,0.1)' : 'rgba(124,58,237,0.05)',
   },
   createProjectBtnText: {
-    color: Colors.accent.glow,
+    color: theme.purple,
     fontSize: 11,
     fontWeight: '700',
     fontFamily: 'monospace',
   },
-  noneText: { color: '#444', fontSize: 11, fontFamily: 'monospace', textAlign: 'center' },
+  noneText: { color: theme.textMuted, fontSize: 11, fontFamily: 'monospace', textAlign: 'center' },
   entryCard: { padding: 20, marginBottom: 24 },
   inputHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 16 },
   inputMeta: { flex: 1 },
-  username: { color: '#FFF', fontSize: 14, fontWeight: '800' },
-  timestamp: { color: '#555', fontSize: 10, fontWeight: '600' },
-  textInput: { color: '#EEE', fontSize: 16, minHeight: 100, textAlignVertical: 'top', marginBottom: 20 },
-  mediaBox: { width: '100%', aspectRatio: 16 / 9, backgroundColor: '#111', borderRadius: 12, overflow: 'hidden', borderWidth: 1, borderColor: '#222' },
+  username: { color: theme.textPrimary, fontSize: 14, fontWeight: '800' },
+  timestamp: { color: theme.textMuted, fontSize: 10, fontWeight: '600' },
+  textInput: { color: theme.textPrimary, fontSize: 16, minHeight: 100, textAlignVertical: 'top', marginBottom: 20 },
+  mediaBox: { width: '100%', aspectRatio: 16 / 9, backgroundColor: theme.bgInput, borderRadius: 12, overflow: 'hidden', borderWidth: 1, borderColor: theme.border },
   placeholder: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 10 },
-  placeholderTxt: { color: '#444', fontSize: 10, fontWeight: '800', letterSpacing: 1 },
+  placeholderTxt: { color: theme.textMuted, fontSize: 10, fontWeight: '800', letterSpacing: 1 },
   imageWrap: { flex: 1 },
   preview: { width: '100%', height: '100%' },
   changeBadge: { position: 'absolute', bottom: 12, right: 12, backgroundColor: 'rgba(0,0,0,0.6)', padding: 8, borderRadius: 20, borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)' },
   githubInput: { marginBottom: 8 },
-  hint: { color: '#444', fontSize: 10, fontStyle: 'italic' },
+  hint: { color: theme.textMuted, fontSize: 10, fontStyle: 'italic' },
 });

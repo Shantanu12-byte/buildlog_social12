@@ -101,22 +101,47 @@ async function sendTestNotification(req, res) {
 }
 
 async function notifyChat(req, res) {
-  const { targetUserIds, senderUsername, roomName, message } = req.body;
-  if (!targetUserIds || !senderUsername || !roomName || !targetUserIds.length) {
+  const { roomId, senderUsername, roomName, message } = req.body;
+  const senderId = req.user.id; // From authMiddleware
+
+  if (!roomId || !senderUsername || !roomName || !message) {
     return res.status(400).json({ error: 'Missing data' });
   }
 
-  const notifications = targetUserIds.map(userId => 
-    sendPushNotification(
-      userId,
-      `New message in ${roomName}`,
-      `@${senderUsername}: ${message}`,
-      '/(tabs)/tavern'
-    )
-  );
-  
-  await Promise.all(notifications);
-  res.json({ success: true });
+  try {
+    // 1. Fetch room members on the server (Privacy: client no longer sees all IDs)
+    const { data: members, error } = await supabase
+      .from('room_members')
+      .select('user_id')
+      .eq('room_id', roomId);
+
+    if (error) throw error;
+
+    // 2. Filter out the sender
+    const targetUserIds = (members || [])
+      .map(m => m.user_id)
+      .filter(id => id !== senderId);
+
+    if (targetUserIds.length === 0) {
+      return res.json({ success: true, message: 'No other members to notify' });
+    }
+
+    // 3. Send notifications
+    const notifications = targetUserIds.map(userId => 
+      sendPushNotification(
+        userId,
+        `New message in ${roomName}`,
+        `@${senderUsername}: ${message}`,
+        '/(tabs)/tavern'
+      )
+    );
+    
+    await Promise.all(notifications);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('notifyChat error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
 }
 
 module.exports = {

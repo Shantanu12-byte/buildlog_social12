@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, StyleSheet, Dimensions,
-  Platform, TouchableOpacity, Share
+  Platform, TouchableOpacity, Share, FlatList
 } from 'react-native';
 import Animated, {
   useSharedValue,
@@ -13,10 +13,11 @@ import Animated, {
   FadeInDown,
 } from 'react-native-reanimated';
 import NewsCard, { NewsItem } from './NewsCard';
-import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
-import { Colors } from '@/constants/theme';
+import { Feather } from '@expo/vector-icons';
+import { useTheme } from '@/context/ThemeContext';
+import { Spacing } from '@/constants/theme';
 
-const { width, height } = Dimensions.get('window');
+const { height } = Dimensions.get('window');
 
 export default function NewsReader({ 
   items, 
@@ -27,12 +28,11 @@ export default function NewsReader({
   onClose: () => void,
   initialIndex?: number
 }) {
+  const { theme, isDark } = useTheme();
+  const s = React.useMemo(() => getStyles(theme, isDark), [theme, isDark]);
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
-  const [touchStart, setTouchStart] = useState(0);
   const [showSwipeHint, setShowSwipeHint] = useState(currentIndex === 0);
-
   const translateY = useSharedValue(0);
-  const opacity = useSharedValue(1);
 
   useEffect(() => {
     if (showSwipeHint) {
@@ -40,45 +40,6 @@ export default function NewsReader({
       return () => clearTimeout(timer);
     }
   }, [showSwipeHint]);
-
-  const handleNext = useCallback(() => {
-    if (currentIndex < items.length - 1) {
-      translateY.value = withTiming(-height, { duration: 300 }, () => {
-        runOnJS(setCurrentIndex)(currentIndex + 1);
-        translateY.value = height;
-        translateY.value = withTiming(0, { duration: 300 });
-      });
-    }
-  }, [currentIndex, items.length]);
-
-  const handlePrev = useCallback(() => {
-    if (currentIndex > 0) {
-      translateY.value = withTiming(height, { duration: 300 }, () => {
-        runOnJS(setCurrentIndex)(currentIndex - 1);
-        translateY.value = -height;
-        translateY.value = withTiming(0, { duration: 300 });
-      });
-    }
-  }, [currentIndex]);
-
-  // Web Gestures
-  const handleWheel = (e: any) => {
-    if (Platform.OS === 'web') {
-      if (e.deltaY > 0) handleNext();
-      else if (e.deltaY < 0) handlePrev();
-    }
-  };
-
-  const onTouchStart = (e: any) => {
-    setTouchStart(e.nativeEvent.pageY || e.nativeEvent.touches[0].pageY);
-  };
-
-  const onTouchEnd = (e: any) => {
-    const endY = e.nativeEvent.pageY || e.nativeEvent.changedTouches[0].pageY;
-    const diff = touchStart - endY;
-    if (diff > 50) handleNext();
-    else if (diff < -50) handlePrev();
-  };
 
   const handleShare = async () => {
     const current = items[currentIndex];
@@ -90,7 +51,7 @@ export default function NewsReader({
         message: `${current.title}\n\nRead more on Buildlog: ${current.url}`,
       });
     } catch (error) {
-      console.error('SHARE_ERROR:', error);
+      // Share error handled silently
     }
   };
 
@@ -107,32 +68,32 @@ export default function NewsReader({
     width: withSpring(`${((currentIndex + 1) / items.length) * 100}%`, { damping: 20 }),
   }));
 
+  const onScrollIndexChanged = useCallback((e: any) => {
+    const offsetY = e.nativeEvent.contentOffset.y;
+    const index = Math.round(offsetY / height);
+    if (index !== currentIndex) {
+      setCurrentIndex(index);
+    }
+  }, [currentIndex]);
+
   if (items.length === 0) return null;
 
-  const currentItem = items[currentIndex];
-
   return (
-    <View 
-      style={s.container}
-      // @ts-ignore - web only
-      onWheel={handleWheel}
-      onTouchStart={onTouchStart}
-      onTouchEnd={onTouchEnd}
-    >
+    <View style={s.container}>
       {/* Header */}
       <View style={s.header}>
-        <Text style={s.headerTitle}>NEWS</Text>
+        <Text style={s.headerTitle}>TRANSMISSIONS</Text>
         <View style={s.headerActions}>
-          <TouchableOpacity style={s.headerActionBtn}>
-            <Feather name="bell" size={20} color="#fff" />
-          </TouchableOpacity>
           <TouchableOpacity style={s.headerActionBtn} onPress={handleShare}>
-            <Feather name="share-2" size={20} color="#fff" />
+            <Feather name="share-2" size={20} color={theme.textPrimary} />
+          </TouchableOpacity>
+          <TouchableOpacity style={s.headerActionBtn} onPress={onClose}>
+            <Feather name="x" size={20} color={theme.textPrimary} />
           </TouchableOpacity>
         </View>
       </View>
 
-      {/* Progress Bar (Full Width, Flush) */}
+      {/* Progress Bar */}
       <View style={s.progressBarBg}>
         <Animated.View 
           style={[
@@ -142,33 +103,45 @@ export default function NewsReader({
         />
       </View>
 
-      {/* Content */}
-      <Animated.View 
-        key={currentIndex} 
-        entering={FadeInDown.duration(400).delay(currentIndex === 0 ? 100 : 0)} 
-        style={[s.content, animatedStyle]}
-      >
-        <NewsCard 
-          item={currentItem} 
-          isFirst={currentIndex === 0}
-          showSwipeHint={showSwipeHint}
-        />
-      </Animated.View>
+      {/* Vertical Feed */}
+      <FlatList
+        data={items}
+        keyExtractor={(item: NewsItem) => item.id.toString()}
+        renderItem={({ item }: { item: NewsItem }) => (
+          <View style={{ height: height }}>
+            <NewsCard item={item} />
+          </View>
+        )}
+        pagingEnabled
+        showsVerticalScrollIndicator={false}
+        onMomentumScrollEnd={onScrollIndexChanged}
+        initialScrollIndex={initialIndex}
+        getItemLayout={(_: any, index: number) => ({
+          length: height,
+          offset: height * index,
+          index,
+        })}
+        // Optimizations
+        removeClippedSubviews={Platform.OS !== 'ios'}
+        initialNumToRender={1}
+        maxToRenderPerBatch={3}
+        windowSize={5}
+      />
     </View>
   );
 }
 
-const s = StyleSheet.create({
+const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0a0a0a',
+    backgroundColor: theme.bg,
     ...(Platform.OS === 'web' && {
       maxWidth: 600,
       width: '100%',
       alignSelf: 'center',
       borderLeftWidth: 1,
       borderRightWidth: 1,
-      borderColor: '#1a1a1a',
+      borderColor: theme.border,
     }),
   },
   header: {
@@ -179,13 +152,14 @@ const s = StyleSheet.create({
     paddingTop: 16,
     height: 60,
     borderBottomWidth: 1,
-    borderBottomColor: '#1a1a1a',
+    borderBottomColor: theme.border,
   },
   headerTitle: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: '800',
-    letterSpacing: 0.5,
+    color: theme.textPrimary,
+    fontSize: 14,
+    fontWeight: '900',
+    letterSpacing: 2,
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
   },
   headerActions: {
     flexDirection: 'row',
@@ -197,12 +171,12 @@ const s = StyleSheet.create({
   },
   progressBarBg: {
     width: '100%',
-    height: 2,
-    backgroundColor: 'transparent',
+    height: 3,
+    backgroundColor: theme.bgInput,
   },
   progressBarFill: {
     height: '100%',
-    backgroundColor: '#7c3aed',
+    backgroundColor: theme.purple,
   },
   content: {
     flex: 1,

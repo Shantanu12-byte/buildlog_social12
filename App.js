@@ -33,9 +33,7 @@ export default function App() {
 
       if (error) throw error;
       setOnboardingComplete(!!data?.onboarding_complete);
-    } catch (err) {
-      console.error('Onboarding check failed:', err);
-      // Fallback if no profile is found
+    } catch (err) { // Fallback if no profile is found
       if (onboardingComplete === null) setOnboardingComplete(false); 
     } finally {
       setIsLoading(false);

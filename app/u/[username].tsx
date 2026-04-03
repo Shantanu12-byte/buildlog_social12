@@ -1,13 +1,16 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ActivityIndicator, SafeAreaView, Platform } from 'react-native';
+import { View, Text, StyleSheet, ActivityIndicator, SafeAreaView, Platform, StatusBar } from 'react-native';
 import { useLocalSearchParams, Stack } from 'expo-router';
 import Head from 'expo-router/head';
 import { supabase } from '@/lib/supabase';
-import { Colors, Spacing } from '@/constants/theme';
+import { Spacing } from '@/constants/theme';
 import { PublicBentoProfile } from '@/components/PublicBentoProfile';
 import { LoadingScreen } from '@/components/ui/UI';
+import { useTheme } from '@/context/ThemeContext';
 
 export default function PublicProfilePage() {
+  const { theme, isDark } = useTheme();
+  const s = React.useMemo(() => getStyles(theme, isDark), [theme, isDark]);
   const { username } = useLocalSearchParams<{ username: string }>();
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState<any>(null);
@@ -59,9 +62,7 @@ export default function PublicProfilePage() {
         if (projectsRes.data) setPinnedProject(projectsRes.data);
         if (postsRes.data) setRecentPosts(postsRes.data);
 
-      } catch (err: any) {
-        console.error('[PublicProfile] Fetch Error:', err.message);
-        setError('FETCH_ERROR');
+      } catch (err: any) { setError('FETCH_ERROR');
       } finally {
         setLoading(false);
       }
@@ -75,6 +76,7 @@ export default function PublicProfilePage() {
   if (error === 'PROFILE_NOT_FOUND' || !profile) {
     return (
       <View style={s.center}>
+        <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={theme.bg} />
         <Text style={s.errorText}>404</Text>
         <Text style={s.errorSubText}>Builder "@ {username}" not found or profile is private.</Text>
       </View>
@@ -94,6 +96,7 @@ export default function PublicProfilePage() {
           title: `${name} | Buildlog`,
         }}
       />
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={theme.bg} />
       {Platform.OS === 'web' && (
         <Head>
           <title>{name} | Buildlog</title>
@@ -115,28 +118,30 @@ export default function PublicProfilePage() {
   );
 }
 
-const s = StyleSheet.create({
+const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.bg.primary,
+    backgroundColor: theme.bg,
   },
   center: {
     flex: 1,
-    backgroundColor: Colors.bg.primary,
+    backgroundColor: theme.bg,
     alignItems: 'center',
     justifyContent: 'center',
     padding: Spacing.xl,
   },
   errorText: {
-    color: Colors.accent.primary,
+    color: theme.purple,
     fontSize: 64,
     fontWeight: '900',
     marginBottom: Spacing.md,
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
   },
   errorSubText: {
-    color: Colors.text.secondary,
+    color: theme.textSecondary,
     fontSize: 16,
     textAlign: 'center',
     maxWidth: 300,
+    fontWeight: '600',
   },
 });

@@ -35,8 +35,7 @@ export async function sendPushNotification(expoPushToken: string, title: string,
       body: JSON.stringify(message),
     });
     return await response.json();
-  } catch (error) {
-    console.error('Error sending push notification:', error);
+  } catch {
     return null;
   }
 }

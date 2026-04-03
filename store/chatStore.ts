@@ -41,8 +41,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
       if (error) throw error;
       set({ messages: data || [] });
-    } catch (error) {
-      console.error("fetchMessages Error:", error);
+    } catch {
     } finally {
       set({ isLoading: false });
     }
@@ -98,8 +97,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       } else {
         set({ inbox: [] });
       }
-    } catch (error) {
-      console.error("fetchInbox Error:", error);
+    } catch {
     } finally {
       set({ isLoading: false });
     }
@@ -130,7 +128,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
         get().fetchInbox(senderId);
       }
     } catch (error) {
-      console.error("sendMessage Error:", error);
       throw error;
     }
   },

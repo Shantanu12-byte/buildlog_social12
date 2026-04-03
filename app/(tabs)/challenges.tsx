@@ -1,13 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, TextInput, ActivityIndicator, Alert, Animated, Easing, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Alert, Animated, Easing, ScrollView, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Colors, Typography, Spacing, Radius, Shadows } from '@/constants/theme';
+import { Typography, Spacing, Radius } from '@/constants/theme';
 import { Feather, FontAwesome5 } from '@expo/vector-icons';
 import LottieView from 'lottie-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAudioPlayer } from 'expo-audio';
-import { supabase } from '@/lib/supabase';
 import { useUserStore } from '@/store/userStore';
+import { useTheme } from '@/context/ThemeContext';
 import { COURSE_DATA } from '@/constants/courseData';
 import AnimatedProgressBar from '@/components/AnimatedProgressBar';
 import QuizOption from '@/components/QuizOption';
@@ -16,24 +16,25 @@ import { getTutoringFeedback } from '@/services/TutorController';
 import { manageLanguageProgress } from '@/services/AsyncProgressManager';
 
 export default function ChallengesScreen() {
-  const { userProfile, updateUserProfile } = useUserStore();
+  const { theme, isDark } = useTheme();
+  const styles = React.useMemo(() => getStyles(theme, isDark), [theme, isDark]);
+  const { userProfile } = useUserStore();
   const [loading, setLoading] = useState(true);
   
   // Onboarding State
   const [learningFocus, setLearningFocus] = useState<string | null>(null);
   const [skillLevel, setSkillLevel] = useState<string | null>(null);
-  const [savingSurvey, setSavingSurvey] = useState(false);
 
   // Challenge Engine State
-  const [currentChallenge, setCurrentChallenge] = useState<any>(null);
+  const [sessionQuestions, setSessionQuestions] = useState<any[]>([]);
+  const [questionIndex, setQuestionIndex] = useState(0);
+  const [roundScore, setRoundScore] = useState(0);
+  const [isRoundFinished, setIsRoundFinished] = useState(false);
   const [selectedOption, setSelectedOption] = useState<string | null>(null);
-  const [fillInAnswer, setFillInAnswer] = useState('');
   
   // Validation State
   const [isAnswered, setIsAnswered] = useState(false);
   const [isCorrect, setIsCorrect] = useState<boolean | null>(null);
-  const [checking, setChecking] = useState(false);
-  const challengeStartTime = useRef<number>(0);
   
   // Animation
   const scaleAnim = useRef(new Animated.Value(0)).current;
@@ -67,10 +68,6 @@ export default function ChallengesScreen() {
   
   // Progress State
   const [learningStats, setLearningStats] = useState<Record<string, number>>({});
-  const [sessionQuestions, setSessionQuestions] = useState<any[]>([]);
-  const [questionIndex, setQuestionIndex] = useState(0);
-  const [roundScore, setRoundScore] = useState(0);
-  const [isRoundFinished, setIsRoundFinished] = useState(false);
   
   // Tutor State
   const [showTutor, setShowTutor] = useState(false);
@@ -98,8 +95,7 @@ export default function ChallengesScreen() {
         stats[cleanKey] = val ? parseInt(val, 10) : 0;
       });
       setLearningStats(stats);
-    } catch (e) {
-      console.error(e);
+    } catch {
     } finally {
       setLoading(false);
     }
@@ -113,7 +109,6 @@ export default function ChallengesScreen() {
   };
 
   const startRound = (topic: string, level: string) => {
-    // Select 5 questions from the data
     const questions = (COURSE_DATA as any)[topic]?.[level];
     
     if (!questions) {
@@ -132,14 +127,6 @@ export default function ChallengesScreen() {
     setSelectedOption(null);
   };
 
-  const playVictorySound = async () => {
-    victoryPlayer.play();
-  };
-
-  const playSuccessSound = async () => {
-    successPlayer.play();
-  };
-
   const submitAnswer = async (optIdx: number) => {
     if (isAnswered) return;
     
@@ -148,12 +135,11 @@ export default function ChallengesScreen() {
     
     if (correct) {
       optionRefs.current[optIdx]?.playCorrectAnimation();
-      playSuccessSound();
+      successPlayer.play();
     } else {
       optionRefs.current[optIdx]?.playIncorrectAnimation();
       optionRefs.current[correctIdx]?.playCorrectAnimation();
       
-      // Zero-Cost Tutor Fetch
       const feedback = getTutoringFeedback(`${learningFocus}_${skillLevel}`, sessionQuestions[questionIndex].id, optIdx);
       if (feedback) {
         setTutorText(feedback.feedback);
@@ -174,23 +160,18 @@ export default function ChallengesScreen() {
       setIsCorrect(null);
       setSelectedOption(null);
     } else {
-      // Round Complete
       setIsRoundFinished(true);
-      
-      // Use the latest score (roundScore + current isCorrect)
       const totalCorrect = roundScore; 
       const percent = Math.round((totalCorrect / 5) * 100);
       
       if (totalCorrect === 5) {
-        playVictorySound();
+        victoryPlayer.play();
       }
 
-      // Save Progress using AsyncProgressManager (Persistent Achievements)
       if (userProfile?.id) {
         await manageLanguageProgress(userProfile.id, learningFocus!, skillLevel!, percent);
       }
       
-      // Refresh local stats
       await loadProgress();
     }
   };
@@ -199,31 +180,24 @@ export default function ChallengesScreen() {
     if (isRoundFinished && roundScore === 5) {
       triggerConfetti();
     }
-  }, [isRoundFinished]);
-
+  }, [isRoundFinished, roundScore]);
 
   const triggerConfetti = () => {
-    // Show Success Modal
     Animated.sequence([
       Animated.timing(scaleAnim, { toValue: 1.1, duration: 250, easing: Easing.bounce, useNativeDriver: true }),
       Animated.timing(scaleAnim, { toValue: 1, duration: 200, useNativeDriver: true })
     ]).start();
 
-    // 1. Make the confetti visible
     setShowConfetti(true);
-
-    // 2. Start the party! (Give a slight delay for render)
     setTimeout(() => {
         animationRef.current?.play();
     }, 50);
   };
 
-  // --- RENDERERS ---
-
   if (loading) {
     return (
-      <View style={styles.center}>
-        <ActivityIndicator size="large" color={Colors.accent.primary} />
+      <View style={styles.centerLoading}>
+        <ActivityIndicator size="large" color={theme.purple} />
         <Text style={styles.loadingText}>Loading Quests...</Text>
       </View>
     );
@@ -258,14 +232,14 @@ export default function ChallengesScreen() {
                     style={styles.cardHeader}
                     onPress={() => startRound(topic, 'Beginner')}
                   >
-                    <View style={[styles.iconBox, { backgroundColor: `${color}20` }]}>
+                    <View style={[styles.iconBox, { backgroundColor: isDark ? `${color}20` : `${color}10` }]}>
                       <FontAwesome5 name={(TOPIC_ICONS as any)[topic]} size={20} color={color} />
                     </View>
                     <View style={{ flex: 1, marginLeft: 16 }}>
                       <Text style={styles.cardTopicTitle}>{topic}</Text>
                       <Text style={styles.cardTopicSub}>{overall}% XP Earned</Text>
                     </View>
-                    <View style={styles.overallRing}>
+                    <View style={[styles.overallRing, { borderColor: theme.border }]}>
                       <Text style={[styles.overallText, { color }]}>{overall}%</Text>
                     </View>
                   </TouchableOpacity>
@@ -273,7 +247,7 @@ export default function ChallengesScreen() {
                   <View style={styles.pillRow}>
                     {LEVELS.map(level => {
                       const locked = isLevelLocked(topic, level);
-                      const isExpert = level === 'Expert';
+                      const isLevelActive = learningStats[`${topic}_${level}`] === 100;
                       
                       return (
                         <TouchableOpacity
@@ -285,8 +259,10 @@ export default function ChallengesScreen() {
                           ]}
                           onPress={() => !locked && startRound(topic, level)}
                         >
-                          {locked && isExpert && <Feather name="lock" size={10} color="#666" style={{ marginRight: 4 }} />}
-                          <Text style={[styles.pillText, locked && styles.pillTextLocked]}>{level}</Text>
+                          {locked && <Feather name="lock" size={10} color={theme.textMuted} style={{ marginRight: 4 }} />}
+                          <Text style={[styles.pillText, locked && styles.pillTextLocked, isLevelActive && { color: theme.green }]}>
+                            {level}
+                          </Text>
                         </TouchableOpacity>
                       );
                     })}
@@ -305,7 +281,7 @@ export default function ChallengesScreen() {
     return (
       <SafeAreaView style={styles.center}>
         <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
-          <Feather name={roundScore === 5 ? "zap" : "award"} size={80} color={roundScore === 5 ? Colors.accent.glow : "#888"} />
+          <Feather name={roundScore === 5 ? "zap" : "award"} size={80} color={roundScore === 5 ? theme.purple : theme.textMuted} />
         </Animated.View>
         <Text style={[styles.title, { marginTop: Spacing.xl }]}>
           {roundScore === 5 ? "CHALLENGE CONQUERED!" : "QUEST COMPLETE"}
@@ -336,17 +312,17 @@ export default function ChallengesScreen() {
 
   const currentQ = sessionQuestions[questionIndex];
 
-  // 3. Adaptive Challenge Engine - Cyber-Noir "Mimo" Card
+  // 3. Adaptive Challenge Engine
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
+      <View style={styles.challengeHeader}>
         <TouchableOpacity 
            onPress={() => { setLearningFocus(null); setSkillLevel(null); }} 
            style={{ position: 'absolute', left: 20, top: 18, zIndex: 10 }}
         >
-            <Feather name="arrow-left" size={24} color="#888" />
+            <Feather name="arrow-left" size={24} color={theme.textMuted} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>{learningFocus} QUEST • {skillLevel}</Text>
+        <Text style={styles.challengeHeaderTitle}>{learningFocus} QUEST • {skillLevel}</Text>
         <AnimatedProgressBar progress={questionIndex / 5} />
       </View>
 
@@ -428,73 +404,72 @@ export default function ChallengesScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0A0A0A' }, // Deep noir bg
-  center: { flex: 1, backgroundColor: '#0A0A0A', justifyContent: 'center', alignItems: 'center', padding: Spacing.xl },
-  loadingText: { color: Colors.accent.glow, marginTop: Spacing.md, fontFamily: 'monospace' },
-  
-  title: { fontSize: 22, fontWeight: '800', color: '#FFF', fontFamily: 'monospace', textAlign: 'center' },
-  subtitle: { fontSize: 13, color: '#888', textAlign: 'center', marginTop: Spacing.sm, fontFamily: 'monospace' },
-  
-  startBtn: { marginTop: 60, backgroundColor: Colors.accent.primary, padding: 18, alignItems: 'center', borderRadius: 4, shadowColor: Colors.accent.glow, shadowOpacity: 0.6, shadowRadius: 15 },
-  startBtnText: { color: '#000', fontWeight: '900', fontSize: 16, letterSpacing: 2, fontFamily: 'monospace' },
-  btnDisabled: { opacity: 0.5, shadowOpacity: 0 },
+const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
+    container: { flex: 1, backgroundColor: theme.bg },
+    center: { flex: 1, backgroundColor: theme.bg, justifyContent: 'center', alignItems: 'center', padding: Spacing.xl },
+    centerLoading: { flex: 1, backgroundColor: theme.bg, justifyContent: 'center', alignItems: 'center' },
+    loadingText: { color: theme.purple, marginTop: Spacing.md, fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace' },
+    
+    title: { fontSize: 22, fontWeight: '800', color: theme.textPrimary, fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace', textAlign: 'center' },
+    subtitle: { fontSize: 13, color: theme.textSecondary, textAlign: 'center', marginTop: Spacing.sm, fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace' },
+    
+    btnDisabled: { opacity: 0.5 },
 
-  // Course Dashboard
-  dashboardContainer: { flex: 1, padding: 20, paddingTop: 40 },
-  materialCard: { 
-    backgroundColor: '#151515', 
-    borderRadius: 20, 
-    padding: 20, 
-    marginBottom: 20, 
-    borderWidth: 1, 
-    borderColor: '#222',
-    ...Shadows.soft
-  },
-  cardHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 20 },
-  iconBox: { width: 44, height: 44, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
-  cardTopicTitle: { color: '#FFF', fontSize: 18, fontWeight: '800', letterSpacing: 1 },
-  cardTopicSub: { color: '#666', fontSize: 13, marginTop: 2 },
-  overallRing: { width: 45, height: 45, borderRadius: 22.5, borderWidth: 2, borderColor: '#222', justifyContent: 'center', alignItems: 'center' },
-  overallText: { fontSize: 11, fontWeight: 'bold' },
+    // Course Dashboard
+    dashboardContainer: { flex: 1, padding: 20 },
+    headerTitle: { color: theme.textMuted, fontSize: 12, fontWeight: '900', letterSpacing: 2, marginBottom: 20, textAlign: 'center' },
+    materialCard: { 
+      backgroundColor: theme.bgCard, 
+      borderRadius: 20, 
+      padding: 20, 
+      marginBottom: 20, 
+      borderWidth: 1, 
+      borderColor: theme.border,
+    },
+    cardHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 20 },
+    iconBox: { width: 44, height: 44, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
+    cardTopicTitle: { color: theme.textPrimary, fontSize: 18, fontWeight: '800', letterSpacing: 1 },
+    cardTopicSub: { color: theme.textSecondary, fontSize: 13, marginTop: 2 },
+    overallRing: { width: 45, height: 45, borderRadius: 22.5, borderWidth: 2, justifyContent: 'center', alignItems: 'center' },
+    overallText: { fontSize: 11, fontWeight: 'bold' },
 
-  pillRow: { flexDirection: 'row', backgroundColor: '#0A0A0A', borderRadius: 30, padding: 4, gap: 4 },
-  pillBtn: { flex: 1, paddingVertical: 10, alignItems: 'center', justifyContent: 'center', borderRadius: 25, backgroundColor: '#1A1A1A', flexDirection: 'row' },
-  pillBtnLocked: { backgroundColor: '#0D0D0D', opacity: 0.6 },
-  pillText: { color: Colors.accent.glow, fontSize: 12, fontWeight: '700' },
-  pillTextLocked: { color: '#666' },
+    pillRow: { flexDirection: 'row', backgroundColor: theme.bgInput, borderRadius: 30, padding: 4, gap: 4 },
+    pillBtn: { flex: 1, paddingVertical: 10, alignItems: 'center', justifyContent: 'center', borderRadius: 25, backgroundColor: theme.bg, flexDirection: 'row' },
+    pillBtnLocked: { backgroundColor: 'transparent', opacity: 0.6 },
+    pillText: { color: theme.textSecondary, fontSize: 12, fontWeight: '700' },
+    pillTextLocked: { color: theme.textMuted },
 
-  // Header
-  header: { padding: Spacing.lg, borderBottomWidth: 1, borderBottomColor: '#1A1A1A', justifyContent: 'center' },
-  headerTitle: { color: '#888', fontSize: 11, fontWeight: '800', fontFamily: 'monospace', textAlign: 'center', marginBottom: Spacing.md, letterSpacing: 2 },
-  
-  // Card
-  scrollContent: { padding: Spacing.lg, paddingBottom: 100 },
-  card: { 
-    backgroundColor: '#111', 
-    borderRadius: 16, 
-    padding: Spacing.xl, 
-    borderWidth: 1, 
-    borderColor: '#333'
-  },
-  cardCorrect: { borderColor: '#1D9E75' },
-  cardWrong: { borderColor: '#FF4444' },
+    // Header
+    challengeHeader: { padding: Spacing.lg, borderBottomWidth: 1, borderBottomColor: theme.border, justifyContent: 'center' },
+    challengeHeaderTitle: { color: theme.textMuted, fontSize: 11, fontWeight: '800', fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace', textAlign: 'center', marginBottom: Spacing.md, letterSpacing: 2 },
+    
+    // Card
+    scrollContent: { padding: Spacing.lg, paddingBottom: 100 },
+    card: { 
+      backgroundColor: theme.bgCard, 
+      borderRadius: 16, 
+      padding: Spacing.xl, 
+      borderWidth: 1, 
+      borderColor: theme.border
+    },
+    cardCorrect: { borderColor: theme.green },
+    cardWrong: { borderColor: theme.red },
 
-  questionText: { color: '#FFF', fontSize: 18, fontWeight: '700', lineHeight: 26 },
-  
-  // Multiple Choice
-  mcqContainer: { gap: Spacing.md, marginTop: Spacing.xl },
-  
-  // Feedback
-  feedbackContainer: { marginTop: Spacing.xl, padding: Spacing.lg, backgroundColor: '#0A0A0A', borderRadius: 8, borderWidth: 1, borderColor: '#222' },
-  feedbackCorrectTitle: { color: '#1D9E75', fontSize: 16, fontWeight: 'bold', fontFamily: 'monospace', marginBottom: 8 },
-  feedbackWrongTitle: { color: '#FF4444', fontSize: 16, fontWeight: 'bold', fontFamily: 'monospace', marginBottom: 8 },
-  feedbackText: { color: '#CCC', fontSize: 13, lineHeight: 18 },
+    questionText: { color: theme.textPrimary, fontSize: 18, fontWeight: '700', lineHeight: 26 },
+    
+    // Multiple Choice
+    mcqContainer: { gap: Spacing.md, marginTop: Spacing.xl },
+    
+    // Feedback
+    feedbackContainer: { marginTop: Spacing.xl, padding: Spacing.lg, backgroundColor: theme.bg, borderRadius: 8, borderWidth: 1, borderColor: theme.border },
+    feedbackCorrectTitle: { color: theme.green, fontSize: 16, fontWeight: 'bold', fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace', marginBottom: 8 },
+    feedbackWrongTitle: { color: theme.red, fontSize: 16, fontWeight: 'bold', fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace', marginBottom: 8 },
+    feedbackText: { color: theme.textSecondary, fontSize: 13, lineHeight: 18 },
 
-  // Footer Buttons
-  footer: { padding: Spacing.xl, backgroundColor: '#0A0A0A', borderTopWidth: 1, borderTopColor: '#222' },
-  submitBtn: { backgroundColor: Colors.accent.primary, padding: 18, alignItems: 'center', borderRadius: 30 },
-  submitBtnText: { color: '#000', fontSize: 15, fontWeight: '900', letterSpacing: 1, fontFamily: 'monospace' },
-  nextBtnCorrect: { backgroundColor: '#1D9E75', padding: 18, alignItems: 'center', borderRadius: 30 },
-  nextBtnWrong: { backgroundColor: '#FF4444', padding: 18, alignItems: 'center', borderRadius: 30 },
+    // Footer Buttons
+    footer: { padding: Spacing.xl, backgroundColor: theme.bg, borderTopWidth: 1, borderTopColor: theme.border },
+    submitBtn: { backgroundColor: theme.purple, padding: 18, alignItems: 'center', borderRadius: 30 },
+    submitBtnText: { color: isDark ? '#000' : '#FFF', fontSize: 15, fontWeight: '900', letterSpacing: 1, fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace' },
+    nextBtnCorrect: { backgroundColor: theme.green, padding: 18, alignItems: 'center', borderRadius: 30 },
+    nextBtnWrong: { backgroundColor: theme.red, padding: 18, alignItems: 'center', borderRadius: 30 },
 });

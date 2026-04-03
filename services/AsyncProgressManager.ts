@@ -17,8 +17,8 @@ export async function manageLanguageProgress(userId: string, topic: string, leve
     }
 
     return newPercent;
-  } catch (error) {
-    console.error('AsyncProgressManager Error:', error);
+  } catch {
+    // Progress save failed silently
   }
 }
 
@@ -36,7 +36,6 @@ async function checkForBadges(userId: string, topic: string) {
   // If all levels are mastered
   if (b === '100' && p === '100' && e === '100') {
     const badgeName = `${topic} Master`;
-    console.log(`AWARDING_BADGE: ${badgeName}`);
     
     // Save to AsyncStorage locally
     const currentBadgesJson = await AsyncStorage.getItem('user_badges');

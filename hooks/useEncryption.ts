@@ -21,9 +21,7 @@ export function useEncryption() {
         if (!userProfile.public_key || userProfile.public_key !== keyPair.publicKey) {
           try {
             await updateUserProfile({ public_key: keyPair.publicKey } as any);
-          } catch (e) {
-            console.error("PUB_KEY_SYNC_ERROR:", e);
-          }
+          } catch (e) { }
         }
       }
       

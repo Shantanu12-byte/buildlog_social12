@@ -2,14 +2,10 @@
  * app/(auth)/CompleteProfileScreen.tsx — Complete Profile Screen
  *
  * ✅ Preserved: Supabase profile upsert, navigation to /(tabs)/
- * 🎨 Updated: Real-time debounced username validation (Instagram-style)
- *    - 300ms debounce with lodash.debounce
- *    - Visual feedback: green ✓ / red ✗ / spinner
- *    - Suggestion engine + badge system
- *    - AsyncStorage cache for validated usernames
+ * 🎨 Updated: Migrated to dynamic theme system with useTheme hook
  */
 
-import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet,
   SafeAreaView, StatusBar, ScrollView, KeyboardAvoidingView, Platform,
@@ -20,10 +16,11 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import debounce from 'lodash.debounce';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '@/context/AuthContext';
-import { Colors, Typography, Spacing, Radius } from '../../constants/theme';
-import { Button, Avatar, SectionHeader } from '../../components/ui/UI';
+import { Typography, Spacing, Radius } from '../../constants/theme';
+import { Button, Avatar } from '../../components/ui/UI';
 import { sanitizeUsername, sanitizeBio, sanitizeUrl, isValidUsername } from '@/lib/sanitize';
 import { useUserStore } from '@/store/userStore';
+import { useTheme } from '@/context/ThemeContext';
 
 // ── Constants ────────────────────────────────────────────────
 
@@ -75,7 +72,6 @@ interface Badge {
 function evaluateBadges(username: string, stack: string[]): Badge[] {
   const badges: Badge[] = [];
 
-  // OG Builder — short, punchy username (3–5 chars)
   if (username.length >= 3 && username.length <= 5) {
     badges.push({
       id: 'og_builder',
@@ -85,7 +81,6 @@ function evaluateBadges(username: string, stack: string[]): Badge[] {
     });
   }
 
-  // Stack Master — 5+ technologies selected
   if (stack.length >= 5) {
     badges.push({
       id: 'stack_master',
@@ -95,7 +90,6 @@ function evaluateBadges(username: string, stack: string[]): Badge[] {
     });
   }
 
-  // Polyglot — has both frontend and backend tech
   const frontendTech = ['React', 'React Native', 'Flutter', 'Vue', 'Angular', 'HTML', 'CSS', 'TailwindCSS'];
   const backendTech = ['Node.js', 'Django', 'FastAPI', 'Spring', 'Laravel', 'PostgreSQL', 'MongoDB'];
   const hasFrontend = stack.some(s => frontendTech.includes(s));
@@ -109,7 +103,6 @@ function evaluateBadges(username: string, stack: string[]): Badge[] {
     });
   }
 
-  // Creative Coder — username contains underscore (intentional styling)
   if (username.includes('_') && username.length >= 6) {
     badges.push({
       id: 'creative_coder',
@@ -122,7 +115,6 @@ function evaluateBadges(username: string, stack: string[]): Badge[] {
   return badges;
 }
 
-// ── RAG-style Local Feedback Messages ────────────────────────
 function getAvailabilityFeedback(status: UsernameStatus, username: string): string {
   switch (status) {
     case 'available':
@@ -140,14 +132,12 @@ function getAvailabilityFeedback(status: UsernameStatus, username: string): stri
   }
 }
 
-// ── Cache Helpers ────────────────────────────────────────────
 async function getCachedResult(username: string): Promise<boolean | null> {
   try {
     const raw = await AsyncStorage.getItem(CACHE_KEY);
     if (!raw) return null;
     const cache: Record<string, { available: boolean; ts: number }> = JSON.parse(raw);
     const entry = cache[username];
-    // Cache valid for 5 minutes
     if (entry && Date.now() - entry.ts < 5 * 60 * 1000) {
       return entry.available;
     }
@@ -161,7 +151,6 @@ async function setCachedResult(username: string, available: boolean) {
   try {
     const raw = await AsyncStorage.getItem(CACHE_KEY);
     const cache: Record<string, { available: boolean; ts: number }> = raw ? JSON.parse(raw) : {};
-    // Keep cache small — max 50 entries
     const keys = Object.keys(cache);
     if (keys.length > 50) {
       delete cache[keys[0]];
@@ -171,20 +160,17 @@ async function setCachedResult(username: string, available: boolean) {
   } catch { /* ignore */ }
 }
 
-// ══════════════════════════════════════════════════════════════
-// COMPONENT
-// ══════════════════════════════════════════════════════════════
 export default function CompleteProfileScreen() {
   const router = useRouter();
+  const { theme, isDark } = useTheme();
+  const s = React.useMemo(() => getStyles(theme, isDark), [theme, isDark]);
   const { updateOnboardingStatus } = useAuth();
   const { fetchUserProfile } = useUserStore();
 
-  // ── State ──────────────────────────────────────────────────
   const [step, setStep] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  // Form fields
   const [username, setUsername] = useState('');
   const [bio, setBio] = useState('');
   const [college, setCollege] = useState('');
@@ -192,19 +178,16 @@ export default function CompleteProfileScreen() {
   const [githubUrl, setGithubUrl] = useState('');
   const [linkedinUrl, setLinkedinUrl] = useState('');
 
-  // Username validation state
   const [usernameStatus, setUsernameStatus] = useState<UsernameStatus>('idle');
   const [isLoadingAvailability, setIsLoadingAvailability] = useState(false);
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [earnedBadges, setEarnedBadges] = useState<Badge[]>([]);
 
-  // ── Pre-fill Username from Auth Metadata ────────────────────
   useEffect(() => {
     const prefillFromAuth = async () => {
       try {
         const { data: { user } } = await supabase.auth.getUser();
         if (user && !username) {
-          // GitHub often provides 'user_name' or 'full_name' in metadata
           const raw = user.user_metadata?.user_name || user.user_metadata?.full_name || '';
           if (raw) {
             const clean = sanitizeUsername(raw);
@@ -215,19 +198,15 @@ export default function CompleteProfileScreen() {
             }
           }
         }
-      } catch (err) {
-        console.warn('[CompleteProfile] Pre-fill error:', err);
-      }
+      } catch (err) { }
     };
     prefillFromAuth();
-  }, []); // Run once on mount
+  }, []);
 
-  // ── Debounced Validation ────────────────────────────────────
   const validateUsername = useCallback(
     debounce(async (raw: string) => {
       const clean = sanitizeUsername(raw);
 
-      // Basic client-side checks first
       if (!clean || clean.length < 3) {
         setUsernameStatus(clean.length > 0 ? 'invalid' : 'idle');
         setIsLoadingAvailability(false);
@@ -241,7 +220,6 @@ export default function CompleteProfileScreen() {
         return;
       }
 
-      // Check local cache first
       const cached = await getCachedResult(clean);
       if (cached !== null) {
         setUsernameStatus(cached ? 'available' : 'taken');
@@ -251,7 +229,6 @@ export default function CompleteProfileScreen() {
         return;
       }
 
-      // Query Supabase directly (faster, no backend dependency)
       setUsernameStatus('checking');
       setIsLoadingAvailability(true);
 
@@ -263,22 +240,18 @@ export default function CompleteProfileScreen() {
           .maybeSingle();
 
         if (dbError) {
-          console.error('[CompleteProfile] DB Validation Error:', dbError);
           setUsernameStatus('error');
           setSuggestions([]);
         } else if (data) {
-          // Found someone else with this username
           setUsernameStatus('taken');
           setSuggestions(generateSuggestions(clean));
           await setCachedResult(clean, false);
         } else {
-          // No match -> available
           setUsernameStatus('available');
           setSuggestions([]);
           await setCachedResult(clean, true);
         }
       } catch (err) {
-        console.error('[CompleteProfile] Validation exception:', err);
         setUsernameStatus('error');
         setSuggestions([]);
       } finally {
@@ -288,14 +261,12 @@ export default function CompleteProfileScreen() {
     []
   );
 
-  // Cleanup debounce on unmount
   useEffect(() => {
     return () => {
       validateUsername.cancel();
     };
   }, [validateUsername]);
 
-  // Evaluate badges whenever username or stack changes
   useEffect(() => {
     const clean = sanitizeUsername(username);
     if (clean.length >= 3 && usernameStatus === 'available') {
@@ -305,7 +276,6 @@ export default function CompleteProfileScreen() {
     }
   }, [username, selectedStack, usernameStatus]);
 
-  // ── Username Input Handler ──────────────────────────────────
   function handleUsernameChange(text: string) {
     const clean = sanitizeUsername(text);
     setUsername(clean);
@@ -322,7 +292,6 @@ export default function CompleteProfileScreen() {
     }
   }
 
-  // ── Apply Suggested Username ────────────────────────────────
   function applySuggestion(suggested: string) {
     setUsername(suggested);
     setUsernameStatus('idle');
@@ -331,7 +300,6 @@ export default function CompleteProfileScreen() {
     validateUsername(suggested);
   }
 
-  // ── Submit ─────────────────────────────────────────────────
   async function handleSubmit() {
     if (!username.trim()) {
       setError('Username is required');
@@ -353,7 +321,6 @@ export default function CompleteProfileScreen() {
         throw new Error('Username must be 3-20 characters (letters, numbers, underscore only)');
       }
 
-      // Final server-side uniqueness check (defense in depth)
       const { data: existing } = await supabase
         .from('profiles')
         .select('id')
@@ -384,7 +351,7 @@ export default function CompleteProfileScreen() {
         id: user.id,
         username: cleanUsername,
         bio: sanitizeBio(bio),
-        avatar_url: null, // Removed UI-Avatars fallback
+        avatar_url: null,
         github_url: sanitizeUrl(githubUrl) ?? '',
         linkedin_url: sanitizeUrl(linkedinUrl) ?? '',
         skills: selectedStack,
@@ -393,17 +360,13 @@ export default function CompleteProfileScreen() {
       });
       if (uError) throw uError;
 
-      // Save badges to AsyncStorage for later display
       if (earnedBadges.length > 0) {
         await AsyncStorage.setItem('@buildlog_badges', JSON.stringify(earnedBadges));
       }
       
       await AsyncStorage.setItem('onboarding_complete', 'true');
       updateOnboardingStatus(true);
-      
-      // Refresh global store to ensure navigation guards in _layout.tsx see the update
       await fetchUserProfile();
-      
       router.replace('/(tabs)/' as any);
     } catch (err: any) {
       setError(err.message ?? 'Failed to save profile');
@@ -424,41 +387,39 @@ export default function CompleteProfileScreen() {
     return true;
   }
 
-  // ── Status Icon Inline ─────────────────────────────────────
   function renderStatusIcon() {
     if (username.length === 0) return null;
 
     if (isLoadingAvailability || usernameStatus === 'checking') {
       return (
-        <View style={vs.iconWrap}>
-          <ActivityIndicator size="small" color={Colors.accent.glow} />
+        <View style={s.iconWrap}>
+          <ActivityIndicator size="small" color={theme.purple} />
         </View>
       );
     }
     if (usernameStatus === 'available') {
       return (
-        <View style={[vs.iconWrap, vs.iconAvailable]}>
-          <Text style={vs.checkmark}>✓</Text>
+        <View style={[s.iconWrap, s.iconAvailable]}>
+          <Text style={s.checkmark}>✓</Text>
         </View>
       );
     }
     if (usernameStatus === 'taken' || usernameStatus === 'invalid' || usernameStatus === 'error') {
       return (
-        <View style={[vs.iconWrap, vs.iconTaken]}>
-          <Text style={vs.xmark}>✗</Text>
+        <View style={[s.iconWrap, s.iconTaken]}>
+          <Text style={s.xmark}>✗</Text>
         </View>
       );
     }
     return null;
   }
 
-  // ── Feedback Pill ──────────────────────────────────────────
   function renderFeedbackPill() {
     const msg = getAvailabilityFeedback(usernameStatus, username);
     const isPositive = usernameStatus === 'available';
     return !!msg ? (
-      <View style={[vs.feedbackPill, isPositive ? vs.feedbackSuccess : vs.feedbackError]}>
-        <Text style={[vs.feedbackText, isPositive ? vs.feedbackTextSuccess : vs.feedbackTextError]}>
+      <View style={[s.feedbackPill, isPositive ? s.feedbackSuccess : s.feedbackError]}>
+        <Text style={[s.feedbackText, isPositive ? s.feedbackTextSuccess : s.feedbackTextError]}>
           {msg}
         </Text>
       </View>
@@ -466,27 +427,26 @@ export default function CompleteProfileScreen() {
   }
 
   return (
-    <SafeAreaView style={st.container}>
-      <StatusBar barStyle="light-content" />
+    <SafeAreaView style={s.container}>
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={theme.bg} />
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
-        {/* Progress header */}
-        <View style={st.header}>
-          <Text style={st.headerTitle}>Complete your profile</Text>
-          <View style={st.progressSteps}>
+        <View style={s.header}>
+          <Text style={s.headerTitle}>Complete your profile</Text>
+          <View style={s.progressSteps}>
             {STEPS.map((label, i) => (
-              <View key={i} style={st.stepItem}>
-                <View style={[st.stepDot, i <= step && st.stepDotActive, i < step && st.stepDotDone]}>
+              <View key={i} style={s.stepItem}>
+                <View style={[s.stepDot, i <= step && s.stepDotActive, i < step && s.stepDotDone]}>
                   {i < step
-                    ? <Text style={st.stepDotCheck}>✓</Text>
-                    : <Text style={[st.stepDotNum, i === step && { color: Colors.accent.glow }]}>{i + 1}</Text>
+                    ? <Text style={s.stepDotCheck}>✓</Text>
+                    : <Text style={[s.stepDotNum, i === step && { color: theme.purple }]}>{i + 1}</Text>
                   }
                 </View>
-                <Text style={[st.stepLabel, i === step && st.stepLabelActive]}>{label}</Text>
+                <Text style={[s.stepLabel, i === step && s.stepLabelActive]}>{label}</Text>
                 {i < STEPS.length - 1 && (
-                  <View style={[st.stepLine, i < step && st.stepLineActive]} />
+                  <View style={[s.stepLine, i < step && s.stepLineActive]} />
                 )}
               </View>
             ))}
@@ -494,71 +454,66 @@ export default function CompleteProfileScreen() {
         </View>
 
         <ScrollView
-          contentContainerStyle={st.scroll}
+          contentContainerStyle={s.scroll}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
-          {/* ── STEP 0: Identity ── */}
           {step === 0 && (
-            <View style={st.stepContent}>
-              <View style={st.avatarPreview}>
+            <View style={s.stepContent}>
+              <View style={s.avatarPreview}>
                 <Avatar username={username || 'you'} size={64} />
-                <Text style={st.avatarHint}>Your avatar is auto-generated from your username</Text>
+                <Text style={s.avatarHint}>Your avatar is auto-generated from your username</Text>
               </View>
 
-              {/* Username Input with inline status */}
               <View style={{ marginBottom: Spacing.md }}>
-                <Text style={vs.inputLabel}>USERNAME</Text>
-                <View style={vs.inputRow}>
+                <Text style={s.inputLabel}>USERNAME</Text>
+                <View style={s.inputRow}>
                   <TextInput
                     value={username}
                     onChangeText={handleUsernameChange}
                     placeholder="username"
-                    placeholderTextColor={Colors.text.tertiary}
+                    placeholderTextColor={theme.textMuted}
                     autoCapitalize="none"
                     autoCorrect={false}
                     style={[
-                      vs.usernameInput,
-                      usernameStatus === 'available' && vs.inputBorderGreen,
-                      (usernameStatus === 'taken' || usernameStatus === 'invalid') && vs.inputBorderRed,
+                      s.usernameInput,
+                      usernameStatus === 'available' && s.inputBorderGreen,
+                      (usernameStatus === 'taken' || usernameStatus === 'invalid') && s.inputBorderRed,
                     ]}
                   />
                   {renderStatusIcon()}
                 </View>
-                <Text style={st.inputHint}>Letters, numbers and underscores only</Text>
+                <Text style={s.inputHint}>Letters, numbers and underscores only</Text>
 
-                {/* Feedback pill */}
-                {!!renderFeedbackPill() && renderFeedbackPill()}
+                {renderFeedbackPill()}
 
-                {/* Suggestions when taken */}
                 {usernameStatus === 'taken' && !!suggestions.length && (
-                  <View style={vs.suggestionsWrap}>
-                    <Text style={vs.suggestionsLabel}>TRY THESE</Text>
-                    <View style={vs.suggestionsRow}>
-                      {suggestions.map(s => (
+                  <View style={s.suggestionsWrap}>
+                    <Text style={s.suggestionsLabel}>TRY THESE</Text>
+                    <View style={s.suggestionsRow}>
+                      {suggestions.map(sg => (
                         <TouchableOpacity
-                          key={s}
-                          style={vs.suggestionChip}
-                          onPress={() => applySuggestion(s)}
+                          key={sg}
+                          style={s.suggestionChip}
+                          onPress={() => applySuggestion(sg)}
                           activeOpacity={0.7}
                         >
-                          <Text style={vs.suggestionText}>{s}</Text>
+                          <Text style={s.suggestionText}>{sg}</Text>
                         </TouchableOpacity>
                       ))}
                     </View>
                   </View>
                 )}
 
-                {/* Badges earned */}
                 {!!earnedBadges.length && (
-                  <View style={vs.badgesWrap}>
-                    <Text style={vs.badgesLabel}>BADGES EARNED</Text>
+                  <View style={s.badgesWrap}>
+                    <Text style={s.badgesLabel}>BADGES EARNED</Text>
                     {earnedBadges.map(b => (
-                      <View key={b.id} style={vs.badgeRow}>
-                        <Text style={vs.badgeIcon}>{b.icon}</Text>
+                      <View key={b.id} style={s.badgeRow}>
+                        <Text style={s.badgeIcon}>{b.icon}</Text>
                         <View style={{ flex: 1 }}>
-                          <Text style={vs.badgeName}>{b.label}</Text>
-                          <Text style={vs.badgeReason}>{b.reason}</Text>
+                          <Text style={s.badgeName}>{b.label}</Text>
+                          <Text style={s.badgeReason}>{b.reason}</Text>
                         </View>
                       </View>
                     ))}
@@ -566,53 +521,50 @@ export default function CompleteProfileScreen() {
                 )}
               </View>
 
-              {/* Bio */}
               <View style={{ marginBottom: Spacing.md }}>
-                <Text style={vs.inputLabel}>BIO</Text>
+                <Text style={s.inputLabel}>BIO</Text>
                 <TextInput
                   value={bio}
                   onChangeText={setBio}
                   placeholder="Building buildlog — Instagram for devs..."
-                  placeholderTextColor={Colors.text.tertiary}
+                  placeholderTextColor={theme.textMuted}
                   multiline
                   autoCapitalize="sentences"
-                  style={[vs.usernameInput, { minHeight: 80 }]}
+                  style={[s.usernameInput, { minHeight: 80 }]}
                 />
               </View>
 
-              {/* College */}
               <View style={{ marginBottom: Spacing.md }}>
-                <Text style={vs.inputLabel}>COLLEGE / UNIVERSITY (OPTIONAL)</Text>
+                <Text style={s.inputLabel}>COLLEGE / UNIVERSITY (OPTIONAL)</Text>
                 <TextInput
                   value={college}
                   onChangeText={setCollege}
                   placeholder="IIT Bombay, BITS Pilani..."
-                  placeholderTextColor={Colors.text.tertiary}
+                  placeholderTextColor={theme.textMuted}
                   autoCapitalize="words"
-                  style={vs.usernameInput}
+                  style={s.usernameInput}
                 />
               </View>
             </View>
           )}
 
-          {/* ── STEP 1: Stack ── */}
           {step === 1 && (
-            <View style={st.stepContent}>
-              <Text style={st.stepIntro}>
+            <View style={s.stepContent}>
+              <Text style={s.stepIntro}>
                 Pick your tech stack. This helps other developers find you.
               </Text>
-              <Text style={st.selectedCount}>
+              <Text style={s.selectedCount}>
                 {selectedStack.length} selected
               </Text>
-              <View style={st.stackGrid}>
+              <View style={s.stackGrid}>
                 {ALL_STACKS.map(skill => (
                   <TouchableOpacity
                     key={skill}
-                    style={[st.stackChip, selectedStack.includes(skill) && st.stackChipActive]}
+                    style={[s.stackChip, selectedStack.includes(skill) && s.stackChipActive]}
                     onPress={() => toggleStack(skill)}
                     activeOpacity={0.7}
                   >
-                    <Text style={[st.stackChipText, selectedStack.includes(skill) && st.stackChipTextActive]}>
+                    <Text style={[s.stackChipText, selectedStack.includes(skill) && s.stackChipTextActive]}>
                       {skill}
                     </Text>
                   </TouchableOpacity>
@@ -621,93 +573,89 @@ export default function CompleteProfileScreen() {
             </View>
           )}
 
-          {/* ── STEP 2: Links ── */}
           {step === 2 && (
-            <View style={st.stepContent}>
-              <Text style={st.stepIntro}>
+            <View style={s.stepContent}>
+              <Text style={s.stepIntro}>
                 Add your GitHub and LinkedIn so others can see your real work.
               </Text>
 
-              <View style={st.linkInput}>
-                <View style={st.linkIcon}>
-                  <Text style={st.linkIconText}>⌥</Text>
+              <View style={s.linkInput}>
+                <View style={s.linkIcon}>
+                  <Text style={s.linkIconText}>⌥</Text>
                 </View>
                 <View style={{ flex: 1, marginBottom: Spacing.md }}>
-                  <Text style={vs.inputLabel}>GITHUB URL</Text>
+                  <Text style={s.inputLabel}>GITHUB URL</Text>
                   <TextInput
                     value={githubUrl}
                     onChangeText={setGithubUrl}
                     placeholder="https://github.com/username"
-                    placeholderTextColor={Colors.text.tertiary}
+                    placeholderTextColor={theme.textMuted}
                     autoCapitalize="none"
-                    style={vs.usernameInput}
+                    style={s.usernameInput}
                   />
                 </View>
               </View>
 
-              <View style={st.linkInput}>
-                <View style={[st.linkIcon, { backgroundColor: Colors.pills.collab.bg }]}>
-                  <Text style={st.linkIconText}>in</Text>
+              <View style={s.linkInput}>
+                <View style={[s.linkIcon, { backgroundColor: '#0A66C2' }]}>
+                  <Text style={s.linkIconText}>in</Text>
                 </View>
                 <View style={{ flex: 1, marginBottom: Spacing.md }}>
-                  <Text style={vs.inputLabel}>LINKEDIN URL (OPTIONAL)</Text>
+                  <Text style={s.inputLabel}>LINKEDIN URL (OPTIONAL)</Text>
                   <TextInput
                     value={linkedinUrl}
                     onChangeText={setLinkedinUrl}
                     placeholder="https://linkedin.com/in/username"
-                    placeholderTextColor={Colors.text.tertiary}
+                    placeholderTextColor={theme.textMuted}
                     autoCapitalize="none"
-                    style={vs.usernameInput}
+                    style={s.usernameInput}
                   />
                 </View>
               </View>
 
-              {/* Profile preview */}
-              <View style={st.preview}>
-                <Text style={st.previewLabel}>PREVIEW</Text>
-                <View style={st.previewCard}>
-                  <View style={st.previewHeader}>
+              <View style={s.preview}>
+                <Text style={s.previewLabel}>PREVIEW</Text>
+                <View style={s.previewCard}>
+                  <View style={s.previewHeader}>
                     <Avatar username={username || 'you'} size={40} />
                     <View style={{ flex: 1, marginLeft: Spacing.md }}>
-                      <Text style={st.previewName}>{username || 'your_username'}</Text>
-                      {!!college && <Text style={st.previewCollege}>{college}</Text>}
+                      <Text style={s.previewName}>{username || 'your_username'}</Text>
+                      {!!college && <Text style={s.previewCollege}>{college}</Text>}
                     </View>
                   </View>
-                  {!!bio && <Text style={st.previewBio} numberOfLines={2}>{bio}</Text>}
+                  {!!bio && <Text style={s.previewBio} numberOfLines={2}>{bio}</Text>}
 
-                  {/* Fork / Star counts */}
-                  <View style={vs.statsRow}>
-                    <View style={vs.statItem}>
-                      <Text style={vs.statIcon}>⑂</Text>
-                      <Text style={vs.statCount}>0</Text>
-                      <Text style={vs.statLabel}>forks</Text>
+                  <View style={s.statsRow}>
+                    <View style={s.statItem}>
+                      <Text style={s.statIcon}>⑂</Text>
+                      <Text style={s.statCount}>0</Text>
+                      <Text style={s.statLabel}>forks</Text>
                     </View>
-                    <View style={vs.statItem}>
-                      <Text style={vs.statIcon}>★</Text>
-                      <Text style={vs.statCount}>0</Text>
-                      <Text style={vs.statLabel}>stars</Text>
+                    <View style={s.statItem}>
+                      <Text style={s.statIcon}>★</Text>
+                      <Text style={s.statCount}>0</Text>
+                      <Text style={s.statLabel}>stars</Text>
                     </View>
                   </View>
 
                   {selectedStack.length > 0 && (
-                    <View style={st.previewStack}>
-                      {selectedStack.slice(0, 4).map((sk, i) => (
-                        <View key={i} style={s2.chip}>
-                          <Text style={s2.chipText}>{sk}</Text>
+                    <View style={s.previewStack}>
+                      {selectedStack.slice(0, 4).map((sk, index) => (
+                        <View key={index} style={s.miniChip}>
+                          <Text style={s.miniChipText}>{sk}</Text>
                         </View>
                       ))}
                       {selectedStack.length > 4 && (
-                        <Text style={s2.more}>+{selectedStack.length - 4}</Text>
+                        <Text style={s.moreText}>+{selectedStack.length - 4}</Text>
                       )}
                     </View>
                   )}
 
-                  {/* Earned badges in preview */}
                   {!!earnedBadges.length && (
-                    <View style={vs.previewBadges}>
+                    <View style={s.previewBadges}>
                       {earnedBadges.map(b => (
-                        <View key={b.id} style={vs.previewBadgeChip}>
-                          <Text style={vs.previewBadgeText}>{b.icon} {b.label}</Text>
+                        <View key={b.id} style={s.previewBadgeChip}>
+                          <Text style={s.previewBadgeText}>{b.icon} {b.label}</Text>
                         </View>
                       ))}
                     </View>
@@ -717,26 +665,24 @@ export default function CompleteProfileScreen() {
             </View>
           )}
 
-          {/* Error */}
           {error !== '' && (
-            <View style={st.errorBox}>
-              <Text style={st.errorText}>{error}</Text>
+            <View style={s.errorBox}>
+              <Text style={s.errorText}>{error}</Text>
             </View>
           )}
 
-          {/* Navigation buttons */}
-          <View style={st.navRow}>
+          <View style={s.navRow}>
             {step > 0 && (
               <Button
                 label="Back"
-                onPress={() => setStep(s => s - 1)}
+                onPress={() => setStep(st => st - 1)}
                 variant="secondary"
                 style={{ flex: 1 }}
               />
             )}
             <Button
               label={step === STEPS.length - 1 ? 'Launch profile' : 'Continue'}
-              onPress={step === STEPS.length - 1 ? handleSubmit : () => setStep(s => s + 1)}
+              onPress={step === STEPS.length - 1 ? handleSubmit : () => setStep(st => st + 1)}
               loading={loading}
               style={{
                 flex: step > 0 ? 1 : undefined,
@@ -745,9 +691,8 @@ export default function CompleteProfileScreen() {
             />
           </View>
 
-          {/* Step 0 disabled hint */}
           {step === 0 && !canProceed() && username.length > 0 && (
-            <Text style={vs.disabledHint}>
+            <Text style={s.disabledHint}>
               Choose an available username to continue
             </Text>
           )}
@@ -757,85 +702,87 @@ export default function CompleteProfileScreen() {
   );
 }
 
-// ── Main Styles ──────────────────────────────────────────────
-const st = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.bg.primary },
+const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: theme.bg },
   header: {
     padding: Spacing.xl, paddingBottom: Spacing.md,
-    borderBottomWidth: 0.5, borderBottomColor: Colors.border.subtle,
+    borderBottomWidth: 0.5, borderBottomColor: theme.border,
   },
   headerTitle: {
-    color: Colors.text.primary, fontSize: Typography.sizes.xl,
+    color: theme.textPrimary, fontSize: Typography.sizes.xl,
     fontWeight: '600', marginBottom: Spacing.lg,
   },
   progressSteps: { flexDirection: 'row', alignItems: 'center' },
   stepItem: { flexDirection: 'row', alignItems: 'center', flex: 1 },
   stepDot: {
     width: 26, height: 26, borderRadius: 13,
-    backgroundColor: Colors.bg.tertiary,
-    borderWidth: 0.5, borderColor: Colors.border.default,
+    backgroundColor: theme.bgInput,
+    borderWidth: 0.5, borderColor: theme.border,
     alignItems: 'center', justifyContent: 'center',
   },
-  stepDotActive: { borderColor: Colors.accent.primary, backgroundColor: Colors.accent.muted },
-  stepDotDone: { backgroundColor: Colors.accent.primary, borderColor: Colors.accent.primary },
-  stepDotCheck: { color: '#fff', fontSize: 12, fontWeight: '600' },
-  stepDotNum: { color: Colors.text.tertiary, fontSize: Typography.sizes.xs, fontWeight: '500' },
-  stepLabel: { color: Colors.text.tertiary, fontSize: Typography.sizes.xs, marginLeft: 5 },
-  stepLabelActive: { color: Colors.accent.glow, fontWeight: '500' },
-  stepLine: { flex: 1, height: 0.5, backgroundColor: Colors.border.default, marginHorizontal: 5 },
-  stepLineActive: { backgroundColor: Colors.accent.primary },
+  stepDotActive: { borderColor: theme.purple, backgroundColor: isDark ? 'rgba(124, 58, 237, 0.15)' : 'rgba(124, 58, 237, 0.05)' },
+  stepDotDone: { backgroundColor: theme.purple, borderColor: theme.purple },
+  stepDotCheck: { color: isDark ? '#000' : '#fff', fontSize: 12, fontWeight: '600' },
+  stepDotNum: { color: theme.textMuted, fontSize: Typography.sizes.xs, fontWeight: '500' },
+  stepLabel: { color: theme.textMuted, fontSize: Typography.sizes.xs, marginLeft: 5 },
+  stepLabelActive: { color: theme.purple, fontWeight: '500' },
+  stepLine: { flex: 1, height: 0.5, backgroundColor: theme.border, marginHorizontal: 5 },
+  stepLineActive: { backgroundColor: theme.purple },
   scroll: { padding: Spacing.xl, paddingBottom: Spacing.xxxl, flexGrow: 1 },
   stepContent: { marginBottom: Spacing.xl },
   avatarPreview: { alignItems: 'center', marginBottom: Spacing.xl },
-  avatarHint: { color: Colors.text.tertiary, fontSize: Typography.sizes.xs, marginTop: Spacing.sm, textAlign: 'center' },
-  inputHint: { color: Colors.text.tertiary, fontSize: Typography.sizes.xs, marginTop: 4, marginBottom: Spacing.sm },
-  stepIntro: { color: Colors.text.secondary, fontSize: Typography.sizes.base, lineHeight: 22, marginBottom: Spacing.lg },
-  selectedCount: { color: Colors.accent.glow, fontSize: Typography.sizes.sm, fontWeight: '500', marginBottom: Spacing.md },
+  avatarHint: { color: theme.textMuted, fontSize: Typography.sizes.xs, marginTop: Spacing.sm, textAlign: 'center' },
+  inputHint: { color: theme.textMuted, fontSize: Typography.sizes.xs, marginTop: 4, marginBottom: Spacing.sm },
+  stepIntro: { color: theme.textSecondary, fontSize: Typography.sizes.base, lineHeight: 22, marginBottom: Spacing.lg },
+  selectedCount: { color: theme.purple, fontSize: Typography.sizes.sm, fontWeight: '500', marginBottom: Spacing.md },
   stackGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   stackChip: {
     paddingHorizontal: 12, paddingVertical: 7,
     borderRadius: Radius.md, borderWidth: 0.5,
-    borderColor: Colors.border.default,
-    backgroundColor: Colors.bg.secondary,
+    borderColor: theme.border,
+    backgroundColor: theme.bgInput,
   },
-  stackChipActive: { backgroundColor: Colors.accent.muted, borderColor: Colors.border.accent },
-  stackChipText: { color: Colors.text.secondary, fontSize: Typography.sizes.sm, fontFamily: 'Courier New' },
-  stackChipTextActive: { color: Colors.accent.glow, fontWeight: '500' },
+  stackChipActive: { backgroundColor: isDark ? 'rgba(124, 58, 237, 0.15)' : 'rgba(124, 58, 237, 0.05)', borderColor: theme.purple },
+  stackChipText: { color: theme.textSecondary, fontSize: Typography.sizes.sm, fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace' },
+  stackChipTextActive: { color: theme.purple, fontWeight: '500' },
   linkInput: { flexDirection: 'row', alignItems: 'flex-start', gap: Spacing.md, marginBottom: 4 },
   linkIcon: {
     width: 36, height: 36, borderRadius: Radius.sm,
-    backgroundColor: Colors.accent.muted,
+    backgroundColor: isDark ? 'rgba(124, 58, 237, 0.15)' : 'rgba(124, 58, 237, 0.05)',
     alignItems: 'center', justifyContent: 'center',
     marginTop: 20,
   },
-  linkIconText: { color: Colors.accent.glow, fontSize: Typography.sizes.sm, fontWeight: '600' },
+  linkIconText: { color: theme.purple, fontSize: Typography.sizes.sm, fontWeight: '600' },
   preview: { marginTop: Spacing.xl },
   previewLabel: {
-    color: Colors.text.tertiary, fontSize: Typography.sizes.xs,
+    color: theme.textMuted, fontSize: Typography.sizes.xs,
     fontWeight: '500', letterSpacing: 0.8, marginBottom: Spacing.sm,
   },
   previewCard: {
-    backgroundColor: Colors.bg.secondary,
-    borderWidth: 0.5, borderColor: Colors.border.default,
+    backgroundColor: theme.bgCard,
+    borderWidth: 0.5, borderColor: theme.border,
     borderRadius: Radius.lg, padding: Spacing.lg,
   },
   previewHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: Spacing.md },
-  previewName: { color: Colors.text.primary, fontSize: Typography.sizes.md, fontWeight: '500' },
-  previewCollege: { color: Colors.accent.glow, fontSize: Typography.sizes.xs, marginTop: 2 },
-  previewBio: { color: Colors.text.secondary, fontSize: Typography.sizes.sm, marginBottom: Spacing.md },
+  previewName: { color: theme.textPrimary, fontSize: Typography.sizes.md, fontWeight: '500' },
+  previewCollege: { color: theme.purple, fontSize: Typography.sizes.xs, marginTop: 2 },
+  previewBio: { color: theme.textSecondary, fontSize: Typography.sizes.sm, marginBottom: Spacing.md },
   previewStack: { flexDirection: 'row', flexWrap: 'wrap', gap: 5 },
+  miniChip: {
+    backgroundColor: theme.bgInput, borderWidth: 0.5,
+    borderColor: theme.border, borderRadius: Radius.sm,
+    paddingHorizontal: 8, paddingVertical: 3,
+  },
+  miniChipText: { color: theme.textMuted, fontSize: Typography.sizes.xs, fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace' },
+  moreText: { color: theme.textMuted, fontSize: Typography.sizes.xs, alignSelf: 'center' },
   errorBox: {
-    backgroundColor: 'rgba(163,45,45,0.15)', borderWidth: 0.5, borderColor: Colors.danger,
+    backgroundColor: 'rgba(239, 68, 68, 0.15)', borderWidth: 0.5, borderColor: theme.red,
     borderRadius: Radius.md, padding: Spacing.md, marginBottom: Spacing.md,
   },
-  errorText: { color: '#FCA5A5', fontSize: Typography.sizes.sm },
+  errorText: { color: theme.red, fontSize: Typography.sizes.sm },
   navRow: { flexDirection: 'row', gap: Spacing.md },
-});
-
-// ── Validation Styles ────────────────────────────────────────
-const vs = StyleSheet.create({
   inputLabel: {
-    color: Colors.text.tertiary, fontSize: Typography.sizes.xs,
+    color: theme.textMuted, fontSize: Typography.sizes.xs,
     letterSpacing: 0.5, fontWeight: '500', marginBottom: 5,
   },
   inputRow: {
@@ -843,20 +790,20 @@ const vs = StyleSheet.create({
   },
   usernameInput: {
     flex: 1,
-    backgroundColor: Colors.bg.input,
+    backgroundColor: theme.bgInput,
     borderRadius: Radius.md,
     borderWidth: 0.5,
-    borderColor: Colors.border.default,
+    borderColor: theme.border,
     padding: Spacing.md,
-    color: Colors.text.primary,
+    color: theme.textPrimary,
     fontSize: Typography.sizes.base,
     minHeight: 44,
   },
   inputBorderGreen: {
-    borderColor: Colors.success, borderWidth: 1,
+    borderColor: theme.green, borderWidth: 1,
   },
   inputBorderRed: {
-    borderColor: Colors.danger, borderWidth: 1,
+    borderColor: theme.red, borderWidth: 1,
   },
   iconWrap: {
     width: 32, height: 32, borderRadius: 16,
@@ -870,10 +817,10 @@ const vs = StyleSheet.create({
     backgroundColor: 'rgba(218,54,51,0.2)',
   },
   checkmark: {
-    color: Colors.success, fontSize: 16, fontWeight: '700',
+    color: theme.green, fontSize: 16, fontWeight: '700',
   },
   xmark: {
-    color: Colors.danger, fontSize: 16, fontWeight: '700',
+    color: theme.red, fontSize: 16, fontWeight: '700',
   },
   feedbackPill: {
     paddingHorizontal: 12, paddingVertical: 6,
@@ -882,27 +829,27 @@ const vs = StyleSheet.create({
     borderWidth: 0.5,
   },
   feedbackSuccess: {
-    backgroundColor: Colors.rag.success.bg,
-    borderColor: Colors.rag.success.border,
+    backgroundColor: isDark ? 'rgba(35, 134, 54, 0.15)' : 'rgba(35, 134, 54, 0.05)',
+    borderColor: theme.green,
   },
   feedbackError: {
-    backgroundColor: Colors.rag.error.bg,
-    borderColor: Colors.rag.error.border,
+    backgroundColor: isDark ? 'rgba(239, 68, 68, 0.15)' : 'rgba(239, 68, 68, 0.05)',
+    borderColor: theme.red,
   },
   feedbackText: {
     fontSize: Typography.sizes.xs,
   },
   feedbackTextSuccess: {
-    color: Colors.rag.success.text,
+    color: theme.green,
   },
   feedbackTextError: {
-    color: Colors.rag.error.text,
+    color: theme.red,
   },
   suggestionsWrap: {
     marginTop: Spacing.md,
   },
   suggestionsLabel: {
-    color: Colors.text.tertiary, fontSize: Typography.sizes.xs,
+    color: theme.textMuted, fontSize: Typography.sizes.xs,
     letterSpacing: 0.5, fontWeight: '500', marginBottom: Spacing.sm,
   },
   suggestionsRow: {
@@ -911,22 +858,22 @@ const vs = StyleSheet.create({
   suggestionChip: {
     paddingHorizontal: 12, paddingVertical: 6,
     borderRadius: Radius.full,
-    backgroundColor: Colors.accent.muted,
-    borderWidth: 0.5, borderColor: Colors.border.accent,
+    backgroundColor: isDark ? 'rgba(124, 58, 237, 0.15)' : 'rgba(124, 58, 237, 0.05)',
+    borderWidth: 0.5, borderColor: theme.purple,
   },
   suggestionText: {
-    color: Colors.accent.glow, fontSize: Typography.sizes.sm,
-    fontFamily: 'Courier New',
+    color: theme.purple, fontSize: Typography.sizes.sm,
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
   },
   badgesWrap: {
     marginTop: Spacing.lg,
     padding: Spacing.md,
-    backgroundColor: Colors.bg.secondary,
+    backgroundColor: theme.bgCard,
     borderRadius: Radius.lg,
-    borderWidth: 0.5, borderColor: Colors.border.subtle,
+    borderWidth: 0.5, borderColor: theme.border,
   },
   badgesLabel: {
-    color: Colors.text.tertiary, fontSize: Typography.sizes.xs,
+    color: theme.textMuted, fontSize: Typography.sizes.xs,
     letterSpacing: 0.5, fontWeight: '500', marginBottom: Spacing.sm,
   },
   badgeRow: {
@@ -934,10 +881,10 @@ const vs = StyleSheet.create({
     paddingVertical: 6, gap: Spacing.sm,
   },
   badgeIcon: { fontSize: 20 },
-  badgeName: { color: Colors.text.primary, fontSize: Typography.sizes.sm, fontWeight: '600' },
-  badgeReason: { color: Colors.text.tertiary, fontSize: Typography.sizes.xs, marginTop: 1 },
+  badgeName: { color: theme.textPrimary, fontSize: Typography.sizes.sm, fontWeight: '600' },
+  badgeReason: { color: theme.textMuted, fontSize: Typography.sizes.xs, marginTop: 1 },
   disabledHint: {
-    color: Colors.text.tertiary, fontSize: Typography.sizes.xs,
+    color: theme.textMuted, fontSize: Typography.sizes.xs,
     textAlign: 'center', marginTop: Spacing.md,
   },
   statsRow: {
@@ -947,29 +894,19 @@ const vs = StyleSheet.create({
   statItem: {
     flexDirection: 'row', alignItems: 'center', gap: 4,
   },
-  statIcon: { color: Colors.text.tertiary, fontSize: 14 },
-  statCount: { color: Colors.text.primary, fontSize: Typography.sizes.sm, fontWeight: '600' },
-  statLabel: { color: Colors.text.tertiary, fontSize: Typography.sizes.xs },
+  statIcon: { color: theme.textMuted, fontSize: 14 },
+  statCount: { color: theme.textPrimary, fontSize: Typography.sizes.sm, fontWeight: '600' },
+  statLabel: { color: theme.textMuted, fontSize: Typography.sizes.xs },
   previewBadges: {
     flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: Spacing.md,
   },
   previewBadgeChip: {
     paddingHorizontal: 8, paddingVertical: 3,
     borderRadius: Radius.full,
-    backgroundColor: Colors.pills.challenge.bg,
-    borderWidth: 0.5, borderColor: Colors.pills.challenge.border,
+    backgroundColor: isDark ? 'rgba(124, 58, 237, 0.1)' : 'rgba(124, 58, 237, 0.05)',
+    borderWidth: 0.5, borderColor: theme.purple,
   },
   previewBadgeText: {
-    color: Colors.pills.challenge.text, fontSize: Typography.sizes.xs, fontWeight: '500',
+    color: theme.purple, fontSize: Typography.sizes.xs, fontWeight: '500',
   },
-});
-
-const s2 = StyleSheet.create({
-  chip: {
-    backgroundColor: Colors.bg.tertiary, borderWidth: 0.5,
-    borderColor: Colors.border.subtle, borderRadius: Radius.sm,
-    paddingHorizontal: 8, paddingVertical: 3,
-  },
-  chipText: { color: Colors.text.tertiary, fontSize: Typography.sizes.xs, fontFamily: 'Courier New' },
-  more: { color: Colors.text.tertiary, fontSize: Typography.sizes.xs, alignSelf: 'center' },
 });

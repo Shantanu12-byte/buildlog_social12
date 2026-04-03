@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Colors, Typography, Spacing, Radius } from '@/constants/theme';
+import { Typography, Spacing, Radius } from '@/constants/theme';
 import { useUserStore } from '@/store/userStore';
+import { useTheme } from '@/context/ThemeContext';
 
 interface CampusGroup {
   id: string;
@@ -12,6 +13,8 @@ interface CampusGroup {
 }
 
 export default function CampusGroupController() {
+  const { theme, isDark } = useTheme();
+  const styles = React.useMemo(() => getStyles(theme, isDark), [theme, isDark]);
   const router = useRouter();
   const { userProfile } = useUserStore();
   const [groups, setGroups] = useState<CampusGroup[]>([]);
@@ -22,8 +25,7 @@ export default function CampusGroupController() {
 
   useEffect(() => {
     if (isJoinedToCampus && campusName) {
-      // Fetch groups securely from our Node API (or Supabase directly if rules are solid)
-      // For now, mocking specific campus groups based on the college selected.
+      // Mocking specific campus groups
       setTimeout(() => {
         setGroups([
           { id: 'g1', name: `C++ Builders - ${campusName}`, description: 'Mastering DSA together', member_count: 142 },
@@ -40,18 +42,18 @@ export default function CampusGroupController() {
   // Locked State
   if (!isJoinedToCampus) {
     return (
-      <View style={s.lockedContainer}>
-        <View style={s.lockedCard}>
-          <Text style={s.lockedIcon}>🎓</Text>
-          <Text style={s.lockedTitle}>Campus Hub Locked</Text>
-          <Text style={s.lockedSub}>
+      <View style={styles.lockedContainer}>
+        <View style={styles.lockedCard}>
+          <Text style={styles.lockedIcon}>🎓</Text>
+          <Text style={styles.lockedTitle}>Campus Hub Locked</Text>
+          <Text style={styles.lockedSub}>
             You must select and officially join a campus community to access chat groups and projects.
           </Text>
           <TouchableOpacity 
-            style={s.joinBtn}
+            style={styles.joinBtn}
             onPress={() => router.push('/(auth)/CampusOnboarding')}
           >
-            <Text style={s.joinBtnText}>Join Community</Text>
+            <Text style={styles.joinBtnText}>Join Community</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -60,30 +62,30 @@ export default function CampusGroupController() {
 
   // Unlocked State (List of groups)
   return (
-    <View style={s.container}>
-      <View style={s.headerRow}>
-        <Text style={s.campusBanner}>Welcome to {campusName} Hub</Text>
-        <TouchableOpacity style={s.createBtn}>
-          <Text style={s.createBtnText}>+ Create Group</Text>
+    <View style={styles.container}>
+      <View style={styles.headerRow}>
+        <Text style={styles.campusBanner}>Welcome to {campusName} Hub</Text>
+        <TouchableOpacity style={styles.createBtn}>
+          <Text style={styles.createBtnText}>+ Create Group</Text>
         </TouchableOpacity>
       </View>
 
       {isLoading ? (
-        <View style={s.center}><ActivityIndicator color={Colors.accent.primary} /></View>
+        <View style={styles.center}><ActivityIndicator color={theme.purple} /></View>
       ) : (
         <FlatList
           data={groups}
           keyExtractor={item => item.id}
-          contentContainerStyle={s.list}
+          contentContainerStyle={styles.list}
           renderItem={({ item }) => (
-            <View style={s.groupCard}>
-              <View style={s.groupInfo}>
-                <Text style={s.groupName}>{item.name}</Text>
-                <Text style={s.groupDesc}>{item.description}</Text>
-                <Text style={s.groupMembers}>👥 {item.member_count} members</Text>
+            <View style={styles.groupCard}>
+              <View style={styles.groupInfo}>
+                <Text style={styles.groupName}>{item.name}</Text>
+                <Text style={styles.groupDesc}>{item.description}</Text>
+                <Text style={styles.groupMembers}>👥 {item.member_count} members</Text>
               </View>
-              <TouchableOpacity style={s.enterBtn}>
-                <Text style={s.enterBtnText}>Join</Text>
+              <TouchableOpacity style={styles.enterBtn}>
+                <Text style={styles.enterBtnText}>Join</Text>
               </TouchableOpacity>
             </View>
           )}
@@ -93,42 +95,63 @@ export default function CampusGroupController() {
   );
 }
 
-const s = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.bg.primary },
+function getStyles(theme: any, isDark: boolean) {
+  return StyleSheet.create({
+  container: { flex: 1, backgroundColor: theme.bg },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   lockedContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: Spacing.xl },
   lockedCard: {
-    backgroundColor: Colors.bg.secondary,
+    backgroundColor: theme.bgCard,
     padding: Spacing.xxxl,
-    borderRadius: Radius.xl,
+    borderRadius: Radius.lg,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: Colors.border.default,
+    borderColor: theme.border,
     width: '100%'
   },
   lockedIcon: { fontSize: 48, marginBottom: Spacing.md },
-  lockedTitle: { color: Colors.text.primary, fontSize: Typography.sizes.lg, fontWeight: '700', marginBottom: Spacing.sm },
-  lockedSub: { color: Colors.text.secondary, fontSize: Typography.sizes.sm, textAlign: 'center', marginBottom: Spacing.xl, lineHeight: 20 },
-  joinBtn: { backgroundColor: Colors.accent.primary, paddingHorizontal: Spacing.xl, paddingVertical: Spacing.md, borderRadius: Radius.md },
+  lockedTitle: { color: theme.textPrimary, fontSize: Typography.sizes.lg, fontWeight: '700', marginBottom: Spacing.sm },
+  lockedSub: { color: theme.textSecondary, fontSize: Typography.sizes.sm, textAlign: 'center', marginBottom: Spacing.xl, lineHeight: 20 },
+  joinBtn: { backgroundColor: theme.purple, paddingHorizontal: Spacing.xl, paddingVertical: Spacing.md, borderRadius: Radius.md },
   joinBtnText: { color: '#fff', fontSize: Typography.sizes.base, fontWeight: '700' },
-  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: Spacing.lg, borderBottomWidth: 1, borderBottomColor: Colors.border.subtle },
-  campusBanner: { color: Colors.accent.primary, fontSize: Typography.sizes.base, fontWeight: '700' },
-  createBtn: { backgroundColor: 'rgba(93, 63, 211, 0.1)', paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm, borderRadius: Radius.sm },
-  createBtnText: { color: Colors.accent.primary, fontSize: Typography.sizes.sm, fontWeight: '600' },
+  headerRow: { 
+    flexDirection: 'row', 
+    justifyContent: 'space-between', 
+    alignItems: 'center', 
+    padding: Spacing.lg, 
+    borderBottomWidth: 1, 
+    borderBottomColor: theme.border 
+  },
+  campusBanner: { color: theme.purple, fontSize: Typography.sizes.base, fontWeight: '700' },
+  createBtn: { 
+    backgroundColor: isDark ? 'rgba(124, 58, 237, 0.1)' : 'rgba(124, 58, 237, 0.05)', 
+    paddingHorizontal: Spacing.md, 
+    paddingVertical: Spacing.sm, 
+    borderRadius: Radius.sm 
+  },
+  createBtnText: { color: theme.purple, fontSize: Typography.sizes.sm, fontWeight: '600' },
   list: { padding: Spacing.lg, gap: Spacing.md },
   groupCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.bg.secondary,
+    backgroundColor: theme.bgCard,
     padding: Spacing.lg,
     borderRadius: Radius.lg,
     borderWidth: 1,
-    borderColor: Colors.border.subtle,
+    borderColor: theme.border,
   },
   groupInfo: { flex: 1, paddingRight: Spacing.md },
-  groupName: { color: Colors.text.primary, fontSize: Typography.sizes.base, fontWeight: '600', marginBottom: 2 },
-  groupDesc: { color: Colors.text.secondary, fontSize: Typography.sizes.sm, marginBottom: 8 },
-  groupMembers: { color: Colors.text.tertiary, fontSize: Typography.sizes.xs },
-  enterBtn: { backgroundColor: Colors.bg.tertiary, borderWidth: 1, borderColor: Colors.border.default, paddingHorizontal: Spacing.lg, paddingVertical: 8, borderRadius: Radius.md },
-  enterBtnText: { color: Colors.text.primary, fontSize: Typography.sizes.sm, fontWeight: '600' }
-});
+  groupName: { color: theme.textPrimary, fontSize: Typography.sizes.base, fontWeight: '600', marginBottom: 2 },
+  groupDesc: { color: theme.textSecondary, fontSize: Typography.sizes.sm, marginBottom: 8 },
+  groupMembers: { color: theme.textMuted, fontSize: Typography.sizes.xs },
+  enterBtn: { 
+    backgroundColor: theme.bgInput, 
+    borderWidth: 1, 
+    borderColor: theme.border, 
+    paddingHorizontal: Spacing.lg, 
+    paddingVertical: 8, 
+    borderRadius: Radius.md 
+  },
+  enterBtnText: { color: theme.textPrimary, fontSize: Typography.sizes.sm, fontWeight: '600' }
+  });
+}

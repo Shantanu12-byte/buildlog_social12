@@ -18,6 +18,7 @@ import { LoadingScreen } from '@/components/ui/UI';
 import { useUserStore } from '@/store/userStore';
 import CampusLeaderboard from '@/components/CampusLeaderboard';
 import CampusPicker from '@/components/CampusPicker';
+import { useTheme } from '@/context/ThemeContext';
 
 // ─── Types ────────────────────────────────────────────────────
 interface Room {
@@ -53,7 +54,7 @@ function formatTime(dateStr: string): string {
 
 
 
-function RoomCard({
+const RoomCard = React.memo(({
   room,
   isActive,
   isJoined,
@@ -65,7 +66,9 @@ function RoomCard({
   isJoined: boolean;
   onPress: () => void;
   onJoin: (roomId: string) => void;
-}) {
+}) => {
+  const { theme, isDark } = useTheme();
+  const s = React.useMemo(() => getStyles(theme, isDark), [theme, isDark]);
   const isGlobal = room.type === 'global';
   return (
     <TouchableOpacity style={[s.roomCard, isActive && s.roomCardActive]} onPress={onPress} activeOpacity={0.75}>
@@ -111,9 +114,11 @@ function RoomCard({
       </View>
     </TouchableOpacity>
   );
-}
+});
 
-function MessageBubble({ msg, isMe, onLongPress }: { msg: Message; isMe: boolean; onLongPress?: () => void }) {
+const MessageBubble = React.memo(({ msg, isMe, onLongPress }: { msg: Message; isMe: boolean; onLongPress?: () => void }) => {
+  const { theme, isDark } = useTheme();
+  const s = React.useMemo(() => getStyles(theme, isDark), [theme, isDark]);
   const initials = msg.sender_username.slice(0, 2).toUpperCase();
 
   // FIX - Flagging Logic (URLs + Promotional keywords)
@@ -149,9 +154,11 @@ function MessageBubble({ msg, isMe, onLongPress }: { msg: Message; isMe: boolean
       </View>
     </TouchableOpacity>
   );
-}
+});
 
 function DateSeparator({ date }: { date: string }) {
+  const { theme, isDark } = useTheme();
+  const s = React.useMemo(() => getStyles(theme, isDark), [theme, isDark]);
   const label = new Date(date).toDateString() === new Date().toDateString() ? 'Today' :
     new Date(date).toDateString() === new Date(Date.now() - 86400000).toDateString() ? 'Yesterday' :
       new Date(date).toLocaleDateString();
@@ -173,6 +180,8 @@ function ChatView({
   onLeave: () => void;
   onDeleteMessage: (id: string) => void;
 }) {
+  const { theme, isDark } = useTheme();
+  const s = React.useMemo(() => getStyles(theme, isDark), [theme, isDark]);
   const [text, setText] = useState('');
   const flatRef = useRef<FlatList>(null);
 
@@ -186,7 +195,7 @@ function ChatView({
     setText('');
   }
 
-  const renderItem = ({ item, index }: { item: Message; index: number }) => {
+  const renderItem = useCallback(({ item, index }: { item: Message; index: number }) => {
     const prevMsg = index > 0 ? messages[index - 1] : null;
     const showDate = !prevMsg || new Date(item.created_at).toDateString() !== new Date(prevMsg.created_at).toDateString();
 
@@ -205,7 +214,7 @@ function ChatView({
         />
       </View>
     );
-  };
+  }, [messages, userId, onDeleteMessage]);
 
   return (
     <View style={s.chatView}>
@@ -244,7 +253,7 @@ function ChatView({
         keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
       >
         {loading ? (
-          <View style={s.chatLoading}><ActivityIndicator color="#7c3aed" /></View>
+          <View style={s.chatLoading}><ActivityIndicator color={theme.purple} /></View>
         ) : (
           <FlatList
             ref={flatRef}
@@ -253,6 +262,10 @@ function ChatView({
             showsVerticalScrollIndicator={false}
             contentContainerStyle={s.msgList}
             onContentSizeChange={() => flatRef.current?.scrollToEnd()}
+            initialNumToRender={20}
+            maxToRenderPerBatch={10}
+            windowSize={5}
+            removeClippedSubviews={Platform.OS !== 'ios'}
             ListEmptyComponent={
               <View style={s.emptyList}>
                 <Text style={s.emptyIcon}>💬</Text>
@@ -269,7 +282,7 @@ function ChatView({
               value={text}
               onChangeText={setText}
               placeholder={room.type === 'global' ? 'Broadcast message...' : 'Message campus...'}
-              placeholderTextColor="#4b5563"
+              placeholderTextColor={theme.textMuted}
               style={s.msgInput}
               multiline
               onSubmitEditing={handleSend}
@@ -292,6 +305,8 @@ function ChatView({
 export default function TavernScreen() {
   const router = useRouter();
   const { userProfile, userId, updateUserProfile, profileFetched } = useUserStore();
+  const { theme, isDark } = useTheme();
+  const s = React.useMemo(() => getStyles(theme, isDark), [theme, isDark]);
 
   // ── State (preserved) ─────────────────────────────────────
   const [rooms, setRooms] = useState<Room[]>([]);
@@ -439,9 +454,7 @@ export default function TavernScreen() {
       // Refresh rooms to include campus-specific ones
       await fetchRooms();
 
-    } catch (err: any) {
-      console.error('Set campus error:', err);
-      Alert.alert('Join Failed', err.message || 'Could not join campus.');
+    } catch (err: any) { Alert.alert('Join Failed', err.message || 'Could not join campus.');
     } finally {
       setIsJoinLoading(false);
     }
@@ -474,9 +487,7 @@ export default function TavernScreen() {
       .select()
       .single();
 
-    if (error) {
-      console.error('Error creating community:', error);
-      Alert.alert('Error', `Could not create community: ${error.message}${error.details ? ` (${error.details})` : ''}\n\nHint: Check if the chat_rooms table has all required columns.`);
+    if (error) { Alert.alert('Error', `Could not create community: ${error.message}${error.details ? ` (${error.details})` : ''}\n\nHint: Check if the chat_rooms table has all required columns.`);
       return;
     }
 
@@ -596,11 +607,18 @@ export default function TavernScreen() {
     let processedText = text;
     let wasFiltered = false;
 
-    // Zero-Cost Profanity Filter Bridge (Local Node Backend)
+    const backendUrl = process.env.EXPO_PUBLIC_BACKEND_URL || 'http://localhost:5000';
+    const { data: { session } } = await supabase.auth.getSession();
+    const token = session?.access_token;
+
+    // 1. Secure Profanity Filter (Requires JWT)
     try {
-      const response = await fetch('http://localhost:5000/api/chat/clean', {
+      const response = await fetch(`${backendUrl}/api/chat/clean`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
         body: JSON.stringify({ text })
       });
       const data = await response.json();
@@ -608,9 +626,7 @@ export default function TavernScreen() {
         processedText = data.cleaned;
         wasFiltered = true;
       }
-    } catch (e) {
-      console.warn('Content filter service unavailable, sending raw text.');
-    }
+    } catch (e) { }
 
     const newMsg = {
       room_id: selectedRoom.id,
@@ -620,35 +636,28 @@ export default function TavernScreen() {
       created_at: new Date().toISOString(),
     };
 
+    // 2. Insert into Supabase
     await supabase.from('messages').insert(newMsg);
     setRooms(prev => prev.map(r => r.id === selectedRoom.id ? { ...r, last_message: processedText.slice(0, 50) } : r));
 
-    // Send push notifications to other members
+    // 3. Delegate Push Notifications to Backend (Privacy & Efficiency)
     try {
-      const { data: memberData } = await supabase
-        .from('room_members')
-        .select('user_id')
-        .eq('room_id', selectedRoom.id);
-        
-      if (memberData) {
-        const targetIds = memberData.map(m => m.user_id).filter(id => id !== userId);
-        if (targetIds.length > 0) {
-          const backendUrl = process.env.EXPO_PUBLIC_BACKEND_URL || 'http://localhost:5000';
-          fetch(`${backendUrl}/api/user/push/notify/chat`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              targetUserIds: targetIds,
-              senderUsername: userProfile?.username || 'user',
-              roomName: selectedRoom.name,
-              message: processedText
-            }),
-          }).catch(e => console.error('Failed pushing chat notification', e));
-        }
+      if (token) {
+        fetch(`${backendUrl}/api/user/push/notify/chat`, {
+          method: 'POST',
+          headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            roomId: selectedRoom.id,
+            senderUsername: userProfile?.username || 'user',
+            roomName: selectedRoom.name,
+            message: processedText
+          }),
+        }).catch(() => {});
       }
-    } catch (e) {
-      console.error('Error fetching members to notify', e);
-    }
+    } catch (e) { }
 
     if (wasFiltered) {
       Alert.alert(
@@ -672,7 +681,7 @@ export default function TavernScreen() {
   if (selectedRoom) {
     return (
       <SafeAreaView style={s.container}>
-        <StatusBar barStyle="light-content" />
+        <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={theme.bg} />
         <ChatView
           room={selectedRoom}
           messages={messages}
@@ -739,7 +748,7 @@ export default function TavernScreen() {
                 <Text style={s.memberSectionTitle}>👥 All Members ({roomMembers.length})</Text>
                 {roomMembers.map((m, i) => (
                   <View key={i} style={s.memberRow}>
-                    <View style={[s.memberAvatar, { backgroundColor: '#1f2937' }]}>
+                    <View style={[s.memberAvatar, { backgroundColor: theme.bgInput }]}>
                       <Text style={s.memberAvatarText}>{(m.profiles?.username || 'U').slice(0, 1).toUpperCase()}</Text>
                     </View>
                     <Text style={s.memberUsername}>{m.profiles?.username}</Text>
@@ -828,7 +837,7 @@ export default function TavernScreen() {
                   <Text style={s.memberSectionTitle}>👥 Members ({roomMembers.length})</Text>
                   {roomMembers.map((m, i) => (
                     <View key={i} style={s.memberRow}>
-                      <View style={[s.memberAvatar, { backgroundColor: '#1f2937' }]}>
+                      <View style={[s.memberAvatar, { backgroundColor: theme.bgInput }]}>
                         <Text style={s.memberAvatarText}>{(m.profiles?.username || 'U').slice(0, 1).toUpperCase()}</Text>
                       </View>
                       <Text style={s.memberUsername}>{m.profiles?.username}</Text>
@@ -877,7 +886,7 @@ export default function TavernScreen() {
 
   return (
     <SafeAreaView style={s.container}>
-      <StatusBar barStyle="light-content" />
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={theme.bg} />
 
       {/* Header */}
       <View style={s.header}>
@@ -927,17 +936,17 @@ export default function TavernScreen() {
         <CampusLeaderboard />
       ) : activeTab === 'campus' && !isJoinedToCampus ? (
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 20 }}>
-          <View style={{ backgroundColor: '#111111', padding: 30, borderRadius: 24, alignItems: 'center', borderWidth: 1, borderColor: '#1f2937', width: '100%' }}>
+          <View style={{ backgroundColor: theme.bgCard, padding: 30, borderRadius: 24, alignItems: 'center', borderWidth: 1, borderColor: theme.border, width: '100%' }}>
             <Text style={{ fontSize: 48, marginBottom: 16 }}>🎓</Text>
-            <Text style={{ color: '#ffffff', fontSize: 18, fontWeight: '700', marginBottom: 8 }}>Campus Hub Locked</Text>
-            <Text style={{ color: '#6b7280', fontSize: 14, textAlign: 'center', marginBottom: 24, lineHeight: 20 }}>
+            <Text style={{ color: theme.textPrimary, fontSize: 18, fontWeight: '700', marginBottom: 8 }}>Campus Hub Locked</Text>
+            <Text style={{ color: theme.textSecondary, fontSize: 14, textAlign: 'center', marginBottom: 24, lineHeight: 20 }}>
               You must select and officially join a campus community to access chat groups and projects.
             </Text>
             <TouchableOpacity
-              style={{ backgroundColor: '#7c3aed', paddingHorizontal: 24, paddingVertical: 12, borderRadius: 12 }}
+              style={{ backgroundColor: theme.purple, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 12 }}
               onPress={() => router.push('/(auth)/CampusOnboarding')}
             >
-              <Text style={{ color: '#fff', fontSize: 16, fontWeight: '700' }}>Join Community</Text>
+              <Text style={{ color: isDark ? '#000' : '#fff', fontSize: 16, fontWeight: '700' }}>Join Community</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -1036,7 +1045,7 @@ export default function TavernScreen() {
             <TextInput
               style={s.modalInput}
               placeholder="Community Name (e.g. CS 101)"
-              placeholderTextColor="#4b5563"
+              placeholderTextColor={theme.textMuted}
               value={newRoomName}
               onChangeText={setNewRoomName}
               autoFocus
@@ -1045,7 +1054,7 @@ export default function TavernScreen() {
             <TextInput
               style={[s.modalInput, { height: 80 }]}
               placeholder="Description (optional)"
-              placeholderTextColor="#4b5563"
+              placeholderTextColor={theme.textMuted}
               value={newRoomDesc}
               onChangeText={setNewRoomDesc}
               multiline
@@ -1067,320 +1076,319 @@ export default function TavernScreen() {
   );
 }
 
-const s = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0a0a0a' },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 20
-  },
-  screenTitle: {
-    color: '#ffffff',
-    fontSize: 28,
-    fontWeight: '800',
-    letterSpacing: -0.5
-  },
-  liveIndicator: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: '#052e16',
-    borderWidth: 1,
-    borderColor: '#16a34a',
-    borderRadius: 20,
-    paddingHorizontal: 10,
-    paddingVertical: 4
-  },
-  onlineDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#4ade80' },
-  liveText: { color: '#4ade80', fontSize: 11, fontWeight: '700' },
+function getStyles(theme: any, isDark: boolean) {
+  return StyleSheet.create({
+    container: { flex: 1, backgroundColor: theme.bg },
+    header: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: 20,
+      paddingTop: 16,
+      paddingBottom: 20
+    },
+    screenTitle: {
+      color: theme.textPrimary,
+      fontSize: 28,
+      fontWeight: '800',
+      letterSpacing: -0.5
+    },
+    liveIndicator: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      backgroundColor: isDark ? 'rgba(34, 197, 94, 0.2)' : 'rgba(34, 197, 94, 0.1)',
+      borderWidth: 1,
+      borderColor: theme.green,
+      borderRadius: 20,
+      paddingHorizontal: 10,
+      paddingVertical: 4
+    },
+    onlineDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: theme.green },
+    liveText: { color: theme.green, fontSize: 11, fontWeight: '700' },
 
-  // Pill Toggle
-  tabs: {
-    flexDirection: 'row',
-    marginHorizontal: 20,
-    backgroundColor: '#111111',
-    borderRadius: 12,
-    padding: 4,
-    marginBottom: 16
-  },
-  tab: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 10,
-    borderRadius: 10
-  },
-  tabActive: { backgroundColor: '#7c3aed' },
-  tabIcon: { fontSize: 14 },
-  tabLabel: { color: '#6b7280', fontSize: 14, fontWeight: '600' },
-  tabLabelActive: { color: '#ffffff' },
+    tabs: {
+      flexDirection: 'row',
+      marginHorizontal: 20,
+      backgroundColor: theme.bgInput,
+      borderRadius: 12,
+      padding: 4,
+      marginBottom: 16
+    },
+    tab: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 6,
+      paddingVertical: 10,
+      borderRadius: 10
+    },
+    tabActive: { backgroundColor: theme.purple },
+    tabIcon: { fontSize: 14 },
+    tabLabel: { color: theme.textSecondary, fontSize: 14, fontWeight: '600' },
+    tabLabelActive: { color: isDark ? '#000' : '#ffffff' },
 
-  // Sub Tabs
-  subTabs: {
-    flexDirection: 'row',
-    marginHorizontal: 20,
-    marginBottom: 16,
-    gap: 20
-  },
-  subTab: {
-    paddingVertical: 8,
-    borderBottomWidth: 2,
-    borderBottomColor: 'transparent',
-  },
-  subTabActive: {
-    borderBottomColor: '#7c3aed',
-  },
-  subTabText: {
-    color: '#6b7280',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  subTabTextActive: {
-    color: '#ffffff',
-  },
+    subTabs: {
+      flexDirection: 'row',
+      marginHorizontal: 20,
+      marginBottom: 16,
+      gap: 20
+    },
+    subTab: {
+      paddingVertical: 8,
+      borderBottomWidth: 2,
+      borderBottomColor: 'transparent',
+    },
+    subTabActive: {
+      borderBottomColor: theme.purple,
+    },
+    subTabText: {
+      color: theme.textSecondary,
+      fontSize: 14,
+      fontWeight: '600',
+    },
+    subTabTextActive: {
+      color: theme.textPrimary,
+    },
 
-  // Room Cards
-  roomCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginHorizontal: 20,
-    marginBottom: 10,
-    padding: 16,
-    backgroundColor: '#111111',
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#1f2937'
-  },
-  roomCardActive: { borderColor: '#7c3aed' },
-  roomIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#4c1d95'
-  },
-  roomIconText: { fontSize: 20 },
-  roomNameRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 },
-  roomName: { color: '#ffffff', fontSize: 16, fontWeight: '700', flex: 1 },
-  onlinePillText: { color: '#4ade80', fontSize: 12, fontWeight: '600' },
-  roomDesc: { color: '#6b7280', fontSize: 13, marginTop: 2 },
+    roomCard: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginHorizontal: 20,
+      marginBottom: 10,
+      padding: 16,
+      backgroundColor: theme.bgCard,
+      borderRadius: 16,
+      borderWidth: 1,
+      borderColor: theme.border
+    },
+    roomCardActive: { borderColor: theme.purple },
+    roomIcon: {
+      width: 48,
+      height: 48,
+      borderRadius: 12,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: isDark ? 'rgba(124, 58, 237, 0.15)' : 'rgba(124, 58, 237, 0.05)'
+    },
+    roomIconText: { fontSize: 20 },
+    roomNameRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 },
+    roomName: { color: theme.textPrimary, fontSize: 16, fontWeight: '700', flex: 1 },
+    onlinePillText: { color: theme.green, fontSize: 12, fontWeight: '600' },
+    roomDesc: { color: theme.textSecondary, fontSize: 13, marginTop: 2 },
 
-  roomStatsRow: { flexDirection: 'row', alignItems: 'center', marginTop: 8, gap: 8 },
-  roomStatText: { color: '#6b7280', fontSize: 12 },
-  roomStatSeparator: { color: '#374151', fontSize: 12 },
-  roomOnlineText: { color: '#4ade80', fontSize: 12, fontWeight: '600' },
+    roomStatsRow: { flexDirection: 'row', alignItems: 'center', marginTop: 8, gap: 8 },
+    roomStatText: { color: theme.textSecondary, fontSize: 12 },
+    roomStatSeparator: { color: theme.border, fontSize: 12 },
+    roomOnlineText: { color: theme.green, fontSize: 12, fontWeight: '600' },
 
-  roomCardAction: { marginLeft: 12, justifyContent: 'center' },
-  joinedPill: { backgroundColor: '#064e3b', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, borderWidth: 1, borderColor: '#065f46' },
-  joinedPillText: { color: '#4ade80', fontSize: 11, fontWeight: '700' },
-  joinBtnSmall: { backgroundColor: 'transparent', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12, borderWidth: 1, borderColor: '#7c3aed' },
-  joinBtnSmallText: { color: '#7c3aed', fontSize: 12, fontWeight: '700' },
+    roomCardAction: { marginLeft: 12, justifyContent: 'center' },
+    joinedPill: { backgroundColor: 'rgba(74, 222, 128, 0.1)', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, borderWidth: 1, borderColor: 'rgba(74, 222, 128, 0.2)' },
+    joinedPillText: { color: theme.green, fontSize: 11, fontWeight: '700' },
+    joinBtnSmall: { backgroundColor: 'transparent', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12, borderWidth: 1, borderColor: theme.purple },
+    joinBtnSmallText: { color: theme.purple, fontSize: 12, fontWeight: '700' },
 
-  joinPromptOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.9)', justifyContent: 'center', alignItems: 'center', padding: 24 },
-  joinPromptContent: { backgroundColor: '#111111', borderRadius: 24, padding: 32, width: '100%', alignItems: 'center', borderWidth: 1, borderColor: '#1f2937' },
-  joinPromptIcon: { fontSize: 48, marginBottom: 16 },
-  joinPromptTitle: { color: '#ffffff', fontSize: 24, fontWeight: '800', marginBottom: 8, textAlign: 'center' },
-  joinPromptSub: { color: '#6b7280', fontSize: 16, textAlign: 'center', marginBottom: 24, lineHeight: 24 },
-  joinPromptStats: { flexDirection: 'row', alignItems: 'center', marginBottom: 32 },
-  joinPromptMembers: { color: '#ffffff', fontSize: 16, fontWeight: '600' },
-  joinPromptBtn: { backgroundColor: '#7c3aed', width: '100%', paddingVertical: 16, borderRadius: 16, alignItems: 'center', marginBottom: 12 },
-  joinPromptBtnText: { color: '#ffffff', fontSize: 18, fontWeight: '700' },
-  joinPromptCancel: { paddingVertical: 12 },
-  joinPromptCancelText: { color: '#6b7280', fontSize: 16, fontWeight: '600' },
+    joinPromptOverlay: { flex: 1, backgroundColor: isDark ? 'rgba(0,0,0,0.9)' : 'rgba(255,255,255,0.85)', justifyContent: 'center', alignItems: 'center', padding: 24 },
+    joinPromptContent: { backgroundColor: theme.bgCard, borderRadius: 24, padding: 32, width: '100%', alignItems: 'center', borderWidth: 1, borderColor: theme.border },
+    joinPromptIcon: { fontSize: 48, marginBottom: 16 },
+    joinPromptTitle: { color: theme.textPrimary, fontSize: 24, fontWeight: '800', marginBottom: 8, textAlign: 'center' },
+    joinPromptSub: { color: theme.textSecondary, fontSize: 16, textAlign: 'center', marginBottom: 24, lineHeight: 24 },
+    joinPromptStats: { flexDirection: 'row', alignItems: 'center', marginBottom: 32 },
+    joinPromptMembers: { color: theme.textPrimary, fontSize: 16, fontWeight: '600' },
+    joinPromptBtn: { backgroundColor: theme.purple, width: '100%', paddingVertical: 16, borderRadius: 16, alignItems: 'center', marginBottom: 12 },
+    joinPromptBtnText: { color: isDark ? '#000' : '#ffffff', fontSize: 18, fontWeight: '700' },
+    joinPromptCancel: { paddingVertical: 12 },
+    joinPromptCancelText: { color: theme.textSecondary, fontSize: 16, fontWeight: '600' },
 
-  unreadBadge: {
-    position: 'absolute',
-    top: -5,
-    right: -5,
-    minWidth: 18,
-    height: 18,
-    borderRadius: 9,
-    backgroundColor: '#ef4444',
-    alignItems: 'center',
-    justifyContent: 'center'
-  },
-  unreadText: { color: '#fff', fontSize: 10, fontWeight: '800' },
+    unreadBadge: {
+      position: 'absolute',
+      top: -5,
+      right: -5,
+      minWidth: 18,
+      height: 18,
+      borderRadius: 9,
+      backgroundColor: theme.red,
+      alignItems: 'center',
+      justifyContent: 'center'
+    },
+    unreadText: { color: '#fff', fontSize: 10, fontWeight: '800' },
 
-  emptyList: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 40, gap: 12 },
-  emptyIcon: { fontSize: 48, marginBottom: 8 },
-  emptyTitle: { color: '#ffffff', fontSize: 18, fontWeight: '700' },
-  emptySub: { color: '#6b7280', fontSize: 14, textAlign: 'center', lineHeight: 20 },
+    emptyList: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 40, gap: 12 },
+    emptyIcon: { fontSize: 48, marginBottom: 8 },
+    emptyTitle: { color: theme.textPrimary, fontSize: 18, fontWeight: '700' },
+    emptySub: { color: theme.textSecondary, fontSize: 14, textAlign: 'center', lineHeight: 20 },
 
-  // Chat View
-  chatView: { flex: 1, backgroundColor: '#0a0a0a' },
-  chatHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#1f2937'
-  },
-  chatHeaderSub: { color: '#6b7280', fontSize: 12, fontWeight: '500' },
-  backBtn: { padding: 4, marginRight: 12 },
-  backIcon: { color: '#ffffff', fontSize: 24 },
-  chatTitle: { flex: 1, color: '#ffffff', fontSize: 16, fontWeight: '700', textAlign: 'center' },
-  infoBtn: { padding: 4 },
-  infoBtnText: { color: '#6b7280', fontSize: 20 },
+    chatView: { flex: 1, backgroundColor: theme.bg },
+    chatHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: 20,
+      paddingVertical: 12,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.border
+    },
+    chatHeaderSub: { color: theme.textSecondary, fontSize: 12, fontWeight: '500' },
+    backBtn: { padding: 4, marginRight: 12 },
+    backIcon: { color: theme.textPrimary, fontSize: 24 },
+    chatTitle: { flex: 1, color: theme.textPrimary, fontSize: 16, fontWeight: '700', textAlign: 'center' },
+    infoBtn: { padding: 4 },
+    infoBtnText: { color: theme.textSecondary, fontSize: 20 },
 
-  onlineStrip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 6,
-    backgroundColor: '#0a0a0a',
-    borderBottomWidth: 1,
-    borderBottomColor: '#1f2937'
-  },
-  onlineStripText: { color: '#4ade80', fontSize: 11, fontWeight: '600' },
+    onlineStrip: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 6,
+      paddingVertical: 6,
+      backgroundColor: theme.bg,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.border
+    },
+    onlineStripText: { color: theme.green, fontSize: 11, fontWeight: '600' },
 
-  msgList: { paddingHorizontal: 20, paddingVertical: 16, gap: 16 },
-  chatLoading: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+    msgList: { paddingHorizontal: 20, paddingVertical: 16, gap: 16 },
+    chatLoading: { flex: 1, alignItems: 'center', justifyContent: 'center' },
 
-  msgRow: { marginBottom: 16 },
-  msgRowMe: { alignItems: 'flex-end' },
+    msgRow: { marginBottom: 16 },
+    msgRowMe: { alignItems: 'flex-end' },
 
-  senderName: { color: '#7c3aed', fontSize: 11, fontWeight: '700', marginBottom: 4, marginLeft: 44 },
+    senderName: { color: theme.purple, fontSize: 11, fontWeight: '700', marginBottom: 4, marginLeft: 44 },
 
-  bubbleRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 12 },
-  bubbleRowMe: { flexDirection: 'row-reverse' },
+    bubbleRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 12 },
+    bubbleRowMe: { flexDirection: 'row-reverse' },
 
-  avatarCircle: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#4c1d95', alignItems: 'center', justifyContent: 'center' },
-  avatarText: { color: '#ffffff', fontSize: 12, fontWeight: '700' },
+    avatarCircle: { width: 32, height: 32, borderRadius: 16, backgroundColor: isDark ? 'rgba(124, 58, 237, 0.3)' : 'rgba(124, 58, 237, 0.1)', alignItems: 'center', justifyContent: 'center' },
+    avatarText: { color: theme.textPrimary, fontSize: 12, fontWeight: '700' },
 
-  bubble: {
-    maxWidth: '75%',
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderWidth: 1,
-    borderColor: '#1f2937'
-  },
-  bubbleThem: {
-    backgroundColor: '#1a1a2e',
-    borderRadius: 16,
-    borderTopLeftRadius: 4
-  },
-  bubbleMe: {
-    backgroundColor: '#7c3aed',
-    borderColor: '#7c3aed',
-    borderRadius: 16,
-    borderTopRightRadius: 4
-  },
-  bubbleFlagged: { borderColor: '#ef4444' },
+    bubble: {
+      maxWidth: '75%',
+      paddingHorizontal: 14,
+      paddingVertical: 10,
+      borderWidth: 1,
+      borderColor: theme.border
+    },
+    bubbleThem: {
+      backgroundColor: theme.bgCard,
+      borderRadius: 16,
+      borderTopLeftRadius: 4
+    },
+    bubbleMe: {
+      backgroundColor: theme.purple,
+      borderColor: theme.purple,
+      borderRadius: 16,
+      borderTopRightRadius: 4
+    },
+    bubbleFlagged: { borderColor: theme.red },
 
-  bubbleText: { color: '#e5e7eb', fontSize: 14, lineHeight: 20 },
-  bubbleTextMe: { color: '#ffffff' },
+    bubbleText: { color: theme.textPrimary, fontSize: 14, lineHeight: 20 },
+    bubbleTextMe: { color: isDark ? '#000' : '#ffffff' },
 
-  bubbleTime: { color: '#4b5563', fontSize: 10, marginTop: 4 },
-  bubbleTimeMe: { color: '#a78bfa', textAlign: 'right' },
-  flaggedText: { color: '#ef4444', fontSize: 10, marginTop: 2, fontWeight: '600' },
+    bubbleTime: { color: theme.textSecondary, fontSize: 10, marginTop: 4 },
+    bubbleTimeMe: { color: isDark ? 'rgba(0,0,0,0.6)' : 'rgba(255,255,255,0.7)', textAlign: 'right' },
+    flaggedText: { color: theme.red, fontSize: 10, marginTop: 2, fontWeight: '600' },
 
-  dateSeparator: { flexDirection: 'row', alignItems: 'center', marginVertical: 20, gap: 10 },
-  dateLine: { flex: 1, height: 1, backgroundColor: '#374151' },
-  dateLabel: { color: '#374151', fontSize: 11, fontWeight: '600' },
+    dateSeparator: { flexDirection: 'row', alignItems: 'center', marginVertical: 20, gap: 10 },
+    dateLine: { flex: 1, height: 1, backgroundColor: theme.border },
+    dateLabel: { color: theme.textSecondary, fontSize: 11, fontWeight: '600' },
 
-  inputBarContainer: {
-    padding: 10,
-    paddingHorizontal: 16,
-    backgroundColor: '#0a0a0a',
-  },
-  inputPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#111111',
-    borderWidth: 1,
-    borderColor: '#1f2937',
-    borderRadius: 25,
-    paddingLeft: 16,
-    paddingRight: 6,
-    paddingVertical: 6,
-  },
-  msgInput: {
-    flex: 1,
-    color: '#ffffff',
-    fontSize: 15,
-    maxHeight: 100,
-    paddingVertical: 4
-  },
-  sendBtn: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: '#4b5563',
-    marginLeft: 8
-  },
-  sendBtnActive: { backgroundColor: '#7c3aed' },
-  sendBtnText: { color: '#ffffff', fontSize: 13, fontWeight: '700' },
+    inputBarContainer: {
+      padding: 10,
+      paddingHorizontal: 16,
+      backgroundColor: 'transparent',
+    },
+    inputPill: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: theme.bgInput,
+      borderWidth: 1,
+      borderColor: theme.border,
+      borderRadius: 25,
+      paddingLeft: 16,
+      paddingRight: 6,
+      paddingVertical: 6,
+    },
+    msgInput: {
+      flex: 1,
+      color: theme.textPrimary,
+      fontSize: 15,
+      maxHeight: 100,
+      paddingVertical: 4
+    },
+    sendBtn: {
+      paddingHorizontal: 16,
+      paddingVertical: 8,
+      borderRadius: 20,
+      backgroundColor: theme.bg,
+      borderWidth: 1,
+      borderColor: theme.border,
+      marginLeft: 8
+    },
+    sendBtnActive: { backgroundColor: theme.purple, borderColor: theme.purple },
+    sendBtnText: { color: isDark ? '#000' : '#ffffff', fontSize: 13, fontWeight: '700' },
 
-  fab: {
-    position: 'absolute',
-    bottom: 20,
-    right: 20,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: '#7c3aed',
-    alignItems: 'center',
-    justifyContent: 'center',
-    elevation: 8,
-    shadowColor: '#7c3aed',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.4,
-    shadowRadius: 20
-  },
-  fabIcon: { color: '#fff', fontSize: 28, fontWeight: '300' },
+    fab: {
+      position: 'absolute',
+      bottom: 20,
+      right: 20,
+      width: 56,
+      height: 56,
+      borderRadius: 28,
+      backgroundColor: theme.purple,
+      alignItems: 'center',
+      justifyContent: 'center',
+      elevation: 8,
+      shadowColor: theme.purple,
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.4,
+      shadowRadius: 10
+    },
+    fabIcon: { color: isDark ? '#000' : '#fff', fontSize: 28, fontWeight: '400' },
 
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'flex-end' },
-  modalContent: { backgroundColor: '#111111', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingBottom: Platform.OS === 'ios' ? 40 : 24 },
-  modalTitle: { color: '#ffffff', fontSize: 20, fontWeight: '700', marginBottom: 20 },
-  modalInput: { backgroundColor: '#0a0a0a', borderWidth: 1, borderColor: '#1f2937', borderRadius: 12, padding: 16, color: '#ffffff', fontSize: 16, marginBottom: 12 },
-  modalActions: { flexDirection: 'row', gap: 12, marginTop: 10 },
-  modalBtnCancel: { flex: 1, padding: 16, borderRadius: 12, backgroundColor: '#0a0a0a', borderWidth: 1, borderColor: '#1f2937', alignItems: 'center' },
-  modalCancelText: { color: '#9ca3af', fontWeight: '600', fontSize: 16 },
-  modalBtnCreate: { flex: 1, padding: 16, borderRadius: 12, backgroundColor: '#7c3aed', alignItems: 'center' },
-  modalCreateText: { color: '#fff', fontWeight: '600', fontSize: 16 },
+    modalOverlay: { flex: 1, backgroundColor: isDark ? 'rgba(0,0,0,0.8)' : 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+    modalContent: { backgroundColor: theme.bgCard, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingBottom: Platform.OS === 'ios' ? 40 : 24 },
+    modalTitle: { color: theme.textPrimary, fontSize: 20, fontWeight: '700', marginBottom: 20 },
+    modalInput: { backgroundColor: theme.bgInput, borderWidth: 1, borderColor: theme.border, borderRadius: 12, padding: 16, color: theme.textPrimary, fontSize: 16, marginBottom: 12 },
+    modalActions: { flexDirection: 'row', gap: 12, marginTop: 10 },
+    modalBtnCancel: { flex: 1, padding: 16, borderRadius: 12, backgroundColor: theme.bgInput, borderWidth: 1, borderColor: theme.border, alignItems: 'center' },
+    modalCancelText: { color: theme.textSecondary, fontWeight: '600', fontSize: 16 },
+    modalBtnCreate: { flex: 1, padding: 16, borderRadius: 12, backgroundColor: theme.purple, alignItems: 'center' },
+    modalCreateText: { color: isDark ? '#000' : '#fff', fontWeight: '600', fontSize: 16 },
 
-  modalHeader: { marginBottom: 20 },
-  modalCloseText: { color: '#ffffff', fontSize: 18, fontWeight: '700' },
-  memberSectionTitle: { color: '#6b7280', fontSize: 14, fontWeight: '700', marginTop: 24, marginBottom: 16, textTransform: 'uppercase' },
-  memberRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 16, gap: 12 },
-  memberAvatar: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#4c1d95', alignItems: 'center', justifyContent: 'center' },
-  memberAvatarText: { color: '#ffffff', fontSize: 12, fontWeight: '700' },
-  memberUsername: { flex: 1, color: '#ffffff', fontSize: 16, fontWeight: '600' },
-  leaveBtn: { marginTop: 40, marginBottom: 20, paddingVertical: 16, borderRadius: 12, borderWidth: 1, borderColor: '#ef4444', alignItems: 'center' },
-  leaveBtnText: { color: '#ef4444', fontSize: 16, fontWeight: '700' },
+    modalHeader: { marginBottom: 20 },
+    modalCloseText: { color: theme.textPrimary, fontSize: 18, fontWeight: '700' },
+    memberSectionTitle: { color: theme.textMuted, fontSize: 14, fontWeight: '700', marginTop: 24, marginBottom: 16, textTransform: 'uppercase' },
+    memberRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 16, gap: 12 },
+    memberAvatar: { width: 32, height: 32, borderRadius: 16, backgroundColor: isDark ? 'rgba(124, 58, 237, 0.2)' : 'rgba(124, 58, 237, 0.1)', alignItems: 'center', justifyContent: 'center' },
+    memberAvatarText: { color: theme.textPrimary, fontSize: 12, fontWeight: '700' },
+    memberUsername: { flex: 1, color: theme.textPrimary, fontSize: 16, fontWeight: '600' },
+    leaveBtn: { marginTop: 40, marginBottom: 20, paddingVertical: 16, borderRadius: 12, borderWidth: 1, borderColor: theme.red, alignItems: 'center' },
+    leaveBtnText: { color: theme.red, fontSize: 16, fontWeight: '700' },
 
-  aboutTitle: { color: '#ffffff', fontSize: 24, fontWeight: '800', marginTop: 12 },
-  aboutHandle: { color: '#7c3aed', fontSize: 14, fontWeight: '600' },
-  aboutSection: { backgroundColor: '#0a0a0a', borderWidth: 1, borderColor: '#1f2937', borderRadius: 16, padding: 16, marginTop: 20 },
-  aboutSectionTitle: { color: '#6b7280', fontSize: 14, fontWeight: '700', marginBottom: 12, textTransform: 'uppercase' },
-  aboutSectionBody: { color: '#ffffff', fontSize: 15, lineHeight: 22 },
-  statRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
-  statLabel: { color: '#6b7280', fontSize: 15 },
-  statValue: { color: '#ffffff', fontSize: 15, fontWeight: '700' },
-  tagPill: { backgroundColor: '#111111', paddingHorizontal: 4, paddingVertical: 2 },
-  tagText: { color: '#7c3aed', fontSize: 14, fontWeight: '600' },
+    aboutTitle: { color: theme.textPrimary, fontSize: 24, fontWeight: '800', marginTop: 12 },
+    aboutHandle: { color: theme.purple, fontSize: 14, fontWeight: '600' },
+    aboutSection: { backgroundColor: theme.bgInput, borderWidth: 1, borderColor: theme.border, borderRadius: 16, padding: 16, marginTop: 20 },
+    aboutSectionTitle: { color: theme.textMuted, fontSize: 14, fontWeight: '700', marginBottom: 12, textTransform: 'uppercase' },
+    aboutSectionBody: { color: theme.textPrimary, fontSize: 15, lineHeight: 22 },
+    statRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
+    statLabel: { color: theme.textSecondary, fontSize: 15 },
+    statValue: { color: theme.textPrimary, fontSize: 15, fontWeight: '700' },
+    tagPill: { backgroundColor: theme.bg, paddingHorizontal: 4, paddingVertical: 2 },
+    tagText: { color: theme.purple, fontSize: 14, fontWeight: '600' },
 
-  // Toast
-  toastContainer: {
-    position: 'absolute',
-    bottom: 100,
-    left: 20,
-    right: 20,
-    backgroundColor: '#052e16',
-    borderWidth: 1,
-    borderColor: '#16a34a',
-    borderRadius: 12,
-    padding: 16,
-    alignItems: 'center',
-    zIndex: 9999
-  },
-  toastText: { color: '#4ade80', fontSize: 14, fontWeight: '700' },
-});
+    toastContainer: {
+      position: 'absolute',
+      bottom: 100,
+      left: 20,
+      right: 20,
+      backgroundColor: isDark ? 'rgba(34, 197, 94, 0.2)' : 'rgba(34, 197, 94, 0.1)',
+      borderWidth: 1,
+      borderColor: theme.green,
+      borderRadius: 12,
+      padding: 16,
+      alignItems: 'center',
+      zIndex: 9999
+    },
+    toastText: { color: theme.green, fontSize: 14, fontWeight: '700' },
+  });
+}

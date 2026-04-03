@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -11,19 +11,23 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  StatusBar,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Feather, FontAwesome5 } from '@expo/vector-icons';
 import { supabase } from '@/lib/supabase';
-import { Colors, Spacing, Radius, Typography } from '@/constants/theme';
+import { Spacing, Typography } from '@/constants/theme';
 import { githubService, GithubRepo } from '@/services/githubService';
 import { LoadingScreen, Button, Input } from '@/components/ui/UI';
 import { useUserStore } from '@/store/userStore';
 import { detectSkillsFromGitHub } from '@/lib/githubSkillVerifier';
+import { useTheme } from '@/context/ThemeContext';
 
 export default function NewProjectScreen() {
   const router = useRouter();
+  const { theme, isDark } = useTheme();
+  const s = React.useMemo(() => getStyles(theme, isDark), [theme, isDark]);
   const { userProfile } = useUserStore();
   
   const [githubUsername, setGithubUsername] = useState('');
@@ -150,8 +154,8 @@ export default function NewProjectScreen() {
         onPress={() => selectRepo(item)}
       >
         <View style={s.repoHeader}>
-          <FontAwesome5 name="github" size={16} color={isSelected ? Colors.cyber.accent : '#888'} />
-          <Text style={[s.repoName, isSelected && { color: Colors.cyber.accent }]}>{item.name}</Text>
+          <FontAwesome5 name="github" size={16} color={isSelected ? theme.purple : theme.textMuted} />
+          <Text style={[s.repoName, isSelected && { color: theme.purple }]}>{item.name}</Text>
         </View>
         <Text style={s.repoDesc} numberOfLines={2}>{item.description || 'No description provided.'}</Text>
         <View style={s.repoFooter}>
@@ -161,7 +165,7 @@ export default function NewProjectScreen() {
           </View>
           {item.language && (
             <View style={s.langBadge}>
-              <View style={[s.langDot, { backgroundColor: Colors.cyber.accent }]} />
+              <View style={[s.langDot, { backgroundColor: theme.purple }]} />
               <Text style={s.langText}>{item.language}</Text>
             </View>
           )}
@@ -172,9 +176,10 @@ export default function NewProjectScreen() {
 
   return (
     <SafeAreaView style={s.container}>
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={theme.bg} />
       <View style={s.header}>
         <TouchableOpacity onPress={() => router.back()} style={s.backBtn}>
-          <Feather name="arrow-left" size={24} color="#FFF" />
+          <Feather name="arrow-left" size={24} color={theme.textPrimary} />
         </TouchableOpacity>
         <Text style={s.headerTitle}>IMPORT_WORK</Text>
         <View style={{ width: 44 }} />
@@ -193,7 +198,7 @@ export default function NewProjectScreen() {
               <TextInput
                 style={s.searchInput}
                 placeholder="GITHUB_USERNAME"
-                placeholderTextColor="#444"
+                placeholderTextColor={theme.textMuted}
                 value={githubUsername}
                 onChangeText={setGithubUsername}
                 autoCapitalize="none"
@@ -204,9 +209,9 @@ export default function NewProjectScreen() {
                 disabled={isLoadingRepos}
               >
                 {isLoadingRepos ? (
-                  <ActivityIndicator size="small" color={Colors.cyber.accent} />
+                  <ActivityIndicator size="small" color={theme.purple} />
                 ) : (
-                  <Feather name="download" size={20} color={Colors.cyber.accent} />
+                  <Feather name="download" size={20} color={theme.purple} />
                 )}
               </TouchableOpacity>
             </View>
@@ -287,18 +292,18 @@ export default function NewProjectScreen() {
   );
 }
 
-const s = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.cyber.bg },
+const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: theme.bg },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     padding: Spacing.lg,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.cyber.border,
+    borderBottomColor: theme.border,
   },
   headerTitle: {
-    color: Colors.cyber.accent,
+    color: theme.purple,
     fontSize: 14,
     fontWeight: '900',
     fontFamily: 'monospace',
@@ -307,7 +312,7 @@ const s = StyleSheet.create({
   backBtn: { padding: 4 },
   fetchSection: { padding: Spacing.lg },
   sectionLabel: { 
-    color: '#444', 
+    color: theme.textMuted, 
     fontSize: 10, 
     fontWeight: '800', 
     marginBottom: 10, 
@@ -316,17 +321,17 @@ const s = StyleSheet.create({
   },
   searchBar: {
     flexDirection: 'row',
-    backgroundColor: Colors.cyber.card,
+    backgroundColor: theme.bgInput,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: Colors.cyber.border,
+    borderColor: theme.border,
     paddingHorizontal: 12,
     alignItems: 'center',
   },
   searchInput: {
     flex: 1,
     height: 48,
-    color: '#FFF',
+    color: theme.textPrimary,
     fontFamily: 'monospace',
     fontSize: 14,
   },
@@ -335,51 +340,51 @@ const s = StyleSheet.create({
   repoList: { paddingHorizontal: Spacing.lg, gap: 12 },
   repoCard: {
     width: 220,
-    backgroundColor: Colors.cyber.card,
+    backgroundColor: theme.bgCard,
     borderRadius: 12,
     padding: 16,
     borderWidth: 1,
-    borderColor: Colors.cyber.border,
+    borderColor: theme.border,
     justifyContent: 'space-between',
     height: 140,
   },
   repoCardSelected: {
-    borderColor: Colors.cyber.accent,
-    backgroundColor: Colors.cyber.dim,
+    borderColor: theme.purple,
+    backgroundColor: isDark ? 'rgba(124, 58, 237, 0.1)' : 'rgba(124, 58, 237, 0.05)',
   },
   repoHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 8 },
-  repoName: { color: '#FFF', fontWeight: '800', fontSize: 13, fontFamily: 'monospace' },
-  repoDesc: { color: '#888', fontSize: 11, lineHeight: 16, marginBottom: 12 },
+  repoName: { color: theme.textPrimary, fontWeight: '800', fontSize: 13, fontFamily: 'monospace' },
+  repoDesc: { color: theme.textSecondary, fontSize: 11, lineHeight: 16, marginBottom: 12 },
   repoFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   repoStat: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  repoStatText: { color: '#666', fontSize: 10, fontWeight: '700' },
+  repoStatText: { color: theme.textMuted, fontSize: 10, fontWeight: '700' },
   langBadge: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   langDot: { width: 6, height: 6, borderRadius: 3 },
-  langText: { color: '#AAA', fontSize: 10, fontWeight: '600' },
+  langText: { color: theme.textSecondary, fontSize: 10, fontWeight: '600' },
   formSection: { padding: Spacing.lg },
   formCard: {
-    backgroundColor: Colors.cyber.card,
+    backgroundColor: theme.bgCard,
     padding: 20,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: Colors.cyber.border,
+    borderColor: theme.border,
     gap: 16,
   },
   input: {
-    backgroundColor: '#000',
+    backgroundColor: theme.bgInput,
     borderWidth: 1,
-    borderColor: '#222',
-    color: Colors.cyber.accent,
+    borderColor: theme.border,
+    color: theme.textPrimary,
   },
   launchBtn: {
-    backgroundColor: Colors.cyber.accent,
+    backgroundColor: theme.purple,
     marginTop: 10,
     height: 56,
     borderRadius: 8,
     borderWidth: 0,
   },
   launchBtnText: {
-    color: '#000',
+    color: isDark ? '#000' : '#FFF',
     fontWeight: '900',
     fontFamily: 'monospace',
     letterSpacing: 2,
@@ -390,7 +395,7 @@ const s = StyleSheet.create({
     opacity: 0.3 
   },
   footerText: { 
-    color: Colors.cyber.accent, 
+    color: theme.purple, 
     fontSize: 8, 
     fontFamily: 'monospace' 
   },

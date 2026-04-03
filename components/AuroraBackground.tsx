@@ -1,20 +1,19 @@
+import React from 'react';
 import { View, StyleSheet } from 'react-native';
-import { Colors } from '@/constants/theme';
+import { useTheme } from '@/context/ThemeContext';
 
 /**
  * MinimalBackground - Clean, solid background
- * Replaces the aurora gradient with a simple premium dark grey
+ * Replaces the aurora gradient with a theme-aware background
  */
 export function AuroraBackground() {
+  const { theme } = useTheme();
+  
   return (
     <View style={[StyleSheet.absoluteFill, { pointerEvents: 'none' }]}>
-      <View style={[StyleSheet.absoluteFill, styles.base]} />
+      <View style={[StyleSheet.absoluteFill, { backgroundColor: theme.bg }]} />
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  base: {
-    backgroundColor: Colors.background,
-  },
-});
+const styles = StyleSheet.create({});

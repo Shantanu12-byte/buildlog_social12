@@ -25,12 +25,7 @@ function safeDecode(str: string, label: string): Uint8Array {
   
   try {
     return decodeBase64(cleaned);
-  } catch (e) {
-    console.error(`BASE64_DECODE_FAILED [${label}]:`, {
-      length: cleaned.length,
-      prefix: cleaned.substring(0, 5) + '...',
-      type: typeof cleaned
-    });
+  } catch {
     throw new Error(`INVALID_ENCODING: ${label}`);
   }
 }
@@ -68,17 +63,14 @@ export async function getOrCreateKeyPair(): Promise<KeyPair> {
     // Always re-sync public key to DB to fix potential corruption
     const { data: { user } } = await supabase.auth.getUser();
     if (user) {
-      supabase.from('profiles').update({ public_key: pubKeyBase64 }).eq('id', user.id).then(({ error }) => {
-        if (error) console.error('KEY_SYNC_ERROR:', error);
-      });
+      supabase.from('profiles').update({ public_key: pubKeyBase64 }).eq('id', user.id).then(() => {});
     }
 
     return {
       publicKey: pubKeyBase64,
       privateKey: privKeyBase64,
     };
-  } catch (e) {
-    console.error('CRITICAL: Local private key is corrupted. Regenerating...');
+  } catch {
     await AsyncStorage.default.removeItem(KEY_STORAGE_KEY);
     return getOrCreateKeyPair();
   }
@@ -108,7 +100,6 @@ export function encryptMessage(message: string, recipientPublicKeyBase64: string
     
     return encodeBase64(full);
   } catch (e: any) {
-    console.error('ENCRYPTION_CRASH:', e.message);
     throw e;
   }
 }

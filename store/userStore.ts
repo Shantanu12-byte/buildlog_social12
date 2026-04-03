@@ -31,6 +31,7 @@ interface UserState {
   isLoading: boolean;
   profileFetched: boolean; // Flag to prevent infinite fetch loops
   isEnderMode: boolean;
+  lastFetched: number;
   fetchUserProfile: () => Promise<void>;
   updateUserProfile: (profile: Partial<UserProfile>) => Promise<void>;
   toggleEnderMode: () => Promise<void>;
@@ -45,12 +46,23 @@ export const useUserStore = create<UserState>((set, get) => ({
   profileFetched: false,
   isEnderMode: false,
 
+  lastFetched: 0,
+
   fetchUserProfile: async () => {
+    if (get().isLoading) return;
+    
+    // 5-minute TTL cache to reduce redundant DB pressure
+    const isFresh = Date.now() - get().lastFetched < 5 * 60000;
+    if (isFresh && get().userProfile) {
+      set({ profileFetched: true });
+      return;
+    }
+
     set({ isLoading: true });
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
-        set({ userProfile: null, userId: null, isLoading: false, profileFetched: true });
+        set({ userProfile: null, userId: null, isLoading: false, profileFetched: true, lastFetched: 0 });
         return;
       }
       
@@ -59,15 +71,18 @@ export const useUserStore = create<UserState>((set, get) => ({
 
       const { data, error } = await supabase
         .from('profiles')
-        .select('*')
+        .select('id, username, bio, avatar_url, skills, languages, streak_count, level, github_url, linkedin_url, expo_push_token, onboarding_complete, campus_id, campus_name, is_joined_to_campus, verified_skills, public_key')
         .eq('id', userId)
         .maybeSingle();
 
       if (error) throw error;
       
-      set({ userProfile: data || null, profileFetched: true });
+      set({ 
+        userProfile: data || null, 
+        profileFetched: true,
+        lastFetched: Date.now()
+      });
     } catch (error) {
-      console.error("fetchUserProfile Error:", error);
       set({ profileFetched: true });
     } finally {
       set({ isLoading: false });
@@ -102,14 +117,20 @@ export const useUserStore = create<UserState>((set, get) => ({
         usernames.push(currentProfile.username);
       }
 
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+
       fetch(`${backendUrl}/api/user/profile/invalidate`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
         body: JSON.stringify({ usernames }),
       }).catch(() => {});
       
     } catch (error) {
-      console.error("updateUserProfile Error:", error);
+      // Error handled silently
       throw error;
     }
   },
@@ -120,7 +141,7 @@ export const useUserStore = create<UserState>((set, get) => ({
     try {
       await AsyncStorage.setItem('isEnderMode', JSON.stringify(newMode));
     } catch (e) {
-      console.error("Error saving Ender Mode:", e);
+      // Error handled silently
     }
   },
 
@@ -151,7 +172,7 @@ export const useUserStore = create<UserState>((set, get) => ({
         }
       });
     } catch (e) {
-      console.error("Store Initialization Error:", e);
+      // Error handled silently
       set({ profileFetched: true });
     }
   },

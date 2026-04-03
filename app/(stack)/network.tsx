@@ -6,7 +6,9 @@ import {
   FlatList, 
   TouchableOpacity, 
   ActivityIndicator,
-  Alert
+  Alert,
+  StatusBar,
+  Platform
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -14,7 +16,8 @@ import { Feather } from '@expo/vector-icons';
 import { supabase } from '@/lib/supabase';
 import { useUserStore } from '@/store/userStore';
 import { AvatarBlock } from '@/components/AvatarBlock';
-import { Colors, Typography, Spacing, Radius, FontSizes, getThemeColors } from '@/constants/theme';
+import { Typography, Spacing, Radius } from '@/constants/theme';
+import { useTheme } from '@/context/ThemeContext';
 
 type NetworkUser = {
   id: string;
@@ -25,19 +28,20 @@ type NetworkUser = {
 
 export default function NetworkRadarScreen() {
   const router = useRouter();
+  const { theme, isDark } = useTheme();
+  const s = React.useMemo(() => getStyles(theme, isDark), [theme, isDark]);
+  
   const { type = 'following' } = useLocalSearchParams<{ type: 'followers' | 'following' }>();
   const [activeTab, setActiveTab] = useState<'followers' | 'following'>(type);
   const [networkList, setNetworkList] = useState<NetworkUser[]>([]);
   const [loading, setLoading] = useState(true);
-  const { userProfile, isEnderMode, fetchUserProfile } = useUserStore();
-  const colors = getThemeColors(isEnderMode);
+  const { userProfile, fetchUserProfile } = useUserStore();
   const [currentUserId, setCurrentUserId] = useState<string | null>(userProfile?.id || null);
 
   const fetchNetwork = useCallback(async (uid: string) => {
     setLoading(true);
     try {
       if (activeTab === 'followers') {
-        // 1. Get follower IDs
         const { data: followRecords, error: followError } = await supabase
           .from('followers')
           .select('follower_id')
@@ -52,7 +56,6 @@ export default function NetworkRadarScreen() {
 
         const ids = followRecords.map(f => f.follower_id);
 
-        // 2. Get profiles for those IDs
         const { data: profiles, error: profileError } = await supabase
           .from('profiles')
           .select('id, username, avatar_url')
@@ -62,7 +65,6 @@ export default function NetworkRadarScreen() {
 
         setNetworkList(profiles || []);
       } else {
-        // 1. Get following IDs
         const { data: followRecords, error: followError } = await supabase
           .from('followers')
           .select('following_id')
@@ -77,7 +79,6 @@ export default function NetworkRadarScreen() {
 
         const ids = followRecords.map(f => f.following_id);
 
-        // 2. Get profiles for those IDs
         const { data: profiles, error: profileError } = await supabase
           .from('profiles')
           .select('id, username, avatar_url')
@@ -111,7 +112,7 @@ export default function NetworkRadarScreen() {
       if (uid) fetchNetwork(uid);
     };
     init();
-  }, [currentUserId, userProfile]);
+  }, [currentUserId, userProfile, fetchNetwork, fetchUserProfile, router]);
 
   useEffect(() => {
     if (type) {
@@ -119,8 +120,9 @@ export default function NetworkRadarScreen() {
     }
   }, [type]);
 
-  const handleUnfollow = async (targetUserId: string, username: string) => {
+  const handleUnfollow = async (targetUserId: string, usernameText: string) => {
     try {
+      if (!currentUserId) return;
       const { error } = await supabase
         .from('followers')
         .delete()
@@ -129,40 +131,38 @@ export default function NetworkRadarScreen() {
 
       if (error) throw error;
       
-      // Update local state
       setNetworkList(prev => prev.filter(u => u.id !== targetUserId));
-    } catch (error) {
-      console.error('Unfollow error:', error);
-      Alert.alert('ERROR', `COULD_NOT_DROP_${username.toUpperCase()}`);
+    } catch (error) { Alert.alert('ERROR', `COULD_NOT_DROP_${usernameText.toUpperCase()}`);
     }
   };
 
   const renderPlayerCard = ({ item }: { item: NetworkUser }) => (
-    <View style={styles.card}>
+    <View style={s.card}>
       <AvatarBlock 
         url={item.avatar_url} 
         username={item.username} 
         size={48} 
         tier={item.level}
       />
-      <View style={styles.cardInfo}>
-        <Text style={styles.usernameText}>{item.username.toUpperCase()}</Text>
-        <Text style={styles.levelText}>LVL {item.level?.toUpperCase() || 'DEFAULT'} ARCHITECT</Text>
+      <View style={s.cardInfo}>
+        <Text style={s.usernameText}>{item.username.toUpperCase()}</Text>
+        <Text style={s.levelText}>LVL {item.level?.toUpperCase() || 'DEFAULT'} ARCHITECT</Text>
       </View>
       <TouchableOpacity 
         style={[
-          styles.actionButton, 
-          activeTab === 'following' ? styles.dropButton : styles.viewButton
+          s.actionButton, 
+          activeTab === 'following' ? s.dropButton : s.viewButton
         ]}
         onPress={() => {
           if (activeTab === 'following') {
             handleUnfollow(item.id, item.username);
           } else {
-            router.push(`/user/${item.id}`);
+            router.push(`/profile/${item.username}`);
           }
         }}
+        activeOpacity={0.7}
       >
-        <Text style={styles.actionButtonText}>
+        <Text style={s.actionButtonText}>
           {activeTab === 'following' ? '[ DROP ]' : '[ VIEW ]'}
         </Text>
       </TouchableOpacity>
@@ -170,91 +170,96 @@ export default function NetworkRadarScreen() {
   );
 
   const renderEmpty = () => (
-    <View style={styles.emptyContainer}>
-      <Feather name={activeTab === 'followers' ? 'eye-off' : 'users'} size={64} color="#333" />
-      <Text style={styles.emptyText}>
+    <View style={s.emptyContainer}>
+      <Feather name={activeTab === 'followers' ? 'eye-off' : 'users'} size={64} color={theme.textMuted} />
+      <Text style={s.emptyText}>
         {'> '}NO_PLAYERS_FOUND_IN_THIS_SECTOR...
       </Text>
       <TouchableOpacity 
-        style={styles.refreshButton} 
+        style={s.refreshButton} 
         onPress={() => currentUserId && fetchNetwork(currentUserId)}
       >
-        <Text style={styles.refreshText}>[ RE-SCAN_SECTOR ]</Text>
+        <Text style={s.refreshText}>[ RE-SCAN_SECTOR ]</Text>
       </TouchableOpacity>
     </View>
   );
 
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <Feather name="chevron-left" size={24} color={colors.primary} />
+    <SafeAreaView style={s.container}>
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={theme.bg} />
+      <View style={s.header}>
+        <TouchableOpacity onPress={() => router.back()} style={s.backButton}>
+          <Feather name="chevron-left" size={24} color={theme.purple} />
         </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: colors.primary }]}>NETWORK_RADAR</Text>
+        <Text style={s.headerTitle}>NETWORK_RADAR</Text>
       </View>
 
-      <View style={styles.tabContainer}>
+      <View style={s.tabContainer}>
         <TouchableOpacity 
           style={[
-            styles.tab, 
-            activeTab === 'following' ? styles.tabActive : styles.tabInactive
+            s.tab, 
+            activeTab === 'following' ? s.tabActive : s.tabInactive
           ]}
           onPress={() => setActiveTab('following')}
+          activeOpacity={0.8}
         >
           <Text style={[
-            styles.tabText, 
-            { color: activeTab === 'following' ? '#55FF55' : '#888' }
+            s.tabText, 
+            { color: activeTab === 'following' ? theme.green : theme.textSecondary }
           ]}>[ FOLLOWING ]</Text>
         </TouchableOpacity>
         <TouchableOpacity 
           style={[
-            styles.tab, 
-            activeTab === 'followers' ? styles.tabActive : styles.tabInactive
+            s.tab, 
+            activeTab === 'followers' ? s.tabActive : s.tabInactive
           ]}
           onPress={() => setActiveTab('followers')}
+          activeOpacity={0.8}
         >
           <Text style={[
-            styles.tabText, 
-            { color: activeTab === 'followers' ? '#55FF55' : '#888' }
+            s.tabText, 
+            { color: activeTab === 'followers' ? theme.green : theme.textSecondary }
           ]}>[ ALLIES ]</Text>
         </TouchableOpacity>
       </View>
 
       {loading ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#55FF55" />
-          <Text style={styles.loadingText}>SCANNING_SOCIAL_GRAPH...</Text>
+        <View style={s.loadingContainer}>
+          <ActivityIndicator size="large" color={theme.green} />
+          <Text style={s.loadingText}>SCANNING_SOCIAL_GRAPH...</Text>
         </View>
       ) : (
         <FlatList
           data={networkList}
           renderItem={renderPlayerCard}
           keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.listContent}
+          contentContainerStyle={s.listContent}
           ListEmptyComponent={renderEmpty}
+          showsVerticalScrollIndicator={false}
         />
       )}
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000',
+    backgroundColor: theme.bg,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     padding: 20,
     borderBottomWidth: 4,
-    borderBottomColor: '#222',
+    borderBottomColor: theme.border,
   },
   backButton: {
     marginRight: 15,
   },
   headerTitle: {
     fontFamily: 'monospace',
+    color: theme.purple,
     fontSize: 18,
     fontWeight: 'bold',
     letterSpacing: 2,
@@ -271,18 +276,18 @@ const styles = StyleSheet.create({
     borderWidth: 4,
   },
   tabActive: {
-    backgroundColor: '#111',
-    borderTopColor: '#555',
-    borderLeftColor: '#555',
-    borderBottomColor: '#FFF',
-    borderRightColor: '#FFF',
+    backgroundColor: theme.bgCard,
+    borderTopColor: isDark ? '#555' : '#ddd',
+    borderLeftColor: isDark ? '#555' : '#ddd',
+    borderBottomColor: theme.textPrimary,
+    borderRightColor: theme.textPrimary,
   },
   tabInactive: {
-    backgroundColor: '#000',
-    borderTopColor: '#222',
-    borderLeftColor: '#222',
-    borderBottomColor: '#111',
-    borderRightColor: '#111',
+    backgroundColor: theme.bg,
+    borderTopColor: theme.border,
+    borderLeftColor: theme.border,
+    borderBottomColor: theme.bgInput,
+    borderRightColor: theme.bgInput,
   },
   tabText: {
     fontFamily: 'monospace',
@@ -294,15 +299,15 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
   },
   card: {
-    backgroundColor: '#1A1A1A',
+    backgroundColor: theme.bgCard,
     flexDirection: 'row',
     alignItems: 'center',
     padding: 12,
     borderWidth: 4,
-    borderTopColor: '#555',
-    borderLeftColor: '#555',
-    borderBottomColor: '#000',
-    borderRightColor: '#000',
+    borderTopColor: isDark ? '#555' : '#ddd',
+    borderLeftColor: isDark ? '#555' : '#ddd',
+    borderBottomColor: isDark ? '#000' : '#888',
+    borderRightColor: isDark ? '#000' : '#888',
     marginBottom: 12,
   },
   cardInfo: {
@@ -311,13 +316,13 @@ const styles = StyleSheet.create({
   },
   usernameText: {
     fontFamily: 'monospace',
-    color: '#FFF',
+    color: theme.textPrimary,
     fontSize: 14,
     fontWeight: 'bold',
   },
   levelText: {
     fontFamily: 'monospace',
-    color: '#888',
+    color: theme.textSecondary,
     fontSize: 8,
     marginTop: 2,
   },
@@ -325,20 +330,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderWidth: 4,
-    borderTopColor: '#FFF',
-    borderLeftColor: '#FFF',
+    borderTopColor: isDark ? '#FFF' : '#eee',
+    borderLeftColor: isDark ? '#FFF' : '#eee',
     borderBottomColor: 'rgba(0,0,0,0.5)',
     borderRightColor: 'rgba(0,0,0,0.5)',
   },
   dropButton: {
-    backgroundColor: '#FF5555',
+    backgroundColor: theme.red,
   },
   viewButton: {
-    backgroundColor: '#00E5FF',
+    backgroundColor: theme.purple,
   },
   actionButtonText: {
     fontFamily: 'monospace',
-    color: '#000',
+    color: isDark ? '#000' : '#FFF',
     fontWeight: 'bold',
     fontSize: 10,
   },
@@ -349,7 +354,7 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     fontFamily: 'monospace',
-    color: '#55FF55',
+    color: theme.green,
     marginTop: 16,
     fontSize: 10,
   },
@@ -362,7 +367,7 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontFamily: 'monospace',
-    color: '#444',
+    color: theme.textMuted,
     textAlign: 'center',
     marginTop: 20,
     fontSize: 12,
@@ -373,7 +378,7 @@ const styles = StyleSheet.create({
   },
   refreshText: {
     fontFamily: 'monospace',
-    color: '#55FF55',
+    color: theme.green,
     fontSize: 12,
   },
 });

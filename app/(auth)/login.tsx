@@ -1,10 +1,3 @@
-/**
- * app/(auth)/login.tsx — Login Screen
- *
- * ✅ Preserved: Supabase auth, navigation paths, error handling
- * 🎨 Updated: Full UI redesign — calming, focused, developer-identity
- */
-
 import React, { useState } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet,
@@ -13,35 +6,42 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { supabase } from '../../lib/supabase';
-import { Colors, Typography, Spacing, Radius } from '../../constants/theme';
+import { Typography, Spacing, Radius } from '../../constants/theme';
 import { Input, Button } from '../../components/ui/UI';
+import { useTheme } from '@/context/ThemeContext';
+import { checkRateLimit } from '@/lib/rateLimit';
+import { sanitizeText } from '@/lib/sanitize';
 
 export default function LoginScreen() {
   const router = useRouter();
+  const { theme, isDark } = useTheme();
+  const s = React.useMemo(() => getStyles(theme, isDark), [theme, isDark]);
 
-  // ── State (preserved) ─────────────────────────────────────
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [mode, setMode] = useState<'login' | 'signup'>('login');
 
-  // ── Auth Logic (preserved) ─────────────────────────────────
   async function handleAuth() {
     if (!email || !password) {
       setError('Please fill in all fields');
       return;
     }
+    if (!checkRateLimit('auth_attempt', 5, 60000)) {
+      setError('Too many attempts. Please wait a moment.');
+      return;
+    }
+    const cleanEmail = sanitizeText(email).toLowerCase();
     setLoading(true);
     setError('');
 
     try {
       if (mode === 'login') {
-        const { data: { user }, error: authError } = await supabase.auth.signInWithPassword({ email, password });
+        const { data: { user }, error: authError } = await supabase.auth.signInWithPassword({ email: cleanEmail, password });
         if (authError) throw authError;
 
         if (user) {
-          // Check if profile exists and is onboarded
           const { data: profile, error: profileError } = await supabase
             .from('profiles')
             .select('onboarding_complete, username')
@@ -49,7 +49,6 @@ export default function LoginScreen() {
             .single();
 
           if (profileError && profileError.code !== 'PGRST116') {
-            // PGRST116 is "no rows returned" - which means new user
             throw profileError;
           }
 
@@ -62,8 +61,8 @@ export default function LoginScreen() {
           }
         }
       } else {
-        const { data, error } = await supabase.auth.signUp({ 
-          email, 
+        const { error } = await supabase.auth.signUp({ 
+          email: cleanEmail, 
           password,
         });
         if (error) throw error;
@@ -91,7 +90,7 @@ export default function LoginScreen() {
 
   return (
     <SafeAreaView style={s.container}>
-      <StatusBar barStyle="light-content" backgroundColor={Colors.bg.primary} />
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={theme.bg} />
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -107,7 +106,7 @@ export default function LoginScreen() {
               <Text style={s.logoMarkText}>bl</Text>
             </View>
             <Text style={s.logoText}>
-              build<Text style={{ color: Colors.accent.primary }}>log</Text>
+              build<Text style={{ color: theme.purple }}>log</Text>
             </Text>
             <Text style={s.tagline}>Where developers share what they're building</Text>
           </View>
@@ -133,13 +132,15 @@ export default function LoginScreen() {
           </View>
 
           {/* Form */}
-          <View style={s.form}>
+          <View style={s.form} accessibilityRole="form">
             <Input
               label="Email"
               value={email}
               onChangeText={setEmail}
               placeholder="you@example.com"
               autoCapitalize="none"
+              textContentType="emailAddress"
+              autoComplete="email"
             />
             <Input
               label="Password"
@@ -147,6 +148,8 @@ export default function LoginScreen() {
               onChangeText={setPassword}
               placeholder="••••••••"
               secureTextEntry
+              textContentType="password"
+              autoComplete="password"
             />
 
             {/* Error message */}
@@ -215,8 +218,8 @@ export default function LoginScreen() {
   );
 }
 
-const s = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.bg.primary },
+const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: theme.bg },
   scroll: {
     flexGrow: 1, padding: Spacing.xl,
     paddingTop: Spacing.xxxl, paddingBottom: Spacing.xxxl,
@@ -224,34 +227,34 @@ const s = StyleSheet.create({
   hero: { alignItems: 'center', marginBottom: Spacing.xxxl },
   logoMark: {
     width: 56, height: 56, borderRadius: 16,
-    backgroundColor: Colors.accent.muted,
-    borderWidth: 1, borderColor: Colors.border.accent,
+    backgroundColor: isDark ? 'rgba(124, 58, 237, 0.15)' : 'rgba(124, 58, 237, 0.05)',
+    borderWidth: 1, borderColor: theme.purple,
     alignItems: 'center', justifyContent: 'center',
     marginBottom: Spacing.md,
   },
   logoMarkText: {
-    color: Colors.accent.glow,
+    color: theme.purple,
     fontSize: Typography.sizes.xl,
     fontWeight: '600',
-    fontFamily: 'Courier New',
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
   },
   logoText: {
     fontSize: Typography.sizes.hero,
     fontWeight: '700',
-    color: Colors.text.primary,
+    color: theme.textPrimary,
     letterSpacing: -1,
     marginBottom: Spacing.sm,
   },
   tagline: {
-    color: Colors.text.tertiary,
+    color: theme.textSecondary,
     fontSize: Typography.sizes.base,
     textAlign: 'center',
     lineHeight: 22,
   },
   modeToggle: {
     flexDirection: 'row',
-    backgroundColor: Colors.bg.secondary,
-    borderWidth: 0.5, borderColor: Colors.border.default,
+    backgroundColor: theme.bgInput,
+    borderWidth: 0.5, borderColor: theme.border,
     borderRadius: Radius.md, padding: 3,
     marginBottom: Spacing.xl,
   },
@@ -261,59 +264,59 @@ const s = StyleSheet.create({
     alignItems: 'center',
   },
   modeBtnActive: {
-    backgroundColor: Colors.accent.muted,
-    borderWidth: 0.5, borderColor: Colors.border.accent,
+    backgroundColor: theme.bg,
+    borderWidth: 0.5, borderColor: theme.purple,
   },
   modeBtnLabel: {
-    color: Colors.text.tertiary,
+    color: theme.textSecondary,
     fontSize: Typography.sizes.base,
     fontWeight: '500',
   },
-  modeBtnLabelActive: { color: Colors.accent.glow },
+  modeBtnLabelActive: { color: theme.purple },
   form: { marginBottom: Spacing.xl },
   errorBox: {
-    backgroundColor: 'rgba(163,45,45,0.15)',
-    borderWidth: 0.5, borderColor: Colors.danger,
+    backgroundColor: isDark ? 'rgba(239, 68, 68, 0.15)' : 'rgba(239, 68, 68, 0.05)',
+    borderWidth: 0.5, borderColor: theme.red,
     borderRadius: Radius.md,
     padding: Spacing.md, marginBottom: Spacing.md,
   },
-  errorText: { color: '#FCA5A5', fontSize: Typography.sizes.sm },
+  errorText: { color: theme.red, fontSize: Typography.sizes.sm },
   forgotRow: { alignItems: 'flex-end', marginBottom: Spacing.md, marginTop: -6 },
-  forgotText: { color: Colors.accent.glow, fontSize: Typography.sizes.sm },
+  forgotText: { color: theme.purple, fontSize: Typography.sizes.sm },
   primaryBtn: { marginTop: Spacing.sm },
   dividerRow: {
     flexDirection: 'row', alignItems: 'center',
     gap: Spacing.md, marginVertical: Spacing.lg,
   },
-  dividerLine: { flex: 1, height: 0.5, backgroundColor: Colors.border.default },
-  dividerText: { color: Colors.text.tertiary, fontSize: Typography.sizes.sm },
+  dividerLine: { flex: 1, height: 0.5, backgroundColor: theme.border },
+  dividerText: { color: theme.textMuted, fontSize: Typography.sizes.sm },
   googleBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    gap: Spacing.md, backgroundColor: Colors.bg.secondary,
-    borderWidth: 0.5, borderColor: Colors.border.default,
+    gap: Spacing.md, backgroundColor: theme.bgInput,
+    borderWidth: 0.5, borderColor: theme.border,
     borderRadius: Radius.md, padding: Spacing.md,
   },
   googleIcon: {
-    color: Colors.text.primary,
+    color: theme.textPrimary,
     fontSize: Typography.sizes.md,
     fontWeight: '700',
     width: 22, textAlign: 'center',
   },
-  googleText: { color: Colors.text.primary, fontSize: Typography.sizes.base, fontWeight: '500' },
+  googleText: { color: theme.textPrimary, fontSize: Typography.sizes.base, fontWeight: '500' },
   footer: {
     flexDirection: 'row', justifyContent: 'center',
     alignItems: 'center', marginBottom: Spacing.xxxl,
   },
-  footerText: { color: Colors.text.tertiary, fontSize: Typography.sizes.sm },
-  footerLink: { color: Colors.accent.glow, fontSize: Typography.sizes.sm, fontWeight: '500' },
+  footerText: { color: theme.textSecondary, fontSize: Typography.sizes.sm },
+  footerLink: { color: theme.purple, fontSize: Typography.sizes.sm, fontWeight: '500' },
   socialProof: {
     flexDirection: 'row', flexWrap: 'wrap',
     justifyContent: 'center', gap: 8,
   },
   techTag: {
-    backgroundColor: Colors.bg.tertiary,
-    borderWidth: 0.5, borderColor: Colors.border.subtle,
+    backgroundColor: theme.bgInput,
+    borderWidth: 0.5, borderColor: theme.border,
     borderRadius: Radius.sm, paddingHorizontal: 10, paddingVertical: 5,
   },
-  techTagText: { color: Colors.text.tertiary, fontSize: Typography.sizes.xs, fontFamily: 'Courier New' },
+  techTagText: { color: theme.textSecondary, fontSize: Typography.sizes.xs, fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace' },
 });

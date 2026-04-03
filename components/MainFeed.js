@@ -13,6 +13,29 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { supabase } from '../lib/supabase';
 
+const PostItem = React.memo(({ item, onLike }) => (
+  <View style={styles.postCard}>
+    <Text style={styles.postCategory}>{item.category || 'Uncategorized'}</Text>
+    <Text style={styles.postTitle}>{item.title || 'Untitled Post'}</Text>
+    {item.content ? <Text style={styles.postContent}>{item.content}</Text> : null}
+    
+    <View style={styles.postFooter}>
+      <Text style={styles.postDate}>
+        {new Date(item.created_at).toLocaleDateString()}
+      </Text>
+      
+      <TouchableOpacity 
+        style={styles.likeButton}
+        onPress={() => onLike(item.id)}
+        activeOpacity={0.7}
+      >
+        <Feather name="arrow-up" size={16} color="#007AFF" />
+        <Text style={styles.likeText}>{item.likes_count || 0}</Text>
+      </TouchableOpacity>
+    </View>
+  </View>
+));
+
 export default function MainFeed() {
   const [posts, setPosts] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -22,31 +45,14 @@ export default function MainFeed() {
   const fetchFeed = async () => {
     try {
       setFetchError(null);
-      const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
-      console.log("SUPABASE_URL:", supabaseUrl);
-      
-      if (!supabaseUrl) {
-        if (typeof window !== 'undefined') {
-          window.alert('CRITICAL: Supabase URL is missing in Vercel Settings!');
-        } else {
-          Alert.alert('CRITICAL: Supabase URL is missing in Vercel Settings!');
-        }
-      }
-
       const { data, error } = await supabase
         .from('trending_posts')
-        .select('*')
+        .select('id, category, title, content, created_at, likes_count, gravity_score, user_id')
         .order('gravity_score', { ascending: false });
 
-      if (error) {
-        console.error("DETAILED_ERROR:", error);
-        throw error;
-      }
-
-      console.log("RAW_DATA_FROM_SUPABASE:", data);
+      if (error) throw error;
       setPosts(data || []);
-    } catch (error) {
-      console.error("DETAILED_ERROR:", error);
+    } catch (error) { 
       setFetchError(error.message);
     }
   };
@@ -61,25 +67,20 @@ export default function MainFeed() {
     loadInitialData();
   }, []);
 
-  // 7. Pull-to-refresh control function
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     await fetchFeed();
     setRefreshing(false);
   }, []);
 
-  const handleLike = async (postId) => {
+  const handleLike = useCallback(async (postId) => {
     try {
-      // Optimistic UI update
       setPosts(currentPosts => 
         currentPosts.map(p => 
           p.id === postId ? { ...p, likes_count: (p.likes_count || 0) + 1 } : p
         )
       );
 
-      // We'll try to use an RPC if available, otherwise direct update
-      // It's safer to use RPC for atomic increments, but for now we'll do a simple update
-      // based on the current post's known likes if RPC is not defined by user
       const post = posts.find(p => p.id === postId);
       const newLikes = (post?.likes_count || 0) + 1;
 
@@ -90,50 +91,32 @@ export default function MainFeed() {
 
       if (error) throw error;
       
-      // Trigger Web Push Notification
       const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL || 'http://localhost:5000';
       const currentUser = (await supabase.auth.getUser()).data.user;
       if (currentUser && Platform.OS === 'web') {
+        const { data: { session } } = await supabase.auth.getSession();
         fetch(`${BACKEND_URL}/api/user/push/notify/hype`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session?.access_token}`
+          },
           body: JSON.stringify({
-            targetUserId: post.user_id, // Trending posts view might have user_id or author_id
+            targetUserId: post.user_id,
             hypedByUsername: currentUser.user_metadata?.username || 'Someone',
             postTitle: post.title || 'a post',
           }),
-        }).catch(e => console.error('Push Notify Error (Hype):', e));
+        }).catch(() => {});
       }
       
-    } catch (error) {
-      console.error('Error liking post:', error);
-      // Revert optimistic update on error
+    } catch (error) { 
       fetchFeed();
     }
-  };
+  }, [posts]);
 
-  const renderPost = ({ item }) => (
-    <View style={styles.postCard}>
-      <Text style={styles.postCategory}>{item.category || 'Uncategorized'}</Text>
-      <Text style={styles.postTitle}>{item.title || 'Untitled Post'}</Text>
-      {item.content ? <Text style={styles.postContent}>{item.content}</Text> : null}
-      
-      <View style={styles.postFooter}>
-        <Text style={styles.postDate}>
-          {new Date(item.created_at).toLocaleDateString()}
-        </Text>
-        
-        <TouchableOpacity 
-          style={styles.likeButton}
-          onPress={() => handleLike(item.id)}
-          activeOpacity={0.7}
-        >
-          <Feather name="arrow-up" size={16} color="#007AFF" />
-          <Text style={styles.likeText}>{item.likes_count || 0}</Text>
-        </TouchableOpacity>
-      </View>
-    </View>
-  );
+  const renderPost = useCallback(({ item }) => (
+    <PostItem item={item} onLike={handleLike} />
+  ), [handleLike]);
 
   if (loading) {
     return (
@@ -159,9 +142,14 @@ export default function MainFeed() {
 
       <FlatList
         data={posts}
-        keyExtractor={(item) => item.id?.toString() || Math.random().toString()}
+        keyExtractor={(item) => item.id?.toString()}
         renderItem={renderPost}
         contentContainerStyle={styles.listContent}
+        initialNumToRender={8}
+        maxToRenderPerBatch={10}
+        windowSize={5}
+        removeClippedSubviews={Platform.OS !== 'ios'}
+        updateCellsBatchingPeriod={50}
         refreshControl={
           <RefreshControl 
             refreshing={refreshing} 

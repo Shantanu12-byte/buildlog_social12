@@ -1,12 +1,12 @@
 import React from 'react';
-import { Tabs, Slot } from 'expo-router';
-import { View, useWindowDimensions, StyleSheet } from 'react-native';
-import { Colors } from '@/constants/theme';
+import { Tabs } from 'expo-router';
+import { useWindowDimensions, StyleSheet, StatusBar } from 'react-native';
 import { Feather } from '@expo/vector-icons';
-
+import { useTheme } from '@/context/ThemeContext';
 import { supabase } from '@/lib/supabase';
 
 export default function TabLayout() {
+  const { theme, isDark } = useTheme();
   const { width } = useWindowDimensions();
   const isWeb = width > 768;
   const [unreadCount, setUnreadCount] = React.useState(0);
@@ -14,7 +14,6 @@ export default function TabLayout() {
   React.useEffect(() => {
     fetchUnreadCount();
     
-    // Real-time listener for new notifications
     const channel = supabase
       .channel('schema-db-changes')
       .on(
@@ -39,21 +38,26 @@ export default function TabLayout() {
         .eq('user_id', user.id)
         .eq('is_read', false);
       setUnreadCount(count || 0);
-    } catch (e) {
-      console.error('FETCH_UNREAD_ERROR:', e);
+    } catch {
+      // Silently handle fetch errors
     }
   };
 
-  // ── LAYOUT SELECTION ──────────────────────────────
-  // We use Tabs for both mobile and web to keep the navigator stable,
-  // but we hide the tab bar on desktop web.
   return (
-    <Tabs
-      screenOptions={{
+    <>
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={theme.bg} />
+      <Tabs
+        screenOptions={{
         headerShown: false,
-        tabBarStyle: isWeb ? { display: 'none' } : s.tabBar,
-        tabBarActiveTintColor: Colors.accent.primary,
-        tabBarInactiveTintColor: Colors.text.tertiary,
+        tabBarStyle: isWeb ? { display: 'none' } : [
+          styles.tabBar,
+          { 
+            backgroundColor: theme.bg,
+            borderTopColor: theme.border,
+          }
+        ],
+        tabBarActiveTintColor: theme.purple,
+        tabBarInactiveTintColor: theme.textMuted,
       }}
     >
       <Tabs.Screen 
@@ -79,28 +83,16 @@ export default function TabLayout() {
         name="search" 
         options={{ href: null }} 
       />
-      <Tabs.Screen 
-        name="inbox" 
-        options={{ href: null }} 
-      />
-      <Tabs.Screen 
-        name="learn" 
-        options={{ href: null }} 
-      />
-    </Tabs>
+
+      </Tabs>
+    </>
   );
 }
 
-const s = StyleSheet.create({
-  webRoot: {
-    flex: 1,
-    backgroundColor: Colors.bg.primary,
-  },
+const styles = StyleSheet.create({
   tabBar: {
-    backgroundColor: Colors.bg.primary,
     borderTopWidth: 0.5,
-    borderTopColor: Colors.border.subtle,
     height: 60,
     paddingBottom: 8,
   },
-});
+});

@@ -5,9 +5,9 @@ import {
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { supabase } from '@/lib/supabase';
 import { useUserStore } from '@/store/userStore';
-import { Colors, Typography, Spacing, Radius } from '@/constants/theme';
+import { Spacing, Radius } from '@/constants/theme';
+import { useTheme } from '@/context/ThemeContext';
 
 const COLLEGES = [
   { id: 'ram_meghe_eng', name: 'Prof Ram Meghe (PRMITR)' },
@@ -16,6 +16,9 @@ const COLLEGES = [
 
 export default function CampusOnboardingScreen() {
   const router = useRouter();
+  const { theme, isDark } = useTheme();
+  const s = React.useMemo(() => getStyles(theme, isDark), [theme, isDark]);
+
   const { userProfile, updateUserProfile } = useUserStore();
   const [selectedCampus, setSelectedCampus] = useState<string | null>(
     userProfile?.campus_id || null
@@ -52,9 +55,7 @@ export default function CampusOnboardingScreen() {
           { text: 'Enter Hub', onPress: () => router.replace('/(tabs)/tavern') }
         ]);
       }
-    } catch (err: any) {
-      console.error('Campus onboarding error:', err);
-      Alert.alert('Error', err.message || 'Could not join campus.');
+    } catch (err: any) { Alert.alert('Error', err.message || 'Could not join campus.');
     } finally {
       setIsLoading(false);
     }
@@ -62,7 +63,7 @@ export default function CampusOnboardingScreen() {
 
   return (
     <SafeAreaView style={s.container}>
-      <StatusBar barStyle="light-content" />
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={theme.bg} />
 
       <ScrollView contentContainerStyle={s.scroll}>
         <View style={s.header}>
@@ -77,11 +78,11 @@ export default function CampusOnboardingScreen() {
         </Text>
 
         <View style={s.searchContainer}>
-          <Feather name="search" size={20} color={Colors.text.tertiary} style={s.searchIcon} />
+          <Feather name="search" size={20} color={theme.textMuted} style={s.searchIcon} />
           <TextInput
             style={s.searchInput}
             placeholder="Search for your campus..."
-            placeholderTextColor={Colors.text.tertiary}
+            placeholderTextColor={theme.textMuted}
             value={searchQuery}
             onChangeText={setSearchQuery}
           />
@@ -123,7 +124,7 @@ export default function CampusOnboardingScreen() {
           disabled={!selectedCampus || isLoading}
         >
           {isLoading ? (
-            <ActivityIndicator color="#fff" />
+            <ActivityIndicator color={isDark ? "#000" : "#fff"} />
           ) : (
             <Text style={s.joinBtnText}>Join Community</Text>
           )}
@@ -133,57 +134,57 @@ export default function CampusOnboardingScreen() {
   );
 }
 
-const s = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.bg.primary },
+const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: theme.bg },
   scroll: { padding: Spacing.xl },
   header: { marginBottom: Spacing.xl },
   backBtn: { padding: Spacing.xs },
-  backIcon: { color: Colors.text.primary, fontSize: 24 },
-  title: { color: Colors.text.primary, fontSize: 28, fontWeight: '800', marginBottom: Spacing.sm },
-  subtitle: { color: Colors.text.secondary, fontSize: 15, lineHeight: 22, marginBottom: Spacing.xl },
-  searchContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.bg.secondary, borderRadius: Radius.md, borderWidth: 1, borderColor: Colors.border.default, paddingHorizontal: Spacing.md, marginBottom: Spacing.xl, height: 50 },
+  backIcon: { color: theme.textPrimary, fontSize: 24 },
+  title: { color: theme.textPrimary, fontSize: 28, fontWeight: '800', marginBottom: Spacing.sm },
+  subtitle: { color: theme.textSecondary, fontSize: 15, lineHeight: 22, marginBottom: Spacing.xl },
+  searchContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: theme.bgInput, borderRadius: Radius.md, borderWidth: 1, borderColor: theme.border, paddingHorizontal: Spacing.md, marginBottom: Spacing.xl, height: 50 },
   searchIcon: { marginRight: Spacing.sm },
-  searchInput: { flex: 1, color: Colors.text.primary, fontSize: 16 },
+  searchInput: { flex: 1, color: theme.textPrimary, fontSize: 16 },
   cardContainer: { gap: Spacing.md },
   card: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.bg.secondary,
+    backgroundColor: theme.bgCard,
     borderWidth: 1,
-    borderColor: Colors.border.default,
+    borderColor: theme.border,
     borderRadius: Radius.lg,
     padding: Spacing.lg,
   },
   cardSelected: {
-    backgroundColor: 'rgba(93, 63, 211, 0.1)', // ACCENT_PURPLE with opacity
-    borderColor: Colors.accent.primary,
+    backgroundColor: isDark ? 'rgba(124, 58, 237, 0.1)' : 'rgba(124, 58, 237, 0.05)',
+    borderColor: theme.purple,
   },
   radioOuter: {
     width: 24,
     height: 24,
     borderRadius: 12,
     borderWidth: 2,
-    borderColor: Colors.border.strong,
+    borderColor: theme.border,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: Spacing.md,
   },
   radioOuterSelected: {
-    borderColor: Colors.accent.primary,
+    borderColor: theme.purple,
   },
   radioInner: {
     width: 12,
     height: 12,
     borderRadius: 6,
-    backgroundColor: Colors.accent.primary,
+    backgroundColor: theme.purple,
   },
   cardContent: { flex: 1 },
-  cardTitle: { color: Colors.text.primary, fontSize: 16, fontWeight: '600' },
-  cardTitleSelected: { color: Colors.accent.primary },
-  noResults: { color: Colors.text.secondary, textAlign: 'center', marginTop: Spacing.xl },
-  footer: { padding: Spacing.xl, borderTopWidth: 1, borderTopColor: Colors.border.subtle, backgroundColor: Colors.bg.primary },
+  cardTitle: { color: theme.textPrimary, fontSize: 16, fontWeight: '600' },
+  cardTitleSelected: { color: theme.purple },
+  noResults: { color: theme.textSecondary, textAlign: 'center', marginTop: Spacing.xl },
+  footer: { padding: Spacing.xl, borderTopWidth: 1, borderTopColor: theme.border, backgroundColor: theme.bg },
   joinBtn: {
-    backgroundColor: Colors.accent.primary,
+    backgroundColor: theme.purple,
     paddingVertical: 18,
     borderRadius: Radius.lg,
     alignItems: 'center',
@@ -191,5 +192,5 @@ const s = StyleSheet.create({
   joinBtnDisabled: {
     opacity: 0.5,
   },
-  joinBtnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
+  joinBtnText: { color: isDark ? "#000" : "#fff", fontSize: 16, fontWeight: '700' },
 });

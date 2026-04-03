@@ -4,6 +4,7 @@ import {
   ActivityIndicator, Platform, Linking
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
+import { useTheme } from '@/context/ThemeContext';
 
 interface CampusPickerProps {
   visible: boolean;
@@ -18,6 +19,8 @@ const COLLEGES = [
 
 export default function CampusPicker({ visible, onConfirm, isLoading }: CampusPickerProps) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const { theme, isDark } = useTheme();
+  const s = React.useMemo(() => getStyles(theme, isDark), [theme, isDark]);
 
   const handleConfirm = () => {
     const campus = COLLEGES.find(c => c.id === selectedId);
@@ -56,7 +59,7 @@ export default function CampusPicker({ visible, onConfirm, isLoading }: CampusPi
                     <Text style={[s.optionName, isActive && s.optionNameActive]}>{college.name}</Text>
                     {isActive && <Text style={s.selectedTag}>SELECTED</Text>}
                   </View>
-                  {isActive && <Feather name="check-circle" size={20} color="#7c3aed" />}
+                  {isActive && <Feather name="check-circle" size={20} color={theme.purple} />}
                 </TouchableOpacity>
               );
             })}
@@ -64,7 +67,7 @@ export default function CampusPicker({ visible, onConfirm, isLoading }: CampusPi
 
           <View style={s.footer}>
             <Text style={s.disclaimer}>
-              <Text style={{ color: '#ef4444', fontWeight: '800' }}>⚠️ IMPORTANT:</Text> Once you select your campus, it cannot be changed. You will be permanently assigned to this college's private community.
+              <Text style={{ color: theme.red, fontWeight: '800' }}>⚠️ IMPORTANT:</Text> Once you select your campus, it cannot be changed. You will be permanently assigned to this college's private community.
             </Text>
 
             <TouchableOpacity 
@@ -80,7 +83,7 @@ export default function CampusPicker({ visible, onConfirm, isLoading }: CampusPi
               onPress={handleConfirm}
             >
               {isLoading ? (
-                <ActivityIndicator color="#000" />
+                <ActivityIndicator color={isDark ? "#000" : "#fff"} />
               ) : (
                 <Text style={s.confirmBtnText}>Confirm & Join</Text>
               )}
@@ -92,60 +95,62 @@ export default function CampusPicker({ visible, onConfirm, isLoading }: CampusPi
   );
 }
 
-const s = StyleSheet.create({
-  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.9)', justifyContent: 'center', padding: 24 },
-  content: { 
-    backgroundColor: '#111111', 
-    borderRadius: 24, 
-    padding: 24, 
-    borderWidth: 1, 
-    borderColor: '#1f2937',
-    maxWidth: 500,
-    alignSelf: 'center',
-    width: '100%'
-  },
-  badge: { 
-    alignSelf: 'flex-start', 
-    backgroundColor: '#1e1b4b', 
-    paddingHorizontal: 10, 
-    paddingVertical: 4, 
-    borderRadius: 8, 
-    marginBottom: 16 
-  },
-  badgeText: { color: '#818cf8', fontSize: 10, fontWeight: '800', letterSpacing: 1 },
-  title: { color: '#ffffff', fontSize: 24, fontWeight: '800', marginBottom: 8 },
-  subtitle: { color: '#6b7280', fontSize: 14, lineHeight: 20, marginBottom: 24 },
-  
-  options: { gap: 12, marginBottom: 24 },
-  optionCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#0a0a0a',
-    padding: 16,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#1f2937',
-    gap: 16
-  },
-  optionCardActive: { borderColor: '#7c3aed', backgroundColor: '#111111' },
-  optionIconWrap: { width: 40, height: 40, borderRadius: 10, backgroundColor: '#111', alignItems: 'center', justifyContent: 'center' },
-  optionIcon: { fontSize: 20 },
-  optionName: { color: '#6b7280', fontSize: 15, fontWeight: '600' },
-  optionNameActive: { color: '#ffffff' },
-  selectedTag: { color: '#7c3aed', fontSize: 10, fontWeight: '800', marginTop: 2 },
+function getStyles(theme: any, isDark: boolean) {
+  return StyleSheet.create({
+    overlay: { flex: 1, backgroundColor: isDark ? 'rgba(0,0,0,0.9)' : 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: 24 },
+    content: { 
+      backgroundColor: theme.bgCard, 
+      borderRadius: 24, 
+      padding: 24, 
+      borderWidth: 1, 
+      borderColor: theme.border,
+      maxWidth: 500,
+      alignSelf: 'center',
+      width: '100%'
+    },
+    badge: { 
+      alignSelf: 'flex-start', 
+      backgroundColor: theme.purpleDim, 
+      paddingHorizontal: 10, 
+      paddingVertical: 4, 
+      borderRadius: 8, 
+      marginBottom: 16 
+    },
+    badgeText: { color: isDark ? '#818cf8' : '#fff', fontSize: 10, fontWeight: '800', letterSpacing: 1 },
+    title: { color: theme.textPrimary, fontSize: 24, fontWeight: '800', marginBottom: 8 },
+    subtitle: { color: theme.textSecondary, fontSize: 14, lineHeight: 20, marginBottom: 24 },
+    
+    options: { gap: 12, marginBottom: 24 },
+    optionCard: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: theme.bg,
+      padding: 16,
+      borderRadius: 16,
+      borderWidth: 1,
+      borderColor: theme.border,
+      gap: 16
+    },
+    optionCardActive: { borderColor: theme.purple, backgroundColor: theme.bgCard },
+    optionIconWrap: { width: 40, height: 40, borderRadius: 10, backgroundColor: theme.bgCard, alignItems: 'center', justifyContent: 'center' },
+    optionIcon: { fontSize: 20 },
+    optionName: { color: theme.textSecondary, fontSize: 15, fontWeight: '600' },
+    optionNameActive: { color: theme.textPrimary },
+    selectedTag: { color: theme.purple, fontSize: 10, fontWeight: '800', marginTop: 2 },
 
-  footer: { borderTopWidth: 1, borderTopColor: '#1f2937', paddingTop: 20 },
-  disclaimer: { color: '#71717a', fontSize: 13, textAlign: 'center', marginBottom: 16, lineHeight: 18 },
-  linkBtn: { alignSelf: 'center', marginBottom: 24 },
-  linkText: { color: '#7c3aed', fontSize: 13, textDecorationLine: 'underline' },
-  
-  confirmBtn: {
-    backgroundColor: '#7c3aed',
-    paddingVertical: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center'
-  },
-  confirmBtnDisabled: { opacity: 0.5, backgroundColor: '#3f3f46' },
-  confirmBtnText: { color: '#ffffff', fontSize: 16, fontWeight: '800' }
-});
+    footer: { borderTopWidth: 1, borderTopColor: theme.border, paddingTop: 20 },
+    disclaimer: { color: theme.textSecondary, fontSize: 13, textAlign: 'center', marginBottom: 16, lineHeight: 18 },
+    linkBtn: { alignSelf: 'center', marginBottom: 24 },
+    linkText: { color: theme.purple, fontSize: 13, textDecorationLine: 'underline' },
+    
+    confirmBtn: {
+      backgroundColor: theme.purple,
+      paddingVertical: 16,
+      borderRadius: 12,
+      alignItems: 'center',
+      justifyContent: 'center'
+    },
+    confirmBtnDisabled: { opacity: 0.5, backgroundColor: theme.borderLight },
+    confirmBtnText: { color: '#ffffff', fontSize: 16, fontWeight: '800' }
+  });
+}

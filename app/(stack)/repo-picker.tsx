@@ -1,12 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, FlatList, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, FlatList, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, StatusBar } from 'react-native';
 import { router } from 'expo-router';
-import { Colors, Shadows } from '@/constants/theme';
+import { Spacing } from '@/constants/theme';
 import { githubService, GithubRepo } from '@/services/githubService';
 import { useUserStore } from '@/store/userStore';
 import { Search, GitBranch, Star, Code2, ChevronRight } from 'lucide-react-native';
+import { useTheme } from '@/context/ThemeContext';
 
 export default function RepoPickerScreen() {
+  const { theme, isDark } = useTheme();
+  const s = React.useMemo(() => getStyles(theme, isDark), [theme, isDark]);
+  
   const [repos, setRepos] = useState<GithubRepo[]>([]);
   const [filteredRepos, setFilteredRepos] = useState<GithubRepo[]>([]);
   const [loading, setLoading] = useState(true);
@@ -24,9 +28,7 @@ export default function RepoPickerScreen() {
       const data = await githubService.fetchUserReposFromBackend(userId);
       setRepos(data);
       setFilteredRepos(data);
-    } catch (error) {
-      console.error('Failed to load repos:', error);
-    } finally {
+    } catch (error) { } finally {
       setLoading(false);
     }
   };
@@ -40,73 +42,71 @@ export default function RepoPickerScreen() {
     setFilteredRepos(filtered);
   };
 
-  const handleSelectRepo = (repo: GithubRepo) => {
-    // In a real flow, you'd pass this back to the "Add Log" screen
-    // For now we'll log it and navigate back
-    console.log('Selected Repo:', repo.full_name);
-    Alert.alert('Success', `Linked ${repo.name} to your log entry!`);
+  const handleSelectRepo = (repo: GithubRepo) => { Alert.alert('Success', `Linked ${repo.name} to your log entry!`);
     router.back();
   };
 
   const renderItem = ({ item }: { item: GithubRepo }) => (
-    <TouchableOpacity style={styles.repoItem} onPress={() => handleSelectRepo(item)}>
-      <View style={styles.repoInfo}>
-        <View style={styles.repoHeader}>
-          <GitBranch size={16} color={Colors.accent.primary} />
-          <Text style={styles.repoName}>{item.name}</Text>
+    <TouchableOpacity style={s.repoItem} onPress={() => handleSelectRepo(item)} activeOpacity={0.7}>
+      <View style={s.repoInfo}>
+        <View style={s.repoHeader}>
+          <GitBranch size={16} color={theme.purple} />
+          <Text style={s.repoName}>{item.name}</Text>
         </View>
         {item.description && (
-          <Text style={styles.repoDesc} numberOfLines={1}>{item.description}</Text>
+          <Text style={s.repoDesc} numberOfLines={1}>{item.description}</Text>
         )}
-        <View style={styles.repoMeta}>
+        <View style={s.repoMeta}>
           {item.language && (
-            <View style={styles.metaItem}>
-              <Code2 size={12} color={Colors.text.tertiary} />
-              <Text style={styles.metaText}>{item.language}</Text>
+            <View style={s.metaItem}>
+              <Code2 size={12} color={theme.textMuted} />
+              <Text style={s.metaText}>{item.language}</Text>
             </View>
           )}
-          <View style={styles.metaItem}>
-            <Star size={12} color={Colors.text.tertiary} />
-            <Text style={styles.metaText}>{item.stargazers_count}</Text>
+          <View style={s.metaItem}>
+            <Star size={12} color={theme.textMuted} />
+            <Text style={s.metaText}>{item.stargazers_count}</Text>
           </View>
         </View>
       </View>
-      <ChevronRight size={20} color={Colors.text.tertiary} />
+      <ChevronRight size={20} color={theme.textMuted} />
     </TouchableOpacity>
   );
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Select Repository</Text>
-        <Text style={styles.subtitle}>Link a repo as proof of work</Text>
+    <View style={s.container}>
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={theme.bg} />
+      <View style={s.headSection}>
+        <Text style={s.title}>Select Repository</Text>
+        <Text style={s.subtitle}>Link a repo as proof of work</Text>
       </View>
 
-      <View style={styles.searchContainer}>
-        <Search size={20} color={Colors.text.tertiary} style={styles.searchIcon} />
+      <View style={s.searchContainer}>
+        <Search size={20} color={theme.textMuted} style={s.searchIcon} />
         <TextInput
-          style={styles.searchInput}
+          style={s.searchInput}
           placeholder="Search repositories..."
-          placeholderTextColor={Colors.text.tertiary}
+          placeholderTextColor={theme.textMuted}
           value={search}
           onChangeText={handleSearch}
         />
       </View>
 
       {loading ? (
-        <View style={styles.loaderContainer}>
-          <ActivityIndicator size="large" color={Colors.accent.primary} />
-          <Text style={styles.loadText}>Fetching repositories...</Text>
+        <View style={s.loaderContainer}>
+          <ActivityIndicator size="large" color={theme.purple} />
+          <Text style={s.loadText}>Fetching repositories...</Text>
         </View>
       ) : (
         <FlatList
           data={filteredRepos}
           keyExtractor={(item) => item.id.toString()}
           renderItem={renderItem}
-          contentContainerStyle={styles.listContent}
+          contentContainerStyle={s.listContent}
+          showsVerticalScrollIndicator={false}
           ListEmptyComponent={
-            <View style={styles.emptyContainer}>
-              <Text style={styles.emptyText}>{search ? 'No repositories found matching your search.' : 'No public repositories found.'}</Text>
+            <View style={s.emptyContainer}>
+              <Text style={s.emptyText}>{search ? 'No repositories found matching your search.' : 'No public repositories found.'}</Text>
             </View>
           }
         />
@@ -115,34 +115,34 @@ export default function RepoPickerScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.bg.primary,
+    backgroundColor: theme.bg,
   },
-  header: {
+  headSection: {
     padding: 20,
     paddingTop: 60,
   },
   title: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#FFF',
+    color: theme.textPrimary,
   },
   subtitle: {
     fontSize: 14,
-    color: Colors.text.secondary,
+    color: theme.textSecondary,
     marginTop: 4,
   },
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.bg.secondary,
+    backgroundColor: theme.bgInput,
     margin: 20,
     paddingHorizontal: 15,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: Colors.border.subtle,
+    borderColor: theme.border,
   },
   searchIcon: {
     marginRight: 10,
@@ -150,22 +150,23 @@ const styles = StyleSheet.create({
   searchInput: {
     flex: 1,
     height: 50,
-    color: '#FFF',
+    color: theme.textPrimary,
     fontSize: 16,
   },
   listContent: {
     padding: 20,
     paddingTop: 0,
+    paddingBottom: 40,
   },
   repoItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.bg.secondary,
+    backgroundColor: theme.bgCard,
     padding: 16,
     borderRadius: 16,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: Colors.border.subtle,
+    borderColor: theme.border,
   },
   repoInfo: {
     flex: 1,
@@ -178,12 +179,12 @@ const styles = StyleSheet.create({
   repoName: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#FFF',
+    color: theme.textPrimary,
     marginLeft: 8,
   },
   repoDesc: {
     fontSize: 13,
-    color: Colors.text.secondary,
+    color: theme.textSecondary,
     marginBottom: 8,
   },
   repoMeta: {
@@ -197,7 +198,7 @@ const styles = StyleSheet.create({
   },
   metaText: {
     fontSize: 12,
-    color: Colors.text.tertiary,
+    color: theme.textMuted,
   },
   loaderContainer: {
     flex: 1,
@@ -205,7 +206,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   loadText: {
-    color: Colors.text.secondary,
+    color: theme.textSecondary,
     marginTop: 15,
     fontSize: 14,
   },
@@ -214,7 +215,7 @@ const styles = StyleSheet.create({
     marginTop: 50,
   },
   emptyText: {
-    color: Colors.text.tertiary,
+    color: theme.textMuted,
     fontSize: 14,
     textAlign: 'center',
   },

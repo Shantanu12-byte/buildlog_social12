@@ -326,14 +326,30 @@ async function getProfileByUsername(req, res) {
 async function invalidateProfileCache(req, res) {
   try {
     const { username } = req.body;
+    const authHeader = req.headers.authorization;
+
     if (!username) {
       return res.status(400).json({ error: 'Username is required to invalidate cache.' });
+    }
+
+    if (!authHeader) {
+      console.warn('❌ CACHE_INVALIDATE_DENIED: MISSING_AUTH_HEADER');
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+
+    // Verify token with Supabase (prevents unauthorized cache purging)
+    const token = authHeader.replace('Bearer ', '');
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+
+    if (authError || !user) {
+      console.warn('❌ CACHE_INVALIDATE_DENIED: INVALID_TOKEN');
+      return res.status(403).json({ error: 'Forbidden: Invalid authentication' });
     }
 
     const cleanName = username.toLowerCase().trim();
     cache.delete(cleanName);
     
-    console.log(`🧹 CACHE_INVALIDATED: @${cleanName}`);
+    console.log(`🧹 CACHE_INVALIDATED: @${cleanName} by user_id: ${user.id}`);
     return res.json({ success: true, invalidated: cleanName });
   } catch (err) {
     console.error('Cache invalidation error:', err);

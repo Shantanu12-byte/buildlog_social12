@@ -6,9 +6,12 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Feather, FontAwesome, MaterialCommunityIcons } from '@expo/vector-icons';
 import { supabase } from '@/lib/supabase';
 import { useUserStore } from '@/store/userStore';
-import { Colors, FontSizes, Spacing } from '@/constants/theme';
+import { FontSizes, Spacing } from '@/constants/theme';
+import { useTheme } from '@/context/ThemeContext';
 
 export default function ProjectDetailScreen() {
+  const { theme, isDark } = useTheme();
+  const styles = React.useMemo(() => getStyles(theme, isDark), [theme, isDark]);
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   
@@ -63,9 +66,7 @@ export default function ProjectDetailScreen() {
       
       if (logsError) throw logsError;
       setLogs(logsData || []);
-    } catch (error: any) {
-      console.error('Error fetching project details:', error);
-      Alert.alert('Error', 'Failed to load project details.');
+    } catch (error: any) { Alert.alert('Error', 'Failed to load project details.');
     } finally {
       setIsLoading(false);
     }
@@ -89,9 +90,7 @@ export default function ProjectDetailScreen() {
 
       if (error) throw error;
       setComments(data || []);
-    } catch (error) {
-      console.error('Error fetching comments:', error);
-    } finally {
+    } catch (error) { } finally {
       setIsCommentsLoading(false);
     }
   }, [id]);
@@ -194,9 +193,7 @@ export default function ProjectDetailScreen() {
               `NEW_TRANSMISSION: @${userProfile?.username || 'builder'} commented on your Project!`
             );
           }
-        } catch (notifErr) {
-          console.error('Comment notification failed:', notifErr);
-        }
+        } catch (notifErr) { }
       }
 
       setNewComment('');
@@ -229,18 +226,13 @@ export default function ProjectDetailScreen() {
           if (fetchPostsError) throw fetchPostsError;
 
           if (projectPosts && projectPosts.length > 0) {
-            const postIds = projectPosts.map(p => p.id);
-            console.log('🧹 CLEARING_LIKES: Removing likes for posts:', postIds);
-            
-            // 2. Clear all likes for these posts
+            const postIds = projectPosts.map(p => p.id); // 2. Clear all likes for these posts
             const { error: likesError } = await supabase
               .from('likes')
               .delete()
               .in('post_id', postIds);
             
-            if (likesError) {
-              console.error('Non-critical: Failed to clear likes:', likesError);
-            }
+            if (likesError) { }
 
             // 3. Clear all posts for this project
             const { error: postsError } = await supabase
@@ -261,9 +253,7 @@ export default function ProjectDetailScreen() {
           
           Alert.alert('Project Terminated', 'Project and all its history have been permanently removed.');
           router.replace('/(tabs)/profile');
-        } catch (error: any) {
-          console.error('Critical Deletion Error:', error);
-          Alert.alert(
+        } catch (error: any) { Alert.alert(
             'Termination Failed', 
             error.message || 'Database rejected deletion. Check for external dependencies.'
           );
@@ -358,7 +348,7 @@ export default function ProjectDetailScreen() {
     <View style={styles.headerContent}>
       <View style={styles.topRow}>
         <TouchableOpacity onPress={() => router.back()} style={styles.pixelButtonSmall}>
-          <Feather name="arrow-left" size={20} color="#FFFFFF" />
+          <Feather name="arrow-left" size={20} color={theme.textPrimary} />
         </TouchableOpacity>
         
         {project?.user_id === currentUserId && (
@@ -367,7 +357,7 @@ export default function ProjectDetailScreen() {
             style={styles.deleteButton}
             disabled={isDeleting}
           >
-            {isDeleting ? <ActivityIndicator size="small" color="#FFFFFF" /> : <Feather name="trash-2" size={18} color="#FFFFFF" />}
+            {isDeleting ? <ActivityIndicator size="small" color={theme.textPrimary} /> : <Feather name="trash-2" size={18} color={theme.textPrimary} />}
           </TouchableOpacity>
         )}
       </View>
@@ -407,7 +397,7 @@ export default function ProjectDetailScreen() {
             style={styles.addLogButton}
             onPress={() => router.push({ pathname: '/(stack)/add-log', params: { projectId: id } })}
           >
-            <Feather name="plus" size={18} color="#FFFFFF" />
+            <Feather name="plus" size={18} color={theme.textPrimary} />
             <Text style={styles.addLogText}>ADD_LOG</Text>
           </TouchableOpacity>
         )}
@@ -441,7 +431,7 @@ export default function ProjectDetailScreen() {
   if (isLoading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#FFFFFF" />
+        <ActivityIndicator size="large" color={theme.textPrimary} />
       </View>
     );
   }
@@ -465,7 +455,7 @@ export default function ProjectDetailScreen() {
           windowSize={5}
           ListEmptyComponent={() => (
             <View style={styles.emptyContainer}>
-              <Feather name={activeTab === 'logs' ? "book-open" : "message-square"} size={48} color="#333" />
+              <Feather name={activeTab === 'logs' ? "book-open" : "message-square"} size={48} color={theme.bgInput} />
               <Text style={styles.emptyText}>
                 {activeTab === 'logs' ? 'NO_ENTRIES_YET' : 'NO_DISCUSSIONS_FOUND'}
               </Text>
@@ -497,7 +487,7 @@ export default function ProjectDetailScreen() {
               disabled={!newComment.trim() || isSending}
             >
               {isSending ? (
-                <ActivityIndicator size="small" color="#FFF" />
+                <ActivityIndicator size="small" color={theme.textPrimary} />
               ) : (
                 <Text style={styles.sendButtonText}>SEND</Text>
               )}
@@ -509,14 +499,15 @@ export default function ProjectDetailScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function getStyles(theme: any, isDark: boolean) {
+  return StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000000',
+    backgroundColor: theme.bg,
   },
   loadingContainer: {
     flex: 1,
-    backgroundColor: '#000000',
+    backgroundColor: theme.bg,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -533,20 +524,20 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.xl,
   },
   pixelButtonSmall: {
-    backgroundColor: '#333333',
+    backgroundColor: isDark ? '#333333' : theme.textMuted,
     padding: Spacing.sm,
     borderWidth: 3,
-    borderTopColor: '#555555',
-    borderLeftColor: '#555555',
-    borderBottomColor: '#111111',
-    borderRightColor: '#111111',
+    borderTopColor: isDark ? '#555555' : theme.textSecondary,
+    borderLeftColor: isDark ? '#555555' : theme.textSecondary,
+    borderBottomColor: theme.bgCard,
+    borderRightColor: theme.bgCard,
   },
   deleteButton: {
     backgroundColor: '#F44336',
     padding: Spacing.sm,
     borderWidth: 3,
-    borderTopColor: '#FFFFFF',
-    borderLeftColor: '#FFFFFF',
+    borderTopColor: theme.textPrimary,
+    borderLeftColor: theme.textPrimary,
     borderBottomColor: '#B71C1C',
     borderRightColor: '#B71C1C',
   },
@@ -557,7 +548,7 @@ const styles = StyleSheet.create({
     fontFamily: 'monospace',
     fontSize: FontSizes['2xl'],
     fontWeight: 'bold',
-    color: '#FFFFFF',
+    color: theme.textPrimary,
     marginBottom: Spacing.xs,
   },
   challengeBadge: {
@@ -566,25 +557,25 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderWidth: 2,
-    borderColor: '#FFFFFF',
+    borderColor: theme.textPrimary,
   },
   challengeText: {
     fontFamily: 'monospace',
     fontSize: 10,
-    color: '#FFFFFF',
+    color: theme.textPrimary,
     fontWeight: 'bold',
   },
   descriptionSection: {
     marginBottom: Spacing.xl,
     padding: Spacing.md,
-    backgroundColor: '#111111',
+    backgroundColor: theme.bgCard,
     borderWidth: 2,
-    borderColor: '#222222',
+    borderColor: theme.border,
   },
   label: {
     fontFamily: 'monospace',
     fontSize: 10,
-    color: '#666666',
+    color: theme.textSecondary,
     marginBottom: Spacing.xs,
   },
   descriptionText: {
@@ -607,12 +598,12 @@ const styles = StyleSheet.create({
     fontFamily: 'monospace',
     fontSize: FontSizes.xl,
     fontWeight: 'bold',
-    color: '#FFFFFF',
+    color: theme.textPrimary,
   },
   statLabel: {
     fontFamily: 'monospace',
     fontSize: 10,
-    color: '#666666',
+    color: theme.textSecondary,
   },
   addLogButton: {
     flexDirection: 'row',
@@ -621,15 +612,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.xl,
     paddingVertical: Spacing.md,
     borderWidth: 4,
-    borderTopColor: '#FFFFFF',
-    borderLeftColor: '#FFFFFF',
+    borderTopColor: theme.textPrimary,
+    borderLeftColor: theme.textPrimary,
     borderBottomColor: '#1A4D94',
     borderRightColor: '#1A4D94',
     gap: 8,
   },
   addLogText: {
     fontFamily: 'monospace',
-    color: '#FFFFFF',
+    color: theme.textPrimary,
     fontWeight: 'bold',
     fontSize: 14,
   },
@@ -642,13 +633,13 @@ const styles = StyleSheet.create({
   timelineLabel: {
     fontFamily: 'monospace',
     fontSize: 12,
-    color: '#FFFFFF',
+    color: theme.textPrimary,
     fontWeight: 'bold',
   },
   dividerLine: {
     flex: 1,
     height: 4,
-    backgroundColor: '#222222',
+    backgroundColor: theme.border,
   },
   progressSection: {
     flex: 1,
@@ -657,31 +648,31 @@ const styles = StyleSheet.create({
   progressBarWrapper: {
     width: '100%',
     height: 8,
-    backgroundColor: '#111111',
+    backgroundColor: theme.bgCard,
     borderWidth: 2,
-    borderColor: '#333333',
+    borderColor: isDark ? '#333333' : theme.textMuted,
     marginBottom: 4,
   },
   progressBar: {
     height: '100%',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: theme.textPrimary,
   },
   progressText: {
     fontFamily: 'monospace',
     fontSize: 8,
-    color: '#666666',
+    color: theme.textSecondary,
     textAlign: 'center',
   },
   logCard: {
     marginHorizontal: Spacing.xl,
     marginBottom: Spacing.xl,
     padding: Spacing.lg,
-    backgroundColor: '#111111',
+    backgroundColor: theme.bgCard,
     borderWidth: 4,
-    borderTopColor: '#333333',
-    borderLeftColor: '#333333',
-    borderBottomColor: '#000000',
-    borderRightColor: '#000000',
+    borderTopColor: isDark ? '#333333' : theme.textMuted,
+    borderLeftColor: isDark ? '#333333' : theme.textMuted,
+    borderBottomColor: theme.bg,
+    borderRightColor: theme.bg,
   },
   logHeader: {
     flexDirection: 'row',
@@ -699,8 +690,8 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderTopColor: '#00FF00',
     borderLeftColor: '#00FF00',
-    borderBottomColor: '#000000',
-    borderRightColor: '#000000',
+    borderBottomColor: theme.bg,
+    borderRightColor: theme.bg,
   },
   shareButtonText: {
     fontFamily: 'monospace',
@@ -711,14 +702,14 @@ const styles = StyleSheet.create({
   logDate: {
     fontFamily: 'monospace',
     fontSize: 10,
-    color: '#666666',
+    color: theme.textSecondary,
   },
   logImageFrame: {
     width: '100%',
     aspectRatio: 1,
     marginBottom: Spacing.md,
     borderWidth: 2,
-    borderColor: '#222222',
+    borderColor: theme.border,
   },
   logImage: {
     width: '100%',
@@ -727,7 +718,7 @@ const styles = StyleSheet.create({
   logCaption: {
     fontFamily: 'monospace',
     fontSize: 14,
-    color: '#FFFFFF',
+    color: theme.textPrimary,
     lineHeight: 20,
   },
   emptyContainer: {
@@ -737,23 +728,23 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontFamily: 'monospace',
-    color: '#333333',
+    color: isDark ? '#333333' : theme.textMuted,
     fontSize: FontSizes.lg,
     fontWeight: 'bold',
   },
   pixelButtonGray: {
-    backgroundColor: '#333333',
+    backgroundColor: isDark ? '#333333' : theme.textMuted,
     paddingVertical: Spacing.md,
     paddingHorizontal: Spacing.xl,
     borderWidth: 3,
-    borderTopColor: '#555555',
-    borderLeftColor: '#555555',
-    borderBottomColor: '#111111',
-    borderRightColor: '#111111',
+    borderTopColor: isDark ? '#555555' : theme.textSecondary,
+    borderLeftColor: isDark ? '#555555' : theme.textSecondary,
+    borderBottomColor: theme.bgCard,
+    borderRightColor: theme.bgCard,
   },
   pixelButtonText: {
     fontFamily: 'monospace',
-    color: '#FFFFFF',
+    color: theme.textPrimary,
     fontSize: 12,
     fontWeight: 'bold',
   },
@@ -768,19 +759,19 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     backgroundColor: '#000',
     borderWidth: 3,
-    borderTopColor: '#333',
-    borderLeftColor: '#333',
-    borderBottomColor: '#222',
-    borderRightColor: '#222',
+    borderTopColor: isDark ? '#333' : theme.textMuted,
+    borderLeftColor: isDark ? '#333' : theme.textMuted,
+    borderBottomColor: theme.border,
+    borderRightColor: theme.border,
     alignItems: 'center',
     position: 'relative',
   },
   activeTab: {
-    backgroundColor: '#222',
+    backgroundColor: theme.border,
     borderTopColor: '#2F81F7',
     borderLeftColor: '#2F81F7',
-    borderBottomColor: '#FFF',
-    borderRightColor: '#FFF',
+    borderBottomColor: theme.textPrimary,
+    borderRightColor: theme.textPrimary,
   },
   tabText: {
     fontFamily: 'monospace',
@@ -789,7 +780,7 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   activeTabText: {
-    color: '#FFF',
+    color: theme.textPrimary,
   },
   notifDot: {
     position: 'absolute',
@@ -803,10 +794,10 @@ const styles = StyleSheet.create({
     marginHorizontal: Spacing.xl,
     marginBottom: 12,
     padding: 12,
-    backgroundColor: '#111',
+    backgroundColor: theme.bgCard,
     borderWidth: 3,
-    borderTopColor: '#444',
-    borderLeftColor: '#444',
+    borderTopColor: isDark ? '#444' : theme.borderLight,
+    borderLeftColor: isDark ? '#444' : theme.borderLight,
     borderBottomColor: '#000',
     borderRightColor: '#000',
   },
@@ -840,7 +831,7 @@ const styles = StyleSheet.create({
   commentTime: {
     fontFamily: 'monospace',
     fontSize: 8,
-    color: '#555',
+    color: isDark ? '#555' : theme.textSecondary,
   },
   commentText: {
     fontFamily: 'monospace',
@@ -856,21 +847,21 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     padding: 12,
     paddingBottom: Platform.OS === 'ios' ? 24 : 12,
-    backgroundColor: '#050505',
+    backgroundColor: theme.bg,
     borderTopWidth: 4,
-    borderTopColor: '#222',
+    borderTopColor: theme.border,
     gap: 8,
   },
   stickyInput: {
     flex: 1,
     height: 44,
-    backgroundColor: '#111',
+    backgroundColor: theme.bgCard,
     borderWidth: 3,
-    borderTopColor: '#333',
-    borderLeftColor: '#333',
-    borderBottomColor: '#FFF',
-    borderRightColor: '#FFF',
-    color: '#FFF',
+    borderTopColor: isDark ? '#333' : theme.textMuted,
+    borderLeftColor: isDark ? '#333' : theme.textMuted,
+    borderBottomColor: theme.textPrimary,
+    borderRightColor: theme.textPrimary,
+    color: theme.textPrimary,
     fontFamily: 'monospace',
     paddingHorizontal: 12,
     fontSize: 12,
@@ -882,8 +873,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 3,
-    borderTopColor: '#FFF',
-    borderLeftColor: '#FFF',
+    borderTopColor: theme.textPrimary,
+    borderLeftColor: theme.textPrimary,
     borderBottomColor: '#1A4D94',
     borderRightColor: '#1A4D94',
   },
@@ -892,8 +883,10 @@ const styles = StyleSheet.create({
   },
   sendButtonText: {
     fontFamily: 'monospace',
-    color: '#FFF',
+    color: theme.textPrimary,
     fontWeight: 'bold',
     fontSize: 12,
   },
-});
+  });
+}
+

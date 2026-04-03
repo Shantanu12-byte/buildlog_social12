@@ -1,71 +1,76 @@
-export const Colors = {
-  bg: {
-    primary: '#090909',
-    secondary: '#111111',
-    tertiary: '#1A1A1A',
-    input: '#1A1A1A',
-  },
-  text: {
-    primary: '#FFFFFF',
-    secondary: '#888888',
-    tertiary: '#555555',
-  },
-  accent: {
-    primary: '#2F81F7',
-    muted: 'rgba(47, 129, 247, 0.15)',
-    glow: '#3FB9EF',
-    soft: 'rgba(63, 185, 239, 0.1)',
-  },
-  border: {
-    default: '#333333',
-    subtle: '#222222',
-    accent: '#2F81F7',
-    strong: '#444444',
-  },
-  pills: {
-    tech: { bg: 'rgba(46,160,67,0.15)', border: 'rgba(46,160,67,0.3)', text: '#2EA043' },
-    design: { bg: 'rgba(247,129,102,0.15)', border: 'rgba(247,129,102,0.3)', text: '#F78166' },
-    other: { bg: 'rgba(139,148,158,0.15)', border: 'rgba(139,148,158,0.3)', text: '#8B949E' },
-    campus: { bg: 'rgba(6,78,59,0.3)', border: 'rgba(6,95,70,0.5)', text: '#6EE7B7' },
-    challenge: { bg: 'rgba(139,92,246,0.15)', border: 'rgba(139,92,246,0.3)', text: '#A78BFA' },
-    building: { bg: 'rgba(47,129,247,0.15)', border: 'rgba(47,129,247,0.3)', text: '#2F81F7' },
-    collab: { bg: 'rgba(6,78,59,0.3)', border: 'rgba(6,95,70,0.5)', text: '#6EE7B7' },
-  },
-  success: '#238636',
-  danger: '#DA3633',
+import { Platform } from 'react-native';
 
-  // Cyber-Noir Palette
-  cyber: {
-    bg: '#050505',
-    card: '#0A0A0A',
-    border: '#1A1A1A',
-    accent: '#00FF41', // Classic Matrix/Cyber Green
-    dim: 'rgba(0, 255, 65, 0.1)',
-  },
+export const darkTheme = {
+  // Backgrounds
+  bg:           '#0a0a0a',
+  bgCard:       '#111111',
+  bgInput:      '#1a1a1a',
+  bgModal:      '#111111',
 
-  // RAG (Red, Amber, Green) for technical achievements
-  rag: {
-    success: { bg: 'rgba(35,134,54,0.15)', border: 'rgba(35,134,54,0.3)', text: '#3FB950' },
-    warning: { bg: 'rgba(210,153,34,0.15)', border: 'rgba(210,153,34,0.3)', text: '#D29922' },
-    error: { bg: 'rgba(248,81,70,0.15)', border: 'rgba(248,81,70,0.3)', text: '#F85146' },
-    neutral: { bg: 'rgba(139,148,158,0.15)', border: 'rgba(139,148,158,0.3)', text: '#8B949E' },
-  },
+  // Borders
+  border:       '#1f2937',
+  borderLight:  '#374151',
 
-  github: {
-    green: '#2EA043',
-    blue: '#388BFD',
-    bg: '#0D1117',
-    border: '#30363D',
-    text: '#C9D1D9',
-  },
+  // Brand
+  purple:       '#7c3aed',
+  purpleDim:    '#4c1d95',
+  purpleGlow:   'rgba(124,58,237,0.3)',
 
-  // Flattened Aliases for backward compatibility
-  textPrimary: '#FFFFFF',
-  textSecondary: '#888888',
-  textTertiary: '#555555',
-  borderDefault: '#333333',
-  borderSubtle: '#222222',
+  // Text
+  textPrimary:  '#ffffff',
+  textSecondary:'#9ca3af',
+  textMuted:    '#4b5563',
+
+  // Status
+  green:        '#4ade80',
+  red:          '#ef4444',
+  orange:       '#f97316',
+  amber:        '#f59e0b',
+
+  // News categories
+  aiColor:      '#7c3aed',
+  webColor:     '#2563eb',
+  osColor:      '#16a34a',
+  devopsColor:  '#ea580c',
+  langColor:    '#ca8a04',
 };
+
+export const lightTheme = {
+  // Backgrounds
+  bg:           '#f8fafc',
+  bgCard:       '#ffffff',
+  bgInput:      '#f1f5f9',
+  bgModal:      '#ffffff',
+
+  // Borders
+  border:       '#e2e8f0',
+  borderLight:  '#cbd5e1',
+
+  // Brand
+  purple:       '#7c3aed',
+  purpleDim:    '#ede9fe',
+  purpleGlow:   'rgba(124,58,237,0.15)',
+
+  // Text
+  textPrimary:  '#0f172a',
+  textSecondary:'#475569',
+  textMuted:    '#94a3b8',
+
+  // Status
+  green:        '#16a34a',
+  red:          '#dc2626',
+  orange:       '#ea580c',
+  amber:        '#d97706',
+
+  // News categories
+  aiColor:      '#7c3aed',
+  webColor:     '#1d4ed8',
+  osColor:      '#15803d',
+  devopsColor:  '#c2410c',
+  langColor:    '#b45309',
+};
+
+export type Theme = typeof darkTheme;
 
 export const Typography = { 
   sizes: { 
@@ -83,8 +88,6 @@ export const Spacing = {
 };
 export const Radius = { sm: 4, md: 8, lg: 12, full: 9999 };
 
-import { Platform } from 'react-native';
-
 export const Shadows = {
   soft: {
     shadowColor: '#000',
@@ -95,12 +98,12 @@ export const Shadows = {
     ...(Platform.OS === 'web' ? { boxShadow: '0 2px 4px rgba(0,0,0,0.1)' } : {})
   },
   accent: {
-    shadowColor: '#00FF41',
+    shadowColor: '#7c3aed',
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.5,
     shadowRadius: 10,
     elevation: 5,
-    ...(Platform.OS === 'web' ? { boxShadow: '0 0 10px rgba(0, 255, 65, 0.5)' } : {})
+    ...(Platform.OS === 'web' ? { boxShadow: '0 0 10px rgba(124, 58, 237, 0.5)' } : {})
   }
 };
 
@@ -116,24 +119,35 @@ export const getShadow = (type: 'soft' | 'accent') => {
   return s;
 };
 
-// Compatibility helper
+// Legacy Compatibility helper (MAPPED TO THEME)
 export const getThemeColors = (isEnderMode?: boolean) => ({
-  primary: isEnderMode ? '#FFD700' : '#2F81F7',
-  primaryDark: isEnderMode ? '#7A6700' : '#1A4D94',
-  background: '#090909',
+  primary: '#7c3aed',
+  primaryDark: '#4c1d95',
+  background: '#0a0a0a',
   surface: '#111111',
   textPrimary: '#FFFFFF',
-  textSecondary: '#888888',
-  borderSubtle: '#222222',
-  accentEmerald: '#2EA043',
+  textSecondary: '#9ca3af',
+  borderSubtle: '#1f2937',
+  accentEmerald: '#4ade80',
 });
 
-export const getInitials = (name: string) => name.split('_').map(n => n[0]).join('').toUpperCase().slice(0, 2);
-export const getAvatarColor = (name: string) => {
-  const bgColors = ['rgba(47,129,247,0.15)', 'rgba(46,160,67,0.15)', 'rgba(247,129,102,0.15)', 'rgba(139,148,158,0.15)', 'rgba(218,54,51,0.15)'];
-  const textColors = ['#2F81F7', '#2EA043', '#F78166', '#8B949E', '#DA3633'];
+export const getInitials = (name: string) => {
+  if (!name) return '??';
+  return name.split('_').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+};
+
+export const getAvatarColor = (name: string, isDark: boolean = true) => {
+  const bgColorsDark = ['rgba(124,58,237,0.15)', 'rgba(74,222,128,0.15)', 'rgba(249,115,22,0.15)', 'rgba(156,163,175,0.15)', 'rgba(239,68,68,0.15)'];
+  const textColorsDark = ['#7c3aed', '#4ade80', '#f97316', '#9ca3af', '#ef4444'];
+  
+  const bgColorsLight = ['rgba(124,58,237,0.1)', 'rgba(22,163,74,0.1)', 'rgba(234,88,12,0.1)', 'rgba(71,85,105,0.1)', 'rgba(220,38,38,0.1)'];
+  const textColorsLight = ['#7c3aed', '#16a34a', '#ea580c', '#475569', '#dc2626'];
+  
+  const bgs = isDark ? bgColorsDark : bgColorsLight;
+  const txts = isDark ? textColorsDark : textColorsLight;
+  
   let hash = 0;
   for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
-  const index = Math.abs(hash) % bgColors.length;
-  return { bg: bgColors[index], text: textColors[index] };
+  const index = Math.abs(hash) % bgs.length;
+  return { bg: bgs[index], text: txts[index] };
 };

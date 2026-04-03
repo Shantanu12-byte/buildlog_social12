@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Animated } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Animated, Platform } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { useUserStore } from '@/store/userStore';
-import { getThemeColors, FontSizes, Spacing } from '@/constants/theme';
+import { FontSizes, Spacing } from '@/constants/theme';
+import { useTheme } from '@/context/ThemeContext';
 
 export function MinecraftLoader() {
+  const { theme, isDark } = useTheme();
   const { isEnderMode, toggleEnderMode } = useUserStore();
-  const colors = getThemeColors(isEnderMode);
   
   const [tapCount, setTapCount] = useState(0);
   const [progress] = useState(new Animated.Value(0));
@@ -62,32 +63,39 @@ export function MinecraftLoader() {
   });
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <Text style={[styles.title, { color: colors.primary }]}>BUILD_LOG</Text>
+    <View style={[styles.container, { backgroundColor: theme.bg }]}>
+      <Text style={[styles.title, { color: isEnderMode ? '#FFD700' : theme.purple }]}>
+        BUILDLOG
+      </Text>
       
       <TouchableOpacity 
         activeOpacity={1} 
         onPress={handleTap}
-        style={[styles.progressContainer, { borderColor: colors.primaryDark }]}
+        style={[
+          styles.progressContainer, 
+          { 
+            borderColor: isEnderMode ? '#FFD700' : theme.border, 
+            backgroundColor: theme.bgInput 
+          }
+        ]}
       >
         <Animated.View 
           style={[
             styles.progressBar, 
             { 
               width: barWidth, 
-              backgroundColor: colors.accentEmerald,
-              boxShadow: isEnderMode ? `0 0 10px ${colors.accentEmerald}` : 'none'
+              backgroundColor: isEnderMode ? '#FFD700' : theme.green,
             }
           ]} 
         />
       </TouchableOpacity>
 
-      <Text style={[styles.phrase, { color: colors.textSecondary }]}>
+      <Text style={[styles.phrase, { color: theme.textSecondary }]}>
         {phrases[phraseIndex]}
       </Text>
 
       {tapCount > 0 && (
-        <Text style={[styles.debugText, { color: colors.accentEmerald }]}>
+        <Text style={[styles.debugText, { color: theme.green }]}>
           TAP_LOG: {tapCount}/10
         </Text>
       )}
@@ -103,37 +111,37 @@ const styles = StyleSheet.create({
     padding: Spacing.xl,
   },
   title: {
-    fontFamily: 'monospace',
-    fontSize: FontSizes['5xl'],
-    fontWeight: 'bold',
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+    fontSize: 48,
+    fontWeight: '900',
     marginBottom: Spacing['3xl'],
-    letterSpacing: 4,
+    letterSpacing: 8,
   },
   progressContainer: {
     width: '80%',
     height: 32,
-    backgroundColor: '#1A1A1A',
-    borderWidth: 4,
-    borderTopColor: '#333333',
-    borderLeftColor: '#333333',
-    borderBottomColor: '#FFFFFF', // Bevel effect
-    borderRightColor: '#FFFFFF',
-    padding: 2,
+    borderWidth: 2,
+    padding: 4,
     marginBottom: Spacing.xl,
+    borderRadius: 4,
   },
   progressBar: {
     height: '100%',
+    borderRadius: 2,
   },
   phrase: {
-    fontFamily: 'monospace',
-    fontSize: FontSizes.sm,
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+    fontSize: FontSizes.xs,
     letterSpacing: 2,
+    fontWeight: '800',
+    textAlign: 'center',
   },
   debugText: {
     position: 'absolute',
     bottom: 50,
-    fontFamily: 'monospace',
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
     fontSize: 10,
     opacity: 0.5,
+    fontWeight: '800',
   }
 });

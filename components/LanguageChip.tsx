@@ -1,7 +1,8 @@
 import React, { useRef } from 'react';
-import { Text, StyleSheet, Animated, Pressable, View, ViewStyle, Platform } from 'react-native';
+import { Text, StyleSheet, Animated, Pressable, ViewStyle, Platform } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { Colors, FontSizes, Spacing } from '@/constants/theme';
+import { Spacing } from '@/constants/theme';
+import { useTheme } from '@/context/ThemeContext';
 
 interface LanguageChipProps {
   name: string;
@@ -28,6 +29,8 @@ const getLanguageIcon = (name: string): any => {
 };
 
 export const LanguageChip = ({ name, icon, style }: LanguageChipProps) => {
+  const { theme, isDark } = useTheme();
+  const styles = React.useMemo(() => getStyles(theme, isDark), [theme, isDark]);
   const scaleAnim = useRef(new Animated.Value(1)).current;
 
   const handlePressIn = () => {
@@ -53,32 +56,34 @@ export const LanguageChip = ({ name, icon, style }: LanguageChipProps) => {
         onPressOut={handlePressOut}
         style={styles.chip}
       >
-        <MaterialCommunityIcons name={iconName} size={16} color={Colors.accentGold} />
+        <MaterialCommunityIcons name={iconName} size={16} color={theme.amber} />
         <Text style={styles.text}>{name.toUpperCase()}</Text>
       </Pressable>
     </Animated.View>
   );
 };
 
-const styles = StyleSheet.create({
-  chip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#1A1A1A',
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
-    borderWidth: 2,
-    borderColor: '#333333',
-    borderBottomWidth: 4,
-    borderBottomColor: '#000000',
-    gap: 8,
-    marginRight: 8,
-    marginBottom: 8,
-  },
-  text: {
-    fontFamily: 'monospace',
-    color: '#FFFFFF',
-    fontSize: 10,
-    fontWeight: 'bold',
-  },
-});
+function getStyles(theme: any, isDark: boolean) {
+  return StyleSheet.create({
+    chip: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: theme.bgInput,
+      paddingHorizontal: Spacing.md,
+      paddingVertical: Spacing.sm,
+      borderWidth: 2,
+      borderColor: theme.border,
+      borderBottomWidth: 4,
+      borderBottomColor: isDark ? '#000000' : theme.textMuted,
+      gap: 8,
+      marginRight: 8,
+      marginBottom: 8,
+    },
+    text: {
+      fontFamily: 'monospace',
+      color: theme.textPrimary,
+      fontSize: 10,
+      fontWeight: 'bold',
+    },
+  });
+}

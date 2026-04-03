@@ -1,16 +1,20 @@
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert, ActivityIndicator, StatusBar } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { supabase, getValidSession } from '@/lib/supabase';
-import { Colors, Typography, Spacing, Radius } from '@/constants/theme';
+import { Typography, Spacing, Radius } from '@/constants/theme';
+import { useTheme } from '@/context/ThemeContext';
 import { Feather } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { Input, Button } from '@/components/ui/UI';
 
 export default function CreateProjectScreen() {
   const router = useRouter();
+  const { theme, isDark } = useTheme();
+  const s = React.useMemo(() => getStyles(theme, isDark), [theme, isDark]);
+  
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [skills, setSkills] = useState('');
@@ -63,9 +67,7 @@ export default function CreateProjectScreen() {
       if (!result.canceled && result.assets && result.assets.length > 0) {
         setImageUri(result.assets[0].uri);
       }
-    } catch (e) {
-      console.error('Capture error:', e);
-      Alert.alert('ERROR', 'FAILED_TO_CAPTURE_DATA');
+    } catch (e) { Alert.alert('ERROR', 'FAILED_TO_CAPTURE_DATA');
     }
   };
 
@@ -79,7 +81,6 @@ export default function CreateProjectScreen() {
     setIsSubmitting(true);
     isCurrentlySubmitting.current = true;
     try {
-      // 1. Silent Auth Check
       let { data: { session } } = await supabase.auth.getSession();
       if (!session) {
         const { data: refreshed } = await supabase.auth.refreshSession();
@@ -96,7 +97,6 @@ export default function CreateProjectScreen() {
 
       let publicUrl = null;
 
-      // 2. Handle Image Upload
       if (imageUri) {
         const response = await fetch(imageUri);
         const blob = await response.blob();
@@ -133,7 +133,6 @@ export default function CreateProjectScreen() {
 
       if (error) throw error;
 
-      // Announce on Feed
       const { error: postError } = await supabase.from('posts').insert({
         user_id: finalUserId,
         author_id: finalUserId,
@@ -149,9 +148,7 @@ export default function CreateProjectScreen() {
 
       Alert.alert('Success', 'Your new project has been created.');
       router.replace('/(tabs)/profile');
-    } catch (error: any) {
-      console.error('Error creating project:', error);
-      Alert.alert('Error', error.message || 'An error occurred during creation.');
+    } catch (error: any) { Alert.alert('Error', error.message || 'An error occurred during creation.');
     } finally {
       setIsSubmitting(false);
       isCurrentlySubmitting.current = false;
@@ -159,16 +156,17 @@ export default function CreateProjectScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton} activeOpacity={0.75}>
-          <Feather name="chevron-left" size={24} color={Colors.text.primary} />
+    <SafeAreaView style={s.container}>
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={theme.bg} />
+      <View style={s.header}>
+        <TouchableOpacity onPress={() => router.back()} style={s.backButton} activeOpacity={0.75}>
+          <Feather name="chevron-left" size={24} color={theme.textPrimary} />
         </TouchableOpacity>
-        <Text style={styles.title}>New Project</Text>
+        <Text style={s.title}>New Project</Text>
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        <View style={styles.form}>
+      <ScrollView contentContainerStyle={s.scrollContent} showsVerticalScrollIndicator={false}>
+        <View style={s.form}>
           <Input
             label="Title"
             value={title}
@@ -177,19 +175,19 @@ export default function CreateProjectScreen() {
           />
 
           {/* Project Preview Image */}
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>PREVIEW IMAGE (16:9)</Text>
+          <View style={s.inputGroup}>
+            <Text style={s.label}>PREVIEW IMAGE (16:9)</Text>
             <TouchableOpacity 
-              style={styles.captureFrame} 
+              style={s.captureFrame} 
               onPress={handlePickImage}
               activeOpacity={0.8}
             >
               {imageUri ? (
-                <Image source={{ uri: imageUri }} style={styles.previewImage} contentFit="cover" />
+                <Image source={{ uri: imageUri }} style={s.previewImage} contentFit="cover" />
               ) : (
-                <View style={styles.placeholderBox}>
-                  <Feather name="image" size={32} color={Colors.text.tertiary} />
-                  <Text style={styles.placeholderText}>Tap to upload preview</Text>
+                <View style={s.placeholderBox}>
+                  <Feather name="image" size={32} color={theme.textMuted} />
+                  <Text style={s.placeholderText}>Tap to upload preview</Text>
                 </View>
               )}
             </TouchableOpacity>
@@ -219,28 +217,28 @@ export default function CreateProjectScreen() {
           />
 
           {/* Toggles */}
-          <View style={styles.togglesSection}>
-            <View style={styles.toggleRow}>
-              <Text style={styles.toggleLabel}>Open for Collaborators?</Text>
+          <View style={s.togglesSection}>
+            <View style={s.toggleRow}>
+              <Text style={s.toggleLabel}>Open for Collaborators?</Text>
               <TouchableOpacity
-                style={[styles.toggleBtn, lookingForCollabs ? styles.toggleOn : styles.toggleOff]}
+                style={[s.toggleBtn, lookingForCollabs ? s.toggleOn : s.toggleOff]}
                 onPress={() => setLookingForCollabs(!lookingForCollabs)}
                 activeOpacity={0.8}
               >
-                <Text style={[styles.toggleText, lookingForCollabs && styles.toggleTextActive]}>
+                <Text style={[s.toggleText, lookingForCollabs && s.toggleTextActive]}>
                   {lookingForCollabs ? 'Yes' : 'No'}
                 </Text>
               </TouchableOpacity>
             </View>
 
-            <View style={styles.toggleRow}>
-              <Text style={styles.toggleLabel}>Enable Challenge Mode?</Text>
+            <View style={s.toggleRow}>
+              <Text style={s.toggleLabel}>Enable Challenge Mode?</Text>
               <TouchableOpacity
-                style={[styles.toggleBtn, isChallenge ? styles.toggleOn : styles.toggleOff]}
+                style={[s.toggleBtn, isChallenge ? s.toggleOn : s.toggleOff]}
                 onPress={() => setIsChallenge(!isChallenge)}
                 activeOpacity={0.8}
               >
-                <Text style={[styles.toggleText, isChallenge && styles.toggleTextActive]}>
+                <Text style={[s.toggleText, isChallenge && s.toggleTextActive]}>
                   {isChallenge ? 'On' : 'Off'}
                 </Text>
               </TouchableOpacity>
@@ -269,10 +267,10 @@ export default function CreateProjectScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.bg.primary,
+    backgroundColor: theme.bg,
   },
   header: {
     flexDirection: 'row',
@@ -280,14 +278,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.lg,
     paddingVertical: Spacing.md,
     borderBottomWidth: 0.5,
-    borderBottomColor: Colors.border.subtle,
+    borderBottomColor: theme.border,
   },
   backButton: {
     marginRight: Spacing.sm,
     padding: 4,
   },
   title: {
-    color: Colors.text.primary,
+    color: theme.textPrimary,
     fontSize: Typography.sizes.xl,
     fontWeight: '600',
     letterSpacing: -0.3,
@@ -304,7 +302,7 @@ const styles = StyleSheet.create({
   },
   label: {
     fontSize: Typography.sizes.xs,
-    color: Colors.text.tertiary,
+    color: theme.textMuted,
     letterSpacing: 0.5,
     marginBottom: 5,
     textTransform: 'uppercase',
@@ -312,9 +310,9 @@ const styles = StyleSheet.create({
   captureFrame: {
     width: '100%',
     aspectRatio: 16 / 9,
-    backgroundColor: Colors.bg.secondary,
+    backgroundColor: theme.bgInput,
     borderWidth: 0.5,
-    borderColor: Colors.border.default,
+    borderColor: theme.border,
     borderRadius: Radius.md,
     overflow: 'hidden',
     justifyContent: 'center',
@@ -330,12 +328,12 @@ const styles = StyleSheet.create({
   },
   placeholderText: {
     fontSize: Typography.sizes.sm,
-    color: Colors.text.tertiary,
+    color: theme.textMuted,
   },
   togglesSection: {
-    backgroundColor: Colors.bg.secondary,
+    backgroundColor: theme.bgInput,
     borderWidth: 0.5,
-    borderColor: Colors.border.subtle,
+    borderColor: theme.border,
     borderRadius: Radius.lg,
     padding: Spacing.md,
     gap: Spacing.md,
@@ -348,7 +346,7 @@ const styles = StyleSheet.create({
   },
   toggleLabel: {
     fontSize: Typography.sizes.base,
-    color: Colors.text.secondary,
+    color: theme.textSecondary,
   },
   toggleBtn: {
     paddingHorizontal: 16,
@@ -359,19 +357,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   toggleOff: {
-    backgroundColor: Colors.bg.tertiary,
-    borderColor: Colors.border.default,
+    backgroundColor: theme.bgInput,
+    borderColor: theme.border,
   },
   toggleOn: {
-    backgroundColor: 'rgba(46,160,67,0.15)',
-    borderColor: 'rgba(46,160,67,0.3)',
+    backgroundColor: isDark ? 'rgba(74, 222, 128, 0.1)' : 'rgba(74, 222, 128, 0.05)',
+    borderColor: theme.green,
   },
   toggleText: {
     fontSize: Typography.sizes.sm,
     fontWeight: '500',
-    color: Colors.text.tertiary,
+    color: theme.textMuted,
   },
   toggleTextActive: {
-    color: '#2EA043', // Colors.success
+    color: theme.green,
   },
 });

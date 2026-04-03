@@ -1,5 +1,7 @@
+import React from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable } from 'react-native';
-import { Colors, FontSizes, Spacing } from '@/constants/theme';
+import { FontSizes, Spacing } from '@/constants/theme';
+import { useTheme } from '@/context/ThemeContext';
 
 export interface Challenge {
   id: string;
@@ -16,6 +18,9 @@ interface StoriesBarProps {
 }
 
 export function StoriesBar({ challenges, onProfilePress }: StoriesBarProps) {
+  const { theme, isDark } = useTheme();
+  const styles = React.useMemo(() => getStyles(theme, isDark), [theme, isDark]);
+
   if (challenges.length === 0) return null;
 
   const handlePress = (challenge: Challenge) => {
@@ -61,56 +66,58 @@ export function StoriesBar({ challenges, onProfilePress }: StoriesBarProps) {
 const RING_SIZE = 72;
 const AVATAR_SIZE = 64;
 
-const styles = StyleSheet.create({
-  container: {
-    paddingVertical: Spacing.md,
-    backgroundColor: '#000000',
-    borderBottomWidth: 4,
-    borderBottomColor: '#222222',
-  },
-  scrollContent: {
-    paddingHorizontal: Spacing.lg,
-    gap: Spacing.lg,
-    alignItems: 'center',
-  },
-  storyItem: {
-    alignItems: 'center',
-  },
-  ring: {
-    width: 64,
-    height: 64,
-    backgroundColor: '#333333',
-    borderWidth: 2,
-    borderTopColor: '#FFFFFF',
-    borderLeftColor: '#FFFFFF',
-    borderBottomColor: '#111111',
-    borderRightColor: '#111111',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  avatarInner: {
-    width: 48,
-    height: 48,
-    backgroundColor: '#8B8B8B',
-    borderWidth: 2,
-    borderTopColor: '#FFFFFF',
-    borderLeftColor: '#FFFFFF',
-    borderBottomColor: '#333333',
-    borderRightColor: '#333333',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  avatarText: {
-    color: '#FFFFFF',
-    fontSize: FontSizes.xl,
-    fontFamily: 'monospace',
-    fontWeight: 'bold',
-  },
-  label: {
-    marginTop: Spacing.xs,
-    color: '#AAAAAA',
-    fontSize: 8,
-    fontFamily: 'monospace',
-    textTransform: 'uppercase',
-  },
-});
+function getStyles(theme: any, isDark: boolean) {
+  return StyleSheet.create({
+    container: {
+      paddingVertical: Spacing.md,
+      backgroundColor: theme.bg,
+      borderBottomWidth: 4,
+      borderBottomColor: theme.border,
+    },
+    scrollContent: {
+      paddingHorizontal: Spacing.lg,
+      gap: Spacing.lg,
+      alignItems: 'center',
+    },
+    storyItem: {
+      alignItems: 'center',
+    },
+    ring: {
+      width: 64,
+      height: 64,
+      backgroundColor: theme.bgInput,
+      borderWidth: 2,
+      borderTopColor: isDark ? '#FFFFFF' : theme.textMuted,
+      borderLeftColor: isDark ? '#FFFFFF' : theme.textMuted,
+      borderBottomColor: theme.border,
+      borderRightColor: theme.border,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    avatarInner: {
+      width: 48,
+      height: 48,
+      backgroundColor: theme.textSecondary,
+      borderWidth: 2,
+      borderTopColor: isDark ? '#FFFFFF' : theme.bg,
+      borderLeftColor: isDark ? '#FFFFFF' : theme.bg,
+      borderBottomColor: theme.borderLight,
+      borderRightColor: theme.borderLight,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    avatarText: {
+      color: '#FFFFFF',
+      fontSize: FontSizes.xl,
+      fontFamily: 'monospace',
+      fontWeight: 'bold',
+    },
+    label: {
+      marginTop: Spacing.xs,
+      color: theme.textSecondary,
+      fontSize: 8,
+      fontFamily: 'monospace',
+      textTransform: 'uppercase',
+    },
+  });
+}

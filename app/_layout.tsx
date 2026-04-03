@@ -2,17 +2,17 @@ import 'react-native-get-random-values';
 import { Slot, router, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import React, { useEffect, useState, useRef } from 'react';
-import { View, Text, ActivityIndicator, Animated, Platform, StyleSheet, useWindowDimensions, TouchableOpacity } from 'react-native';
+import { View, Text, ActivityIndicator, Platform, StyleSheet, useWindowDimensions, TouchableOpacity } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { supabase } from '@/lib/supabase';
 import { getOrCreateKeyPair } from '@/lib/crypto';
 import { useUserStore } from '@/store/userStore';
 import { WebSidebar } from '@/components/WebSidebar';
 import { MinecraftLoader } from '@/components/MinecraftLoader';
-import { Colors } from '@/constants/theme';
 import { AuthProvider, useAuth } from '@/context/AuthContext';
+import { ThemeProvider, useTheme } from '@/context/ThemeContext';
 import { registerPushNotifications } from '@/lib/push-notifications';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import Animated, { useAnimatedStyle, withTiming } from 'react-native-reanimated';
 
 import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
@@ -38,9 +38,11 @@ Notifications.setNotificationHandler({
 
 export default function RootLayout() {
   return (
-    <AuthProvider>
-      <InnerRootLayout />
-    </AuthProvider>
+    <ThemeProvider>
+      <AuthProvider>
+        <InnerRootLayout />
+      </AuthProvider>
+    </ThemeProvider>
   );
 }
 
@@ -53,12 +55,18 @@ function InnerRootLayout() {
   const { 
     userProfile, 
     userId, 
-    fetchUserProfile, 
-    updateUserProfile, 
     initialize: initializeStore, 
     profileFetched,
-    isLoading: storeLoading
+    updateUserProfile,
   } = useUserStore();
+
+  const { theme, isDark } = useTheme();
+
+  const animatedStyle = useAnimatedStyle(() => {
+    return {
+      backgroundColor: withTiming(theme.bg, { duration: 300 }),
+    };
+  });
 
   // 🔔 NOTIFICATION STATE
   const [expoPushToken, setExpoPushToken] = useState<string>('');
@@ -69,7 +77,7 @@ function InnerRootLayout() {
   // 1. Initialize Global Store once
   useEffect(() => {
     initializeStore();
-    getOrCreateKeyPair().catch(e => console.error('E2EE_INIT_ERROR:', e));
+    getOrCreateKeyPair().catch(() => {});
   }, []);
 
   // 🔔 NOTIFICATION HANDLERS
@@ -121,15 +129,14 @@ function InnerRootLayout() {
       if (userId) {
         await updateUserProfile({ expo_push_token: token });
       }
-    } catch (e) {
-      console.error('🔔 REGISTRATION_ERROR:', e);
+    } catch {
+      // Push notification registration failed silently
     }
   };
 
   // 2. Secure Routing Logic
   useEffect(() => {
     const handleRedirects = async () => {
-      // Wait for store initialization and AuthContext
       if (!profileFetched || authLoading) return;
 
       const segs = segments as string[];
@@ -143,7 +150,6 @@ function InnerRootLayout() {
       } else {
         const profile = userProfile;
         
-        // Sync local context with database status
         if (profile && profile.onboarding_complete !== isOnboardingFinished) {
           updateOnboardingStatus(!!profile.onboarding_complete);
         }
@@ -152,7 +158,6 @@ function InnerRootLayout() {
           registerPushNotifications(profile.id);
         }
 
-        // A user is considered onboarded if EITHER the DB says so OR local storage says so (as a fallback)
         const isOnboarded = !!profile?.onboarding_complete || isOnboardingFinished;
 
         if (!isOnboarded) {
@@ -173,23 +178,26 @@ function InnerRootLayout() {
     handleRedirects();
   }, [userId, userProfile, authLoading, segments, isOnboardingFinished, profileFetched]);
 
-  if (!profileFetched || authLoading) {
+  const segs = segments as string[];
+  const isPublicRoute = segs[0] === 'u';
+
+  if ((!profileFetched || authLoading) && !isPublicRoute) {
     return (
-      <View style={styles.loadingContainer}>
+      <View style={[styles.loadingContainer, { backgroundColor: theme.bg }]}>
         <MinecraftLoader />
-        <Text style={styles.loadingText}>SYNCHRONIZING_MOTHERSHIP...</Text>
+        <Text style={[styles.loadingText, { color: theme.purple }]}>SYNCHRONIZING_MOTHERSHIP...</Text>
       </View>
     );
   }
 
   return (
-    <SafeAreaProvider style={{ backgroundColor: Colors.bg.primary, flex: 1 }}>
-      <View style={[styles.root, { flexDirection: isDesktop ? 'row' : 'column', backgroundColor: Colors.bg.primary }]}>
+    <SafeAreaProvider style={{ flex: 1, backgroundColor: theme.bg }}>
+      <Animated.View style={[styles.root, animatedStyle, { flexDirection: isDesktop ? 'row' : 'column' }]}>
         {Platform.OS === 'web' && isDesktop && <WebSidebar />}
-        <View style={[styles.centerWrapper, { backgroundColor: Colors.bg.primary }]}>
-          <View style={[styles.mainContent, { backgroundColor: Colors.bg.primary }]}>
+        <Animated.View style={[styles.centerWrapper, animatedStyle]}>
+          <Animated.View style={[styles.mainContent, animatedStyle, { borderColor: theme.border }]}>
             <Slot />
-            <StatusBar style="light" />
+            <StatusBar style={isDark ? "light" : "dark"} />
             <CustomNotificationModal 
               visible={showNotificationModal}
               onAuthorize={() => {
@@ -198,9 +206,9 @@ function InnerRootLayout() {
               }}
               onCancel={() => setShowNotificationModal(false)}
             />
-          </View>
-        </View>
-      </View>
+          </Animated.View>
+        </Animated.View>
+      </Animated.View>
     </SafeAreaProvider>
   );
 }
@@ -208,16 +216,15 @@ function InnerRootLayout() {
 const styles = StyleSheet.create({
   loadingContainer: {
     flex: 1,
-    backgroundColor: Colors.bg.primary,
     justifyContent: 'center',
     alignItems: 'center',
   },
   loadingText: {
     marginTop: 20,
-    color: '#55FF55',
-    fontFamily: 'monospace',
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
     fontSize: 10,
     letterSpacing: 2,
+    fontWeight: '800',
   },
   root: {
     flex: 1,
@@ -232,6 +239,5 @@ const styles = StyleSheet.create({
     maxWidth: 600,
     borderLeftWidth: Platform.OS === 'web' ? 1 : 0,
     borderRightWidth: Platform.OS === 'web' ? 1 : 0,
-    borderColor: Colors.border.subtle,
   },
 });

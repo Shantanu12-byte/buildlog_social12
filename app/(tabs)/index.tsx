@@ -2,23 +2,22 @@ import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import {
   View, Text, FlatList, TouchableOpacity,
   StyleSheet, RefreshControl, useWindowDimensions,
-  SafeAreaView, StatusBar, ActivityIndicator, Platform
+  SafeAreaView, ActivityIndicator, Platform
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { useUserStore } from '@/store/userStore';
-import { Colors, Typography, Spacing, Radius } from '@/constants/theme';
+import { Typography, Spacing } from '@/constants/theme';
+import { useTheme } from '@/context/ThemeContext';
 import LogEntryFeedItem from '@/components/LogEntryFeedItem';
 import DevNewsFeed from '@/components/DevNewsFeed';
 import NewsReader from '@/components/NewsReader';
 import { NewsCardSkeleton } from '@/components/NewsCard';
 import { LoadingScreen } from '@/components/ui/UI';
 import { Feather } from '@expo/vector-icons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import Animated, { 
   useSharedValue, 
   useAnimatedStyle, 
-  withSpring, 
   withTiming,
   interpolate,
   runOnJS 
@@ -29,14 +28,15 @@ export default function FeedScreen() {
   const router = useRouter();
   const { width: windowWidth } = useWindowDimensions();
   const width = Platform.OS === 'web' ? Math.min(windowWidth, 600) : windowWidth;
+  const { theme, isDark } = useTheme();
+  const s = useMemo(() => getStyles(theme, isDark), [theme, isDark]);
   
   const [posts, setPosts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const { userProfile, userId } = useUserStore();
+  const { userId } = useUserStore();
   const [newsItems, setNewsItems] = useState<any[]>([]);
   const [activeTab, setActiveTab] = useState<'feed' | 'news'>('feed');
-  const [newsStatus, setNewsStatus] = useState('');
   const [newsRefreshing, setNewsRefreshing] = useState(false);
   
   const scrollX = useSharedValue(0);
@@ -101,8 +101,7 @@ export default function FeedScreen() {
         setHasMore(data.length === PAGE_SIZE);
         setPage(currentPage + 1);
       }
-    } catch (err) {
-      console.error('fetchPosts error:', err);
+    } catch {
     } finally {
       if (reset) setLoading(false);
       setLoadingMore(false);
@@ -112,7 +111,6 @@ export default function FeedScreen() {
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    // Refresh both posts and news
     await Promise.all([
       fetchPosts(true),
       triggerNewsRefresh()
@@ -120,8 +118,8 @@ export default function FeedScreen() {
   }, []);
 
   const triggerNewsRefresh = async () => {
-    // This will be handled by DevNewsFeed if we pass it a refresh trigger
     setNewsRefreshing(true);
+    // DevNewsFeed handles internal refresh logic usually
   };
 
   const handleLike = async (postId: string) => {
@@ -139,8 +137,7 @@ export default function FeedScreen() {
       } else {
         await supabase.from('likes').insert({ post_id: postId, user_id: userId });
       }
-    } catch (err) {
-      console.error('handleLike error:', err);
+    } catch {
       fetchPosts(true);
     }
   };
@@ -151,11 +148,10 @@ export default function FeedScreen() {
 
   // Swiping Logic
   const panoGesture = Gesture.Pan()
-    .activeOffsetX([-10, 10]) // Sensitivity
+    .activeOffsetX([-10, 10]) 
     .onUpdate((e) => {
       const baseValue = activeTab === 'feed' ? 0 : -width;
       scrollX.value = baseValue + e.translationX;
-      // Clamp values
       if (scrollX.value > 0) scrollX.value = 0;
       if (scrollX.value < -width) scrollX.value = -width;
     })
@@ -185,7 +181,7 @@ export default function FeedScreen() {
     const translateX = interpolate(
       scrollX.value,
       [0, -width],
-      [0, 80] // Roughly the distance between labels
+      [0, 84] 
     );
     return {
       transform: [{ translateX }],
@@ -200,13 +196,12 @@ export default function FeedScreen() {
   if (loading && !refreshing) return <LoadingScreen />;
 
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
+    <GestureHandlerRootView style={{ flex: 1, backgroundColor: theme.bg }}>
       <SafeAreaView style={s.container}>
-        <StatusBar barStyle="light-content" backgroundColor="#090909" />
 
         {/* Top Header */}
         <View style={s.topBar}>
-          <Text style={s.logo}>build<Text style={{ color: Colors.accent.primary }}>log</Text></Text>
+          <Text style={s.logo}>build<Text style={{ color: theme.purple }}>log</Text></Text>
           
           <View style={s.tabContainer}>
             <View style={s.tabsWrapper}>
@@ -227,11 +222,11 @@ export default function FeedScreen() {
               style={s.iconBtn} 
               onPress={() => router.push('/(tabs)/search')}
             >
-              <Feather name="search" size={20} color="#666" />
+              <Feather name="search" size={20} color={theme.textMuted} />
             </TouchableOpacity>
             
             <TouchableOpacity style={s.iconBtn}>
-              <Feather name="bell" size={20} color="#666" />
+              <Feather name="bell" size={20} color={theme.textMuted} />
             </TouchableOpacity>
           </View>
         </View>
@@ -256,7 +251,6 @@ export default function FeedScreen() {
                   <DevNewsFeed 
                     onOpenReader={(items, status) => {
                       setNewsItems(items);
-                      if (status) setNewsStatus(status);
                       setNewsRefreshing(false);
                     }} 
                     onRefreshStart={() => setNewsRefreshing(true)}
@@ -266,13 +260,13 @@ export default function FeedScreen() {
                 }
                 showsVerticalScrollIndicator={false}
                 refreshControl={
-                  <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.accent.primary} />
+                  <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.purple} />
                 }
                 onEndReached={() => fetchPosts()}
                 onEndReachedThreshold={0.5}
                 ListFooterComponent={loadingMore ? (
                   <View style={{ padding: 20, alignItems: 'center' }}>
-                    <ActivityIndicator color={Colors.accent.primary} />
+                    <ActivityIndicator color={theme.purple} />
                   </View>
                 ) : null}
               />
@@ -310,10 +304,10 @@ export default function FeedScreen() {
   );
 }
 
-const s = StyleSheet.create({
+const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#090909',
+    backgroundColor: theme.bg,
   },
   topBar: {
     flexDirection: 'row',
@@ -322,14 +316,14 @@ const s = StyleSheet.create({
     paddingHorizontal: Spacing.xl,
     paddingVertical: Spacing.lg,
     borderBottomWidth: 1,
-    borderBottomColor: '#111',
-    backgroundColor: '#090909',
+    borderBottomColor: theme.border,
+    backgroundColor: theme.bg,
     zIndex: 100,
   },
   logo: {
     fontSize: Typography.sizes.lg,
     fontWeight: '900',
-    color: Colors.text.primary,
+    color: theme.textPrimary,
     letterSpacing: -1,
   },
   tabContainer: {
@@ -348,12 +342,12 @@ const s = StyleSheet.create({
     alignItems: 'center',
   },
   tabText: {
-    color: '#666',
+    color: theme.textMuted,
     fontSize: 14,
     fontWeight: '700',
   },
   tabTextActive: {
-    color: '#FFF',
+    color: theme.textPrimary,
   },
   underline: {
     position: 'absolute',
@@ -361,7 +355,7 @@ const s = StyleSheet.create({
     left: 10,
     width: 40,
     height: 2,
-    backgroundColor: '#FFF',
+    backgroundColor: theme.purple,
     borderRadius: 1,
   },
   contentWrapper: {
@@ -374,65 +368,31 @@ const s = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  center: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  emptyText: {
-    color: '#444',
-    fontFamily: 'monospace',
-    fontSize: 12,
-  },
-  newsStatusBanner: {
-    position: 'absolute',
-    top: 70,
-    left: 0,
-    right: 0,
-    alignItems: 'center',
-    zIndex: 2000,
-  },
-  newsStatusText: {
-    color: '#9ca3af',
-    fontSize: 11,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  newsLoadingOverlay: {
-    position: 'absolute',
-    top: 100,
-    left: 0,
-    right: 0,
-    alignItems: 'center',
-    zIndex: 2000,
-  },
   errorState: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#0a0a0a',
+    backgroundColor: theme.bg,
     gap: 16,
   },
   errorIcon: {
     fontSize: 48,
   },
   errorTitle: {
-    color: '#fff',
+    color: theme.textPrimary,
     fontSize: 18,
     fontWeight: '600',
   },
   retryBtn: {
-    backgroundColor: '#1f2937',
+    backgroundColor: theme.bgInput,
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#374151',
+    borderColor: theme.border,
   },
   retryText: {
-    color: '#fff',
+    color: theme.textPrimary,
     fontSize: 14,
     fontWeight: '700',
   },

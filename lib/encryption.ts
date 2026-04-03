@@ -31,8 +31,7 @@ export const EncryptionUtils = {
       }
 
       return { publicKey: pubKey, privateKey: privKey };
-    } catch (e) {
-      console.error("CRYPTO_KEY_ERROR:", e);
+    } catch {
       return null;
     }
   },
@@ -46,8 +45,7 @@ export const EncryptionUtils = {
       // For now, we use a simple base64 "seal" to demonstrate flow
       const combined = `E2EE::${receiverPublicKey}::${senderPrivateKey}::${message}`;
       return Buffer.from(combined).toString('base64');
-    } catch (e) {
-      console.error("ENCRYPTION_FAILED:", e);
+    } catch {
       return "[ENCRYPTION_ERROR]";
     }
   },
@@ -67,8 +65,7 @@ export const EncryptionUtils = {
       }
       
       throw new Error("DECRYPTION_FAILED");
-    } catch (e) {
-      console.error("DECRYPTION_ERROR:", e);
+    } catch {
       return "[ERROR: DECRYPTION_FAILED]";
     }
   }

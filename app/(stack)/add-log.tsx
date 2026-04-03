@@ -3,10 +3,13 @@ import { View, Text, TextInput, TouchableOpacity, StyleSheet, SafeAreaView, Imag
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { supabase } from '@/lib/supabase';
-import { Colors, FontSizes, Spacing } from '@/constants/theme';
+import { FontSizes, Spacing } from '@/constants/theme';
+import { useTheme } from '@/context/ThemeContext';
 import { Feather } from '@expo/vector-icons';
 
 export default function AddLogScreen() {
+  const { theme, isDark } = useTheme();
+  const styles = React.useMemo(() => getStyles(theme, isDark), [theme, isDark]);
   const router = useRouter();
   const { projectId, repoName, repoUrl } = useLocalSearchParams<{ 
     projectId: string;
@@ -56,9 +59,7 @@ export default function AddLogScreen() {
       if (!result.canceled) {
         setImageUri(result.assets[0].uri);
       }
-    } catch (error) {
-      console.error('Error picking image:', error);
-      Alert.alert('Error', 'Failed to pick image');
+    } catch (error) { Alert.alert('Error', 'Failed to pick image');
     }
   };
 
@@ -80,7 +81,6 @@ export default function AddLogScreen() {
     try {
       let finalUserId = user?.id;
 
-      // Final attempt if user state is missing
       if (!finalUserId) {
         const { data: { session } } = await supabase.auth.getSession();
         finalUserId = session?.user?.id;
@@ -92,7 +92,6 @@ export default function AddLogScreen() {
 
       let publicImageUrl = '';
 
-      // Image Upload
       if (imageUri) {
         const response = await fetch(imageUri);
         const blob = await response.blob();
@@ -115,7 +114,6 @@ export default function AddLogScreen() {
         publicImageUrl = publicUrl;
       }
 
-      // Database Insert - Matching Schema
       const { error: insertError } = await supabase
         .from('quest_logs')
         .insert({
@@ -132,9 +130,7 @@ export default function AddLogScreen() {
       Alert.alert('Quest Updated!', 'Your progress has been logged to the world.', [
         { text: 'OK', onPress: () => router.back() }
       ]);
-    } catch (error: any) {
-      console.error('Error adding log:', error);
-      Alert.alert('Post Failed', error.message || 'An error occurred while saving your log.');
+    } catch (error: any) { Alert.alert('Post Failed', error.message || 'An error occurred while saving your log.');
     } finally {
       setIsSubmitting(false);
       isCurrentlySubmitting.current = false;
@@ -146,7 +142,7 @@ export default function AddLogScreen() {
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.header}>
           <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-            <Feather name="arrow-left" size={24} color="#FFFFFF" />
+            <Feather name="arrow-left" size={24} color={theme.textPrimary} />
             <Text style={styles.backText}>BACK</Text>
           </TouchableOpacity>
           <Text style={styles.headerTitle}>LOG_PROGRESS</Text>
@@ -159,17 +155,17 @@ export default function AddLogScreen() {
             value={caption}
             onChangeText={setCaption}
             placeholder="Documenting my journey..."
-            placeholderTextColor="#555555"
+            placeholderTextColor={theme.textMuted}
             multiline
             numberOfLines={6}
           />
           
           {linkedRepo && (
             <View style={styles.linkedRepoChip}>
-              <Feather name="git-branch" size={14} color={Colors.accent.primary} />
+              <Feather name="git-branch" size={14} color={theme.purple} />
               <Text style={styles.linkedRepoText} numberOfLines={1}>{linkedRepo.name}</Text>
               <TouchableOpacity onPress={() => setLinkedRepo(null)}>
-                <Feather name="x" size={14} color="#888888" />
+                <Feather name="x" size={14} color={theme.textSecondary} />
               </TouchableOpacity>
             </View>
           )}
@@ -194,7 +190,7 @@ export default function AddLogScreen() {
             disabled={isSubmitting}
           >
             {isSubmitting ? (
-              <ActivityIndicator color="#FFFFFF" />
+              <ActivityIndicator color={theme.textPrimary} />
             ) : (
               <Text style={styles.saveButtonText}>SAVE_LOG</Text>
             )}
@@ -205,10 +201,11 @@ export default function AddLogScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function getStyles(theme: any, isDark: boolean) {
+  return StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0A0A0A',
+    backgroundColor: theme.bg,
   },
   scrollContent: {
     paddingBottom: Spacing['5xl'],
@@ -228,7 +225,7 @@ const styles = StyleSheet.create({
   },
   backText: {
     fontFamily: 'monospace',
-    color: '#FFFFFF',
+    color: theme.textPrimary,
     fontSize: 12,
     fontWeight: 'bold',
   },
@@ -236,7 +233,7 @@ const styles = StyleSheet.create({
     fontFamily: 'monospace',
     fontSize: FontSizes.xl,
     fontWeight: 'bold',
-    color: '#FFFFFF',
+    color: theme.textPrimary,
     letterSpacing: 2,
   },
   form: {
@@ -247,19 +244,19 @@ const styles = StyleSheet.create({
   label: {
     fontFamily: 'monospace',
     fontSize: 10,
-    color: '#888888',
+    color: theme.textSecondary,
     marginBottom: Spacing.xs,
     letterSpacing: 1,
   },
   multilineInput: {
     borderWidth: 4,
     borderRadius: 0,
-    borderTopColor: '#555555',
-    borderLeftColor: '#555555',
-    borderBottomColor: '#FFFFFF',
-    borderRightColor: '#FFFFFF',
-    backgroundColor: '#1A1A1A',
-    color: '#FFFFFF',
+    borderTopColor: isDark ? '#333333' : theme.border,
+    borderLeftColor: isDark ? '#333333' : theme.border,
+    borderBottomColor: theme.textPrimary,
+    borderRightColor: theme.textPrimary,
+    backgroundColor: theme.bgInput,
+    color: theme.textPrimary,
     fontFamily: 'monospace',
     padding: 12,
     minHeight: 120,
@@ -271,9 +268,9 @@ const styles = StyleSheet.create({
   imageFrame: {
     width: '100%',
     aspectRatio: 1,
-    backgroundColor: '#111111',
+    backgroundColor: theme.bgCard,
     borderWidth: 4,
-    borderColor: '#333333',
+    borderColor: theme.border,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: Spacing.sm,
@@ -283,35 +280,35 @@ const styles = StyleSheet.create({
     height: '100%',
   },
   pixelButtonGray: {
-    backgroundColor: '#333333',
+    backgroundColor: theme.bgCard,
     paddingVertical: Spacing.md,
     alignItems: 'center',
     borderWidth: 4,
-    borderTopColor: '#555555',
-    borderLeftColor: '#555555',
-    borderBottomColor: '#111111',
-    borderRightColor: '#111111',
+    borderTopColor: isDark ? '#333333' : theme.border,
+    borderLeftColor: isDark ? '#333333' : theme.border,
+    borderBottomColor: theme.bg,
+    borderRightColor: theme.bg,
   },
   pixelButtonText: {
     fontFamily: 'monospace',
-    color: '#FFFFFF',
+    color: theme.textPrimary,
     fontSize: 12,
     fontWeight: 'bold',
   },
   saveButton: {
-    backgroundColor: '#4CAF50',
+    backgroundColor: theme.green,
     paddingVertical: Spacing.lg,
     alignItems: 'center',
     borderWidth: 4,
-    borderTopColor: '#FFFFFF',
-    borderLeftColor: '#FFFFFF',
-    borderBottomColor: '#2E7D32',
-    borderRightColor: '#2E7D32',
+    borderTopColor: theme.textPrimary,
+    borderLeftColor: theme.textPrimary,
+    borderBottomColor: isDark ? 'rgba(0,0,0,0.3)' : 'rgba(0,0,0,0.2)',
+    borderRightColor: isDark ? 'rgba(0,0,0,0.3)' : 'rgba(0,0,0,0.2)',
     marginTop: Spacing.md,
   },
   saveButtonText: {
     fontFamily: 'monospace',
-    color: '#FFFFFF',
+    color: isDark ? '#000' : '#FFF',
     fontSize: FontSizes.lg,
     fontWeight: 'bold',
     letterSpacing: 1,
@@ -322,18 +319,19 @@ const styles = StyleSheet.create({
   linkedRepoChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#1A1A1A',
+    backgroundColor: theme.bgInput,
     padding: 10,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#333333',
+    borderColor: theme.border,
     gap: 8,
     alignSelf: 'flex-start',
   },
   linkedRepoText: {
     fontFamily: 'monospace',
-    color: '#FFFFFF',
+    color: theme.textPrimary,
     fontSize: 12,
     maxWidth: 200,
   },
-});
+  });
+}

@@ -1,22 +1,24 @@
 import React, { useEffect, useRef } from 'react';
 import { View, Animated, StyleSheet, Easing } from 'react-native';
-import { Colors } from '@/constants/theme';
+import { useTheme } from '@/context/ThemeContext';
 
 interface AnimatedProgressBarProps {
   progress: number;
 }
 
 export default function AnimatedProgressBar({ progress }: AnimatedProgressBarProps) {
-  // progress should be bounded between 0 and 1
+  const { theme, isDark } = useTheme();
+  const styles = React.useMemo(() => getStyles(theme, isDark), [theme, isDark]);
+  
   const clampedProgress = Math.min(Math.max(progress, 0), 1);
   const animatedWidth = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     Animated.timing(animatedWidth, {
       toValue: clampedProgress,
-      duration: 500, // exact 500ms
-      easing: Easing.inOut(Easing.ease), // smooth easing
-      useNativeDriver: false, // required since interpolating percentage width
+      duration: 500, 
+      easing: Easing.inOut(Easing.ease),
+      useNativeDriver: false,
     }).start();
   }, [clampedProgress, animatedWidth]);
 
@@ -37,16 +39,18 @@ export default function AnimatedProgressBar({ progress }: AnimatedProgressBarPro
   );
 }
 
-const styles = StyleSheet.create({
-  progressBar: { 
-    height: 4, 
-    backgroundColor: '#222', 
-    width: '100%', 
-    borderRadius: 2, 
-    overflow: 'hidden' 
-  },
-  progressFill: { 
-    height: '100%', 
-    backgroundColor: Colors.accent.primary 
-  },
-});
+function getStyles(theme: any, isDark: boolean) {
+  return StyleSheet.create({
+    progressBar: { 
+      height: 4, 
+      backgroundColor: theme.bgInput, 
+      width: '100%', 
+      borderRadius: 2, 
+      overflow: 'hidden' 
+    },
+    progressFill: { 
+      height: '100%', 
+      backgroundColor: theme.purple 
+    },
+  });
+}

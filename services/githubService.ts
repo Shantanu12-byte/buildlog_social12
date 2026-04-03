@@ -32,7 +32,6 @@ export const githubService = {
 
       return true;
     } catch (error) {
-      console.error('githubService.exchangeGithubCode error:', error);
       throw error;
     }
   },
@@ -51,7 +50,6 @@ export const githubService = {
       const data = await response.json();
       return data as GithubRepo[];
     } catch (error) {
-      console.error('githubService.fetchUserReposFromBackend error:', error);
       throw error;
     }
   },
@@ -80,7 +78,6 @@ export const githubService = {
       const data = await response.json();
       return data as GithubRepo[];
     } catch (error) {
-      console.error('githubService.fetchUserRepos error:', error);
       throw error;
     }
   },

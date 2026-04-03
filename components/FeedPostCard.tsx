@@ -1,11 +1,12 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { View, Text, StyleSheet, Pressable, TouchableOpacity } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { Image } from 'expo-image';
-import { Colors, Typography, Spacing, Radius } from '@/constants/theme';
+import { Typography, Spacing, Radius } from '@/constants/theme';
 import { AvatarBlock } from './AvatarBlock';
 import { router } from 'expo-router';
 import { VerifiedSkillChip, SkillLevel } from './VerifiedSkillChip';
+import { useTheme } from '@/context/ThemeContext';
 
 export interface FeedPost {
   id: string;
@@ -45,8 +46,12 @@ interface FeedPostCardProps {
 const IMAGE_ASPECT_RATIO = 16 / 9;
 
 export function FeedPostCard({ post, likeCount, isLiked, onLikePress, onCheerPress, onCommentPress, onProfilePress }: FeedPostCardProps) {
+  const { theme, isDark } = useTheme();
+  const styles = React.useMemo(() => getStyles(theme, isDark), [theme, isDark]);
   const [isLiking, setIsLiking] = useState(false);
+  
   const displayLikeCount = likeCount ?? (post.cheers || 0);
+
   const handleLikePress = async () => {
     if (isLiking) return;
     setIsLiking(true);
@@ -54,11 +59,12 @@ export function FeedPostCard({ post, likeCount, isLiked, onLikePress, onCheerPre
       if (onLikePress) await onLikePress(post.id);
       else if (onCheerPress) await onCheerPress(post.id);
     } catch (e) {
-      console.error('LIKE_ERROR:', e);
+      // Like error handled silently
     } finally {
       setIsLiking(false);
     }
   };
+
   const handleProfilePress = () => {
     if (post.author_id) {
       if (onProfilePress) {
@@ -69,12 +75,10 @@ export function FeedPostCard({ post, likeCount, isLiked, onLikePress, onCheerPre
     }
   };
 
-  // Compute text fallbacks
   const displayTitle = post.projectTitle || post.title || 'Untitled Project';
   const displayDesc = post.caption || post.description || '';
   const displayImage = post.imageUrl || post.image_url;
   
-  // Custom simple relative time
   const getRelativeTime = (dateStr: string) => {
     const diffMs = Date.now() - new Date(dateStr).getTime();
     const diffMins = Math.round(diffMs / 60000);
@@ -85,9 +89,9 @@ export function FeedPostCard({ post, likeCount, isLiked, onLikePress, onCheerPre
   };
   
   const timeText = post.timestamp || (post.created_at ? getRelativeTime(post.created_at) : 'Just now');
-  const skillsList = post.skills || post.needed_skills || ['React', 'Node', 'OpenAI']; // Fallback for mockup
-  const progressVal = post.progress ?? 65; // Mockup fallback
-  const isCollab = post.looking_for_collabs !== false; // Default true for UI
+  const skillsList = post.skills || post.needed_skills || [];
+  const progressVal = post.progress ?? 0;
+  const isCollab = post.looking_for_collabs !== false;
   const statusText = post.status || 'Building';
 
   return (
@@ -106,13 +110,13 @@ export function FeedPostCard({ post, likeCount, isLiked, onLikePress, onCheerPre
               <Text style={styles.timestamp}>{timeText}</Text>
               <Text style={styles.dot}>•</Text>
               
-              <View style={[styles.pill, { backgroundColor: 'transparent', borderColor: '#8A2BE2' }]}>
-                <Text style={[styles.pillText, { color: '#8A2BE2' }]}>{statusText}</Text>
+              <View style={[styles.pill, { borderColor: theme.purple }]}>
+                <Text style={[styles.pillText, { color: theme.purple }]}>{statusText}</Text>
               </View>
               
               {isCollab && (
-                <View style={[styles.pill, { backgroundColor: 'transparent', borderColor: '#2EA043' }]}>
-                  <Text style={[styles.pillText, { color: '#2EA043' }]}>Open to collab</Text>
+                <View style={[styles.pill, { borderColor: theme.green }]}>
+                  <Text style={[styles.pillText, { color: theme.green }]}>Open to collab</Text>
                 </View>
               )}
             </View>
@@ -138,7 +142,7 @@ export function FeedPostCard({ post, likeCount, isLiked, onLikePress, onCheerPre
             />
           ) : (
             <View style={styles.imagePlaceholder}>
-              <Feather name="image" size={32} color={Colors.text.tertiary} />
+              <Feather name="image" size={32} color={theme.textMuted} />
             </View>
           )}
           <View style={styles.inProgressBadge}>
@@ -172,17 +176,17 @@ export function FeedPostCard({ post, likeCount, isLiked, onLikePress, onCheerPre
           {/* Github Link */}
           {(post.hasGithubLink || post.github_url) && (
             <View style={styles.githubRow}>
-              <Feather name="github" size={14} color={Colors.text.secondary} />
+              <Feather name="github" size={14} color={theme.textSecondary} />
               <Text style={styles.githubText}>{post.github_url ? post.github_url.split('://').pop() : `github.com/${post.username}/${displayTitle.toLowerCase().replace(/\s+/g, '')}`}</Text>
             </View>
           )}
 
           {/* Progress Bar */}
           <View style={styles.progressContainer}>
-            <View style={styles.progressHeader}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <Text style={styles.progressLabel}>Progress</Text>
               <Text style={styles.progressPercentage}>{progressVal}%</Text>
-            </View>
+            </div>
             <View style={styles.track}>
               <View style={[styles.fill, { width: `${progressVal}%` }]} />
             </View>
@@ -193,13 +197,13 @@ export function FeedPostCard({ post, likeCount, isLiked, onLikePress, onCheerPre
       {/* Action Bar */}
       <View style={styles.actions}>
         <TouchableOpacity
-          style={[styles.actionBtn, styles.hypeBtn, isLiked && styles.hypeBtnActive]}
+          style={[styles.hypeBtn, isLiked && styles.hypeBtnActive]}
           onPress={handleLikePress}
         >
           <Feather 
             name="plus" 
             size={16} 
-            color={isLiked ? "#FFFFFF" : "#8A2BE2"} 
+            color={isLiked ? "#FFFFFF" : theme.purple} 
             style={{ fontWeight: 'bold' }}
           />
           <Text style={[styles.hypeText, isLiked && styles.hypeTextActive]}>
@@ -212,12 +216,12 @@ export function FeedPostCard({ post, likeCount, isLiked, onLikePress, onCheerPre
             style={styles.actionBtnSmall}
             onPress={() => onCommentPress?.(post.id)}
           >
-            <Feather name="message-square" size={16} color={Colors.text.primary} />
-            <Text style={styles.actionText}>{post.comments || 8}</Text>
+            <Feather name="message-square" size={16} color={theme.textPrimary} />
+            <Text style={styles.actionText}>{post.comments || 0}</Text>
           </Pressable>
           
           <Pressable style={styles.actionBtnSmall}>
-            <Feather name="upload" size={16} color={Colors.text.primary} />
+            <Feather name="upload" size={16} color={theme.textPrimary} />
           </Pressable>
         </View>
       </View>
@@ -228,11 +232,12 @@ export function FeedPostCard({ post, likeCount, isLiked, onLikePress, onCheerPre
   );
 }
 
-const styles = StyleSheet.create({
+function getStyles(theme: any, isDark: boolean) {
+  return StyleSheet.create({
   card: {
     paddingHorizontal: Spacing.lg,
     paddingTop: Spacing.xl,
-    backgroundColor: Colors.bg.primary,
+    backgroundColor: theme.bg,
   },
   clickableArea: {
     marginVertical: Spacing.xs,
@@ -249,16 +254,12 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: Spacing.sm,
   },
-  avatar: {
-    borderRadius: 20,
-    backgroundColor: Colors.bg.secondary,
-  },
   headerText: {
     flex: 1,
     gap: 2,
   },
   username: {
-    color: Colors.text.primary,
+    color: theme.textPrimary,
     fontSize: Typography.sizes.sm,
     fontWeight: '700',
     letterSpacing: -0.2,
@@ -270,11 +271,11 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
   },
   timestamp: {
-    color: Colors.text.tertiary,
+    color: theme.textSecondary,
     fontSize: Typography.sizes.xs,
   },
   dot: {
-    color: Colors.text.tertiary,
+    color: theme.textMuted,
     fontSize: Typography.sizes.xs,
   },
   pill: {
@@ -290,11 +291,11 @@ const styles = StyleSheet.create({
   imageContainer: {
     width: '100%',
     aspectRatio: IMAGE_ASPECT_RATIO,
-    backgroundColor: Colors.bg.secondary,
+    backgroundColor: theme.bgCard,
     borderRadius: Radius.lg,
     overflow: 'hidden',
     borderWidth: 0.5,
-    borderColor: Colors.border.subtle,
+    borderColor: theme.border,
     marginBottom: Spacing.md,
     position: 'relative',
     justifyContent: 'center',
@@ -317,10 +318,10 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: Radius.full,
     borderWidth: 1,
-    borderColor: '#8A2BE2',
+    borderColor: theme.purple,
   },
   inProgressText: {
-    color: '#8A2BE2',
+    color: theme.purple,
     fontSize: 10,
     fontWeight: '600',
   },
@@ -329,13 +330,13 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.lg,
   },
   title: {
-    color: Colors.text.primary,
+    color: theme.textPrimary,
     fontSize: Typography.sizes.lg,
     fontWeight: '700',
     letterSpacing: -0.4,
   },
   description: {
-    color: Colors.text.secondary,
+    color: theme.textSecondary,
     fontSize: Typography.sizes.sm,
     lineHeight: 20,
   },
@@ -345,19 +346,6 @@ const styles = StyleSheet.create({
     gap: Spacing.xs,
     marginTop: 2,
   },
-  skillPill: {
-    backgroundColor: Colors.bg.secondary,
-    borderWidth: 0.5,
-    borderColor: Colors.border.subtle,
-    borderRadius: Radius.sm,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-  },
-  skillText: {
-    color: Colors.text.secondary,
-    fontSize: 11,
-    fontWeight: '500',
-  },
   githubRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -365,36 +353,31 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   githubText: {
-    color: '#3B82F6', // Tech blue
+    color: theme.purple, // Theme color for important links
     fontSize: Typography.sizes.sm,
   },
   progressContainer: {
     marginTop: Spacing.xs,
     gap: 4,
   },
-  progressHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
   progressLabel: {
-    color: Colors.text.tertiary,
+    color: theme.textSecondary,
     fontSize: Typography.sizes.xs,
   },
   progressPercentage: {
-    color: '#8A2BE2',
+    color: theme.purple,
     fontSize: Typography.sizes.xs,
     fontWeight: '600',
   },
   track: {
     height: 4,
-    backgroundColor: Colors.bg.secondary,
+    backgroundColor: theme.bgInput,
     borderRadius: 2,
     overflow: 'hidden',
   },
   fill: {
     height: '100%',
-    backgroundColor: '#8A2BE2',
+    backgroundColor: theme.purple,
     borderRadius: 2,
   },
   actions: {
@@ -403,17 +386,13 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: Spacing.xl,
   },
-  actionBtn: {
-    // Add missing actionBtn style
-    padding: 0,
-  },
   hypeBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(138,43,226,0.1)',
+    backgroundColor: isDark ? 'rgba(124,58,237,0.1)' : 'rgba(124,58,237,0.05)',
     borderWidth: 1,
-    borderColor: 'rgba(138,43,226,0.3)',
+    borderColor: isDark ? 'rgba(124,58,237,0.3)' : 'rgba(124,58,237,0.2)',
     borderRadius: Radius.full,
     paddingHorizontal: 20,
     paddingVertical: 10,
@@ -421,11 +400,11 @@ const styles = StyleSheet.create({
     minWidth: 120,
   },
   hypeBtnActive: {
-    backgroundColor: '#8A2BE2',
-    borderColor: '#8A2BE2',
+    backgroundColor: theme.purple,
+    borderColor: theme.purple,
   },
   hypeText: {
-    color: '#8A2BE2',
+    color: theme.purple,
     fontSize: Typography.sizes.sm,
     fontWeight: '700',
   },
@@ -440,22 +419,23 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: Colors.bg.secondary,
+    backgroundColor: theme.bgCard,
     borderWidth: 0.5,
-    borderColor: Colors.border.subtle,
+    borderColor: theme.border,
     borderRadius: Radius.full,
     paddingHorizontal: 16,
     paddingVertical: 10,
     gap: 6,
   },
   actionText: {
-    color: Colors.text.secondary,
+    color: theme.textSecondary,
     fontSize: Typography.sizes.sm,
     fontWeight: '600',
   },
   separator: {
     height: 1,
-    backgroundColor: Colors.border.subtle,
+    backgroundColor: theme.border,
     opacity: 0.5,
   },
-});
+  });
+}

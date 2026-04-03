@@ -32,9 +32,9 @@ const BASE_DEVTO = 'https://dev.to/api/articles';
 function isStrictlyDevRelated(story: { title: string }) {
   const title = story.title.toLowerCase();
   
-  // FIX 7 - Stricter Filtering
+  // Relaxed filtering for better availability
   if (title.split(' ').length <= 1) return false;
-  if (title.length < 20) return false;
+  if (title.length < 12) return false; // Reduced from 20 to 12
   
   const BLACKLIST_KEYWORDS = [
     'exercise', 'tutorial', 'quiz', 'problem', 'solution', 
@@ -131,7 +131,7 @@ export default function DevNewsFeed({
         newsCache = parsed;
       }
     } catch (e) {
-      console.error('loadCachedNews error:', e);
+      // Cached news load error handled silently
     }
   };
 
@@ -161,7 +161,7 @@ export default function DevNewsFeed({
       if (onRefreshEnd) onRefreshEnd();
       setLoading(false);
     } catch (err) {
-      console.error('loadAllNews error:', err);
+      // News load error handled silently
       setLoading(false);
       if (onRefreshEnd) onRefreshEnd();
     }
@@ -170,27 +170,27 @@ export default function DevNewsFeed({
   const fetchFreshNews = async (): Promise<NewsItem[]> => {
     try {
       // 1. Fetch from Dev.to tags separately
-      const urls = DEVTO_TAGS.map(tag => `${BASE_DEVTO}?tag=${tag}&top=1&per_page=5`);
+      const urls = DEVTO_TAGS.map(tag => `${BASE_DEVTO}?tag=${tag}&top=1&per_page=8`); // Increased per_page from 5 to 8
       const devToResults = await Promise.all(urls.map(u => fetch(u).then(r => r.json())));
       const devToItems = devToResults.flat()
-        .filter(d => (d.public_reactions_count || d.positive_reactions_count || 0) >= 5)
+        .filter(d => (d.public_reactions_count || d.positive_reactions_count || 0) >= 3) // Lowered reaction threshold from 5 to 3
         .map(normalizeDevTo)
         .filter(d => isStrictlyDevRelated(d));
 
-      // 2. Fetch from HN with 50+ upvote quality filter (Reduced from top 25 to 15)
+      // 2. Fetch from HN with 40+ upvote quality filter (Increased from top 15 to 30)
       const hnRes = await fetch('https://hacker-news.firebaseio.com/v0/topstories.json');
       const hnIds = await hnRes.json();
-      const hnTop15 = hnIds.slice(0, 15);
+      const hnTop30 = hnIds.slice(0, 30); // Increased from 15 to 30
 
       const hnItemsRaw = await Promise.all(
-        hnTop15.map(async (id: number) => {
+        hnTop30.map(async (id: number) => {
           const itemRes = await fetch(`https://hacker-news.firebaseio.com/v0/item/${id}.json`);
           return itemRes.json();
         })
       );
 
       const hnItems = hnItemsRaw
-        .filter(d => d && d.score >= 50 && isStrictlyDevRelated(d) && !isBlacklisted(d.url))
+        .filter(d => d && d.score >= 40 && isStrictlyDevRelated(d) && !isBlacklisted(d.url)) // Lowered score from 50 to 40
         .map(normalizeHN);
 
       // 3. Merge and Deduplicate
@@ -211,7 +211,7 @@ export default function DevNewsFeed({
 
       return finalNews;
     } catch (err) {
-      console.error('fetchFreshNews error:', err);
+      // Fresh news fetch error handled silently
       return [];
     }
   };

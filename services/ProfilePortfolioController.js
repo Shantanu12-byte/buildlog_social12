@@ -20,7 +20,6 @@ export const ProfilePortfolioController = {
       }
       return await response.json();
     } catch (error) {
-      console.error('checkGitHubStatus error:', error);
       return { isConnected: false, hasSufficientScopes: false, error: error.message };
     }
   },
@@ -37,7 +36,6 @@ export const ProfilePortfolioController = {
       if (!response.ok) throw new Error('FAILED_TO_LOAD_PROJECTS');
       return await response.json();
     } catch (error) {
-      console.error('loadUserProjects error:', error);
       return { projects: [], total_count: 0 };
     }
   },
@@ -55,7 +53,6 @@ export const ProfilePortfolioController = {
       });
       return await response.json();
     } catch (error) {
-      console.error('disconnectGitHub error:', error);
       throw error;
     }
   }

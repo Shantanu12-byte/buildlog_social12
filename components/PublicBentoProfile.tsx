@@ -2,8 +2,9 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Linking, Platform } from 'react-native';
 import { Image } from 'expo-image';
 import { Feather, FontAwesome5 } from '@expo/vector-icons';
-import { Colors, Typography, Spacing, Radius } from '@/constants/theme';
-import { Avatar, Tag } from '@/components/ui/UI';
+import { Typography, Spacing, Radius } from '@/constants/theme';
+import { Avatar } from '@/components/ui/UI';
+import { useTheme } from '@/context/ThemeContext';
 
 interface PublicBentoProfileProps {
   user: {
@@ -26,6 +27,9 @@ interface PublicBentoProfileProps {
 }
 
 export function PublicBentoProfile({ user, pinnedProject, recentPosts }: PublicBentoProfileProps) {
+  const { theme, isDark } = useTheme();
+  const styles = React.useMemo(() => getStyles(theme, isDark), [theme, isDark]);
+  
   const displayName = user.full_name || user.username || 'Builder';
   const bio = user.bio || 'Building the future, one core at a time.';
   const streak = user.streak_count || 0;
@@ -35,99 +39,99 @@ export function PublicBentoProfile({ user, pinnedProject, recentPosts }: PublicB
   };
 
   return (
-    <ScrollView style={s.container} contentContainerStyle={s.content}>
+    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       {/* Bento Grid */}
-      <View style={s.grid}>
+      <View style={styles.grid}>
         
         {/* Profile Card (Large) */}
-        <View style={[s.card, s.profileCard]}>
-          <View style={s.profileHeader}>
-            <Avatar username={user.username} uri={user.avatar_url} size={80} style={s.avatar} />
-            <View style={s.profileInfo}>
-              <Text style={s.name}>{displayName}</Text>
-              <Text style={s.handle}>@{user.username}</Text>
+        <View style={[styles.card, styles.profileCard]}>
+          <View style={styles.profileHeader}>
+            <Avatar username={user.username} uri={user.avatar_url} size={80} style={styles.avatar} />
+            <View style={styles.profileInfo}>
+              <Text style={styles.name}>{displayName}</Text>
+              <Text style={styles.handle}>@{user.username}</Text>
             </View>
           </View>
-          <Text style={s.bio}>{bio}</Text>
+          <Text style={styles.bio}>{bio}</Text>
           {user.college && (
-            <View style={s.collegeTag}>
-              <Feather name="map-pin" size={12} color={Colors.text.secondary} />
-              <Text style={s.collegeText}>{user.college}</Text>
+            <View style={styles.collegeTag}>
+              <Feather name="map-pin" size={12} color={theme.textSecondary} />
+              <Text style={styles.collegeText}>{user.college}</Text>
             </View>
           )}
         </View>
 
         {/* Streak Card (Small) */}
-        <View style={[s.card, s.streakCard]}>
-          <View style={s.streakIconContainer}>
+        <View style={[styles.card, styles.streakCard]}>
+          <View style={styles.streakIconContainer}>
             <FontAwesome5 name="fire-alt" size={32} color="#FF5F1F" />
           </View>
-          <Text style={s.streakCount}>{streak}</Text>
-          <Text style={s.streakLabel}>DAY STREAK</Text>
+          <Text style={styles.streakCount}>{streak}</Text>
+          <Text style={styles.streakLabel}>DAY STREAK</Text>
         </View>
 
         {/* Socials Card */}
-        <View style={[s.card, s.socialsCard]}>
+        <View style={[styles.card, styles.socialsCard]}>
           <TouchableOpacity 
-            style={[s.socialButton, { backgroundColor: '#24292e' }]} 
+            style={[styles.socialButton, { backgroundColor: '#24292e' }]} 
             onPress={() => openURL(user.github_url)}
           >
             <FontAwesome5 name="github" size={20} color="#FFF" />
-            <Text style={s.socialButtonText}>GitHub</Text>
+            <Text style={styles.socialButtonText}>GitHub</Text>
           </TouchableOpacity>
           <TouchableOpacity 
-            style={[s.socialButton, { backgroundColor: '#0077b5' }]} 
+            style={[styles.socialButton, { backgroundColor: '#0077b5' }]} 
             onPress={() => openURL(user.linkedin_url)}
           >
             <FontAwesome5 name="linkedin" size={20} color="#FFF" />
-            <Text style={s.socialButtonText}>LinkedIn</Text>
+            <Text style={styles.socialButtonText}>LinkedIn</Text>
           </TouchableOpacity>
         </View>
 
         {/* Follow Card */}
-        <TouchableOpacity style={[s.card, s.followCard]} activeOpacity={0.8}>
-          <Text style={s.followText}>Follow on Buildlog</Text>
+        <TouchableOpacity style={[styles.card, styles.followCard]} activeOpacity={0.8}>
+          <Text style={styles.followText}>Follow on Buildlog</Text>
           <Feather name="plus-circle" size={20} color="#FFF" />
         </TouchableOpacity>
 
         {/* Pinned Project (Wide) */}
         {pinnedProject && (
-          <View style={[s.card, s.wideCard]}>
-            <View style={s.cardHeader}>
+          <View style={[styles.card, styles.wideCard]}>
+            <View style={styles.cardHeader}>
               <Feather name="star" size={16} color="#FFD700" />
-              <Text style={s.sectionTitle}>PINNED PROJECT</Text>
+              <Text style={styles.sectionTitle}>PINNED PROJECT</Text>
             </View>
-            <View style={s.projectContent}>
+            <View style={styles.projectContent}>
               {pinnedProject.image_url && (
-                <Image source={{ uri: pinnedProject.image_url }} style={s.projectImage} />
+                <Image source={{ uri: pinnedProject.image_url }} style={styles.projectImage} />
               )}
-              <View style={s.projectInfo}>
-                <Text style={s.projectTitle}>{pinnedProject.title}</Text>
-                <Text style={s.projectDesc} numberOfLines={2}>{pinnedProject.description}</Text>
+              <View style={styles.projectInfo}>
+                <Text style={styles.projectTitle}>{pinnedProject.title}</Text>
+                <Text style={styles.projectDesc} numberOfLines={2}>{pinnedProject.description}</Text>
               </View>
             </View>
           </View>
         )}
 
         {/* Recent Activity */}
-        <View style={[s.card, s.wideCard, s.activityCard]}>
-          <View style={s.cardHeader}>
-            <Feather name="clock" size={16} color={Colors.accent.primary} />
-            <Text style={s.sectionTitle}>RECENT ACTIVITY</Text>
+        <View style={[styles.card, styles.wideCard, styles.activityCard]}>
+          <View style={styles.cardHeader}>
+            <Feather name="clock" size={16} color={theme.purple} />
+            <Text style={styles.sectionTitle}>RECENT ACTIVITY</Text>
           </View>
-          <View style={s.postsList}>
+          <View style={styles.postsList}>
             {recentPosts.length > 0 ? (
               recentPosts.slice(0, 3).map((post, idx) => (
-                <View key={post.id || idx} style={s.postItem}>
-                  <View style={s.postDot} />
-                  <View style={s.postTextContainer}>
-                    <Text style={s.postTitle} numberOfLines={1}>{post.title || post.caption || 'New Update'}</Text>
-                    <Text style={s.postDate}>{new Date(post.created_at).toLocaleDateString()}</Text>
+                <View key={post.id || idx} style={styles.postItem}>
+                  <View style={styles.postDot} />
+                  <View style={styles.postTextContainer}>
+                    <Text style={styles.postTitle} numberOfLines={1}>{post.title || post.caption || 'New Update'}</Text>
+                    <Text style={styles.postDate}>{new Date(post.created_at).toLocaleDateString()}</Text>
                   </View>
                 </View>
               ))
             ) : (
-              <Text style={s.emptyText}>No recent posts.</Text>
+              <Text style={styles.emptyText}>No recent posts.</Text>
             )}
           </View>
         </View>
@@ -135,17 +139,17 @@ export function PublicBentoProfile({ user, pinnedProject, recentPosts }: PublicB
       </View>
 
       {/* Footer Logo */}
-      <View style={s.footer}>
-        <Text style={s.footerText}>built with BUILDLOG</Text>
+      <View style={styles.footer}>
+        <Text style={styles.footerText}>built with BUILDLOG</Text>
       </View>
     </ScrollView>
   );
 }
 
-const s = StyleSheet.create({
+const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.bg.primary,
+    backgroundColor: theme.bg,
   },
   content: {
     padding: Spacing.md,
@@ -159,17 +163,16 @@ const s = StyleSheet.create({
     gap: Spacing.md,
   },
   card: {
-    backgroundColor: Colors.bg.secondary,
+    backgroundColor: theme.bgCard,
     borderRadius: Radius.lg,
     padding: Spacing.lg,
     borderWidth: 1,
-    borderColor: Colors.border.subtle,
-    ...Platform.select({
-      web: {
-        transition: 'transform 0.2s ease-in-out',
-        cursor: 'default',
-      },
-    }),
+    borderColor: theme.border,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
   },
   profileCard: {
     width: '100%',
@@ -183,25 +186,25 @@ const s = StyleSheet.create({
   avatar: {
     marginRight: Spacing.md,
     borderWidth: 2,
-    borderColor: Colors.accent.primary,
+    borderColor: theme.purple,
   },
   profileInfo: {
     flex: 1,
   },
   name: {
-    color: Colors.text.primary,
+    color: theme.textPrimary,
     fontSize: Typography.sizes.xl,
     fontWeight: '800',
     letterSpacing: -0.5,
   },
   handle: {
-    color: Colors.accent.primary,
+    color: theme.purple,
     fontSize: Typography.sizes.sm,
     fontWeight: '600',
     fontFamily: Platform.OS === 'web' ? 'monospace' : undefined,
   },
   bio: {
-    color: Colors.text.secondary,
+    color: theme.textSecondary,
     fontSize: Typography.sizes.base,
     lineHeight: 22,
     marginBottom: Spacing.md,
@@ -210,14 +213,14 @@ const s = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: Colors.bg.tertiary,
+    backgroundColor: theme.bgInput,
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: Radius.md,
     alignSelf: 'flex-start',
   },
   collegeText: {
-    color: Colors.text.secondary,
+    color: theme.textSecondary,
     fontSize: Typography.sizes.xs,
     fontWeight: '500',
   },
@@ -231,12 +234,12 @@ const s = StyleSheet.create({
     marginBottom: Spacing.sm,
   },
   streakCount: {
-    color: '#FFF',
+    color: theme.textPrimary,
     fontSize: 32,
     fontWeight: '900',
   },
   streakLabel: {
-    color: '#888',
+    color: theme.textMuted,
     fontSize: 10,
     fontWeight: '800',
     letterSpacing: 1,
@@ -262,12 +265,13 @@ const s = StyleSheet.create({
   },
   followCard: {
     width: '100%',
-    backgroundColor: Colors.accent.primary,
+    backgroundColor: theme.purple,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: Spacing.sm,
     paddingVertical: Spacing.lg,
+    borderColor: theme.purple,
   },
   followText: {
     color: '#FFF',
@@ -284,7 +288,7 @@ const s = StyleSheet.create({
     marginBottom: Spacing.lg,
   },
   sectionTitle: {
-    color: '#888',
+    color: theme.textMuted,
     fontSize: 10,
     fontWeight: '900',
     letterSpacing: 1.5,
@@ -297,20 +301,20 @@ const s = StyleSheet.create({
     width: 80,
     height: 80,
     borderRadius: Radius.md,
-    backgroundColor: Colors.bg.tertiary,
+    backgroundColor: theme.bgInput,
   },
   projectInfo: {
     flex: 1,
     justifyContent: 'center',
   },
   projectTitle: {
-    color: Colors.text.primary,
+    color: theme.textPrimary,
     fontSize: Typography.sizes.base,
     fontWeight: '700',
     marginBottom: 4,
   },
   projectDesc: {
-    color: Colors.text.secondary,
+    color: theme.textSecondary,
     fontSize: Typography.sizes.sm,
     lineHeight: 18,
   },
@@ -329,7 +333,7 @@ const s = StyleSheet.create({
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: Colors.accent.primary,
+    backgroundColor: theme.purple,
   },
   postTextContainer: {
     flex: 1,
@@ -338,18 +342,18 @@ const s = StyleSheet.create({
     alignItems: 'center',
   },
   postTitle: {
-    color: Colors.text.primary,
+    color: theme.textPrimary,
     fontSize: Typography.sizes.sm,
     fontWeight: '600',
     flex: 1,
     marginRight: Spacing.md,
   },
   postDate: {
-    color: Colors.text.tertiary,
+    color: theme.textMuted,
     fontSize: Typography.sizes.xs,
   },
   emptyText: {
-    color: Colors.text.tertiary,
+    color: theme.textMuted,
     fontSize: Typography.sizes.sm,
     fontStyle: 'italic',
   },
@@ -358,7 +362,7 @@ const s = StyleSheet.create({
     alignItems: 'center',
   },
   footerText: {
-    color: Colors.text.tertiary,
+    color: theme.textMuted,
     fontSize: 10,
     fontWeight: '800',
     letterSpacing: 2,

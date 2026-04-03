@@ -47,7 +47,6 @@ export async function updateProfileWithSkillsData(profile, newSkillData) {
       nextStep: score === total ? `Proceed to ${topic} NEXT TIER` : "Review your misconceptions and try again for a perfect score!"
     };
   } catch (error) {
-    console.error('ProfilePersistenceManager Error:', error);
     return null;
   }
 }
@@ -79,7 +78,6 @@ export async function fetchUserProjects(userId) {
       isPrivate: false
     }));
   } catch (error) {
-    console.error('fetchUserProjects Error:', error);
     return [];
   }
 }

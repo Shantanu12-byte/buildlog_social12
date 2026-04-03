@@ -8,19 +8,20 @@ import {
   Alert,
   StatusBar,
   ScrollView,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Feather, FontAwesome5 } from '@expo/vector-icons';
 import * as Linking from 'expo-linking';
 import { supabase } from '@/lib/supabase';
-import { Colors, Spacing } from '@/constants/theme';
+import { Spacing, Radius } from '@/constants/theme';
 import { Avatar, LoadingScreen } from '@/components/ui/UI';
-
-const ACCENT_PURPLE = '#5D3FD3';
-const CARD_BG = '#1A1A1A';
+import { useTheme } from '@/context/ThemeContext';
 
 export default function OtherProfileScreen() {
+  const { theme, isDark } = useTheme();
+  const s = React.useMemo(() => getStyles(theme, isDark), [theme, isDark]);
   const router = useRouter();
   const { id: targetUserId } = useLocalSearchParams<{ id: string }>();
   
@@ -72,7 +73,7 @@ export default function OtherProfileScreen() {
       const [f1, f2, posts] = await Promise.all([
         supabase.from('followers').select('*', { count: 'exact', head: true }).eq('following_id', targetUserId),
         supabase.from('followers').select('*', { count: 'exact', head: true }).eq('follower_id', targetUserId),
-        supabase.from('posts').select('*', { count: 'exact', head: true }).eq('user_id', targetUserId),
+        supabase.from('posts').select('*', { count: 'exact', head: true }).eq('author_id', targetUserId),
       ]);
 
       setStats({
@@ -80,9 +81,7 @@ export default function OtherProfileScreen() {
         followingCount: f2.count || 0,
         postCount: posts.count || 0,
       });
-    } catch (e) {
-      console.error(e);
-    } finally {
+    } catch (e) { } finally {
       setIsLoading(false);
     }
   };
@@ -126,13 +125,13 @@ export default function OtherProfileScreen() {
 
   return (
     <SafeAreaView style={s.container}>
-      <StatusBar barStyle="light-content" />
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={theme.bg} />
       <ScrollView showsVerticalScrollIndicator={false}>
         
         {/* Header */}
         <View style={s.header}>
           <TouchableOpacity onPress={() => router.back()} style={s.backBtn}>
-            <Feather name="arrow-left" size={24} color="#FFF" />
+            <Feather name="arrow-left" size={24} color={theme.textPrimary} />
           </TouchableOpacity>
           <Text style={s.headerTitle}>PROFILE</Text>
           <View style={{ width: 44 }} />
@@ -154,15 +153,15 @@ export default function OtherProfileScreen() {
               style={s.socialPill}
               onPress={() => profileData?.github_url && Linking.openURL(profileData.github_url)}
             >
-              <FontAwesome5 name="github" size={14} color={ACCENT_PURPLE} />
+              <FontAwesome5 name="github" size={14} color={theme.purple} />
               <Text style={s.socialText}>GitHub</Text>
             </TouchableOpacity>
             <TouchableOpacity 
-              style={[s.socialPill, { borderColor: '#34D399' }]}
+              style={[s.socialPill, { borderColor: theme.green, backgroundColor: isDark ? 'rgba(34, 197, 94, 0.1)' : 'rgba(34, 197, 94, 0.05)' }]}
               onPress={() => profileData?.linkedin_url && Linking.openURL(profileData.linkedin_url)}
             >
-              <FontAwesome5 name="linkedin" size={14} color="#34D399" />
-              <Text style={[s.socialText, { color: '#34D399' }]}>LinkedIn</Text>
+              <FontAwesome5 name="linkedin" size={14} color={theme.green} />
+              <Text style={[s.socialText, { color: theme.green }]}>LinkedIn</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -193,7 +192,7 @@ export default function OtherProfileScreen() {
             disabled={actionLoading}
           >
             {actionLoading ? (
-              <ActivityIndicator size="small" color="#FFF" />
+              <ActivityIndicator size="small" color={isDark ? "#000" : "#FFF"} />
             ) : (
               <Text style={s.btnTextPrimary}>{isFollowing ? 'Following' : 'Follow'}</Text>
             )}
@@ -224,8 +223,8 @@ export default function OtherProfileScreen() {
   );
 }
 
-const s = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0F0F0B' },
+const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: theme.bg },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -234,17 +233,17 @@ const s = StyleSheet.create({
   },
   backBtn: { padding: 4 },
   headerTitle: {
-    color: '#888',
-    fontSize: 12,
+    color: theme.textMuted,
+    fontSize: 11,
     fontWeight: '800',
-    fontFamily: 'monospace',
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
     letterSpacing: 2,
   },
   identity: { alignItems: 'center', marginTop: 10, paddingHorizontal: 20 },
-  avatar: { marginBottom: 16, borderWidth: 2, borderColor: '#1A1A1A' },
-  nameText: { color: '#FFF', fontSize: 28, fontWeight: '800', letterSpacing: -0.5 },
-  handleText: { color: '#888', fontSize: 16, fontWeight: '500', marginBottom: 12 },
-  bioText: { color: '#CCC', fontSize: 15, lineHeight: 22, textAlign: 'center', marginBottom: 20 },
+  avatar: { marginBottom: 16, borderWidth: 2, borderColor: theme.border },
+  nameText: { color: theme.textPrimary, fontSize: 28, fontWeight: '800', letterSpacing: -0.5 },
+  handleText: { color: theme.textSecondary, fontSize: 16, fontWeight: '500', marginBottom: 12 },
+  bioText: { color: theme.textSecondary, fontSize: 15, lineHeight: 22, textAlign: 'center', marginBottom: 20 },
   socialRow: { flexDirection: 'row', gap: 10, marginBottom: 24 },
   socialPill: {
     flexDirection: 'row',
@@ -254,60 +253,62 @@ const s = StyleSheet.create({
     borderRadius: 20,
     gap: 6,
     borderWidth: 1,
-    borderColor: ACCENT_PURPLE,
-    backgroundColor: 'rgba(93, 63, 211, 0.05)',
+    borderColor: theme.purple,
+    backgroundColor: theme.purpleGlow,
   },
-  socialText: { color: ACCENT_PURPLE, fontSize: 13, fontWeight: '600' },
+  socialText: { color: theme.purple, fontSize: 13, fontWeight: '600' },
   statsBox: {
     flexDirection: 'row',
-    backgroundColor: CARD_BG,
+    backgroundColor: theme.bgCard,
     borderRadius: 16,
     paddingVertical: 18,
     marginHorizontal: 20,
     marginBottom: 24,
     borderWidth: 1,
-    borderColor: '#222',
+    borderColor: theme.border,
   },
   statItem: { flex: 1, alignItems: 'center' },
-  statSep: { width: 1, height: '60%', backgroundColor: '#333', alignSelf: 'center' },
-  statVal: { color: '#FFF', fontSize: 18, fontWeight: '800' },
-  statLab: { color: '#888', fontSize: 11, fontWeight: '600', textTransform: 'uppercase', marginTop: 4 },
+  statSep: { width: 1, height: '60%', backgroundColor: theme.border, alignSelf: 'center' },
+  statVal: { color: theme.textPrimary, fontSize: 18, fontWeight: '800' },
+  statLab: { color: theme.textSecondary, fontSize: 11, fontWeight: '600', textTransform: 'uppercase', marginTop: 4 },
   actionsRow: { flexDirection: 'row', gap: 12, marginBottom: 24, paddingHorizontal: 20 },
   btnPrimary: {
     flex: 1,
-    backgroundColor: ACCENT_PURPLE,
+    backgroundColor: theme.purple,
     paddingVertical: 16,
     borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
   },
   btnFollowing: {
-    backgroundColor: '#333',
+    backgroundColor: theme.bgInput,
+    borderWidth: 1,
+    borderColor: theme.border,
   },
-  btnTextPrimary: { color: '#FFF', fontSize: 15, fontWeight: '700' },
+  btnTextPrimary: { color: isDark ? "#000" : "#FFF", fontSize: 15, fontWeight: '700' },
   btnSecondary: {
     flex: 1,
     backgroundColor: 'transparent',
     borderWidth: 1,
-    borderColor: '#333',
+    borderColor: theme.border,
     paddingVertical: 16,
     borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  btnTextSecondary: { color: '#FFF', fontSize: 15, fontWeight: '700' },
+  btnTextSecondary: { color: theme.textPrimary, fontSize: 15, fontWeight: '700' },
   stackWrap: { paddingHorizontal: 20 },
-  stackHeader: { color: '#444', fontSize: 10, fontWeight: '800', letterSpacing: 1, marginBottom: 16 },
+  stackHeader: { color: theme.textMuted, fontSize: 10, fontWeight: '800', letterSpacing: 1, marginBottom: 16 },
   stackGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   pill: {
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 10,
     borderWidth: 1,
-    backgroundColor: 'rgba(93, 63, 211, 0.1)',
-    borderColor: 'rgba(93, 63, 211, 0.2)',
+    backgroundColor: theme.purpleGlow,
+    borderColor: theme.border,
   },
-  pillTxt: { color: '#A5B4FC', fontWeight: '700', fontSize: 13 },
+  pillTxt: { color: theme.purple, fontWeight: '700', fontSize: 13 },
   footer: { marginTop: 60, paddingBottom: 40, alignItems: 'center', opacity: 0.2 },
-  footerText: { color: '#FFF', fontSize: 9, fontFamily: 'monospace' },
+  footerText: { color: theme.textPrimary, fontSize: 9, fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace' },
 });

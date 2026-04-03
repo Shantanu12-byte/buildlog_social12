@@ -1,36 +1,67 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Dimensions, Platform, ViewStyle } from 'react-native';
 import { Image } from 'expo-image';
-import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
+import { Feather } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Colors, Spacing, Radius, Typography } from '../constants/theme';
+import { Spacing, Radius, Typography } from '@/constants/theme';
+import { useTheme } from '@/context/ThemeContext';
+import { Avatar } from './ui/UI';
 
-const { width } = Dimensions.get('window');
-const COLUMN_WIDTH = (width - Spacing.lg * 3) / 2;
+const { width: windowWidth } = Dimensions.get('window');
+const COLUMN_WIDTH = (windowWidth - Spacing.lg * 3) / 2;
+
+interface PostData {
+  id: string;
+  type?: 'featured' | 'medium' | 'small';
+  username?: string;
+  userAvatar?: string;
+  title?: string;
+  description?: string;
+  tech?: string[];
+  likes?: number;
+  comments?: number;
+  thumbnail?: string;
+  gradient?: string[];
+  buildTime?: string;
+  isLiked?: boolean;
+}
+
+interface MasonryCardProps {
+  post: PostData;
+  onPress?: (id: string) => void;
+  onHypePress?: (id: string) => void;
+  onCommentPress?: (id: string) => void;
+  onSharePress?: (id: string) => void;
+  style?: ViewStyle;
+}
 
 /**
  * MasonryCard - A versatile project card for the BuildLog feed.
- * Supports 'featured', 'medium', and 'small' variants.
+ * Supports 'featured', 'medium', and 'small' variants, now theme-aware.
  */
 export default function MasonryCard({ 
   post, 
   onPress, 
   onHypePress, 
   onCommentPress, 
-  onSharePress 
-}) {
+  onSharePress,
+  style
+}: MasonryCardProps) {
+  const { theme, isDark } = useTheme();
+  const s = React.useMemo(() => getStyles(theme, isDark), [theme, isDark]);
+
   const {
     id,
-    type = 'medium', // featured, medium, small
+    type = 'medium',
     username = 'builder',
     userAvatar,
-    title = 'Project Title',
-    description = 'No description provided.',
+    title = 'Untitled Project',
+    description = '',
     tech = [],
     likes = 0,
     comments = 0,
     thumbnail = '💻',
-    gradient = ['#00d9ff', '#0099ff'],
+    gradient = isDark ? ['#7c3aed', '#4c1d95'] : ['#ede9fe', '#7c3aed'],
     buildTime = '1 week',
     isLiked = false
   } = post;
@@ -44,21 +75,21 @@ export default function MasonryCard({
         style={s.actionBtn} 
         onPress={() => onHypePress?.(id)}
       >
-        <Feather name="plus" size={14} color={isLiked ? Colors.accent.primary : Colors.text.tertiary} />
-        <Text style={[s.actionText, isLiked && { color: Colors.accent.primary }]}>{likes}</Text>
+        <Feather name="zap" size={14} color={isLiked ? theme.purple : theme.textMuted} />
+        <Text style={[s.actionText, isLiked && { color: theme.purple }]}>{likes}</Text>
       </TouchableOpacity>
       <TouchableOpacity 
         style={s.actionBtn} 
         onPress={() => onCommentPress?.(id)}
       >
-        <Feather name="message-square" size={14} color={Colors.text.tertiary} />
+        <Feather name="message-square" size={14} color={theme.textMuted} />
         <Text style={s.actionText}>{comments}</Text>
       </TouchableOpacity>
       <TouchableOpacity 
         style={s.actionBtn} 
         onPress={() => onSharePress?.(id)}
       >
-        <Feather name="share-2" size={14} color={Colors.text.tertiary} />
+        <Feather name="share-2" size={14} color={theme.textMuted} />
       </TouchableOpacity>
     </View>
   );
@@ -69,12 +100,13 @@ export default function MasonryCard({
       onPress={() => onPress?.(id)}
       style={[
         s.card, 
-        isFeatured ? s.featuredCard : s.standardCard
+        isFeatured ? s.featuredCard : s.standardCard,
+        style
       ]}
     >
       {/* Visual Header / Thumbnail */}
       <LinearGradient
-        colors={gradient}
+        colors={gradient as [string, string, ...string[]]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={[
@@ -94,28 +126,25 @@ export default function MasonryCard({
       {/* Content */}
       <View style={s.content}>
         <View style={s.builderRow}>
-          <Image 
-            source={userAvatar ? { uri: userAvatar } : { uri: `https://ui-avatars.com/api/?name=${username}&background=0D1117&color=fff` }}
-            style={s.avatar} 
-          />
+          <Avatar username={username} uri={userAvatar} size={24} style={s.avatar} />
           <Text style={s.username} numberOfLines={1}>{username}</Text>
         </View>
 
         <Text style={[s.title, isFeatured && s.featuredTitle]} numberOfLines={2}>
-          {title}
+          {title.toUpperCase()}
         </Text>
         
-        {!isSmall && (
+        {!isSmall && description ? (
           <Text style={s.description} numberOfLines={2}>
             {description}
           </Text>
-        )}
+        ) : null}
 
         {/* Tech Stack */}
         <View style={s.techRow}>
           {tech.slice(0, isFeatured ? 3 : 2).map((t, i) => (
             <View key={i} style={s.techPill}>
-              <Text style={s.techText}>{t}</Text>
+              <Text style={s.techText}>{t.toUpperCase()}</Text>
             </View>
           ))}
           {tech.length > (isFeatured ? 3 : 2) && (
@@ -130,12 +159,12 @@ export default function MasonryCard({
   );
 }
 
-const s = StyleSheet.create({
+const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
   card: {
-    backgroundColor: Colors.bg.secondary,
+    backgroundColor: theme.bgCard,
     borderRadius: Radius.lg,
     borderWidth: 1,
-    borderColor: Colors.border.subtle,
+    borderColor: theme.border,
     overflow: 'hidden',
     marginBottom: Spacing.md,
   },
@@ -167,7 +196,7 @@ const s = StyleSheet.create({
     position: 'absolute',
     top: 12,
     right: 12,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: 'rgba(0,0,0,0.6)',
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: Radius.full,
@@ -186,34 +215,35 @@ const s = StyleSheet.create({
     marginBottom: Spacing.sm,
   },
   avatar: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: Colors.bg.tertiary,
     marginRight: 8,
+    borderWidth: 1,
+    borderColor: theme.border,
   },
   username: {
-    color: Colors.text.secondary,
-    fontSize: 12,
-    fontWeight: '600',
+    color: theme.textSecondary,
+    fontSize: 11,
+    fontWeight: '800',
     flex: 1,
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
   },
   title: {
-    color: Colors.text.primary,
-    fontSize: 16,
-    fontWeight: '800',
-    lineHeight: 20,
-    marginBottom: 4,
+    color: theme.textPrimary,
+    fontSize: 15,
+    fontWeight: '900',
+    lineHeight: 18,
+    marginBottom: 6,
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
   },
   featuredTitle: {
-    fontSize: 20,
-    lineHeight: 24,
+    fontSize: 18,
+    lineHeight: 22,
   },
   description: {
-    color: Colors.text.tertiary,
+    color: theme.textSecondary,
     fontSize: 12,
     lineHeight: 16,
     marginBottom: Spacing.md,
+    fontWeight: '500',
   },
   techRow: {
     flexDirection: 'row',
@@ -223,20 +253,21 @@ const s = StyleSheet.create({
     marginBottom: Spacing.md,
   },
   techPill: {
-    backgroundColor: 'rgba(47, 129, 247, 0.1)',
+    backgroundColor: theme.bgInput,
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: Radius.sm,
     borderWidth: 1,
-    borderColor: 'rgba(47, 129, 247, 0.2)',
+    borderColor: theme.border,
   },
   techText: {
-    color: Colors.accent.primary,
-    fontSize: 10,
-    fontWeight: '800',
+    color: theme.purple,
+    fontSize: 9,
+    fontWeight: '900',
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
   },
   moreTech: {
-    color: Colors.text.tertiary,
+    color: theme.textMuted,
     fontSize: 10,
     fontWeight: 'bold',
   },
@@ -247,7 +278,7 @@ const s = StyleSheet.create({
     marginTop: Spacing.xs,
     paddingTop: Spacing.sm,
     borderTopWidth: 1,
-    borderTopColor: Colors.border.subtle,
+    borderTopColor: theme.border,
   },
   actionBtn: {
     flexDirection: 'row',
@@ -255,8 +286,9 @@ const s = StyleSheet.create({
     gap: 4,
   },
   actionText: {
-    color: Colors.text.tertiary,
-    fontSize: 12,
-    fontWeight: '700',
+    color: theme.textMuted,
+    fontSize: 11,
+    fontWeight: '900',
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
   }
 });

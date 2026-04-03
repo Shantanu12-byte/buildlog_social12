@@ -1,6 +1,6 @@
 import React, { useRef, useImperativeHandle, forwardRef } from 'react';
 import { Animated, TouchableOpacity, Text, StyleSheet } from 'react-native';
-import { Colors } from '@/constants/theme';
+import { useTheme } from '@/context/ThemeContext';
 
 interface QuizOptionProps {
   opt: string;
@@ -14,6 +14,8 @@ interface QuizOptionProps {
 
 const QuizOption = forwardRef((props: QuizOptionProps, ref) => {
   const { opt, idx, isSelected, isAnswered, isCorrect, correctIdx, onPress } = props;
+  const { theme, isDark } = useTheme();
+  
   const scale = useRef(new Animated.Value(1)).current;
   const shake = useRef(new Animated.Value(0)).current;
   const colorIndex = useRef(new Animated.Value(0)).current; // 0=default, 1=green, 2=red
@@ -29,8 +31,6 @@ const QuizOption = forwardRef((props: QuizOptionProps, ref) => {
         Animated.timing(scale, { toValue: 1.1, duration: 150, useNativeDriver: true }),
         Animated.timing(scale, { toValue: 1, duration: 150, useNativeDriver: true })
       ]).start();
-      
-      // Optionally reset color later if needed, but since it's answered, we can leave it
     },
     playIncorrectAnimation: () => {
       // Instantly switch to red flash state
@@ -49,31 +49,35 @@ const QuizOption = forwardRef((props: QuizOptionProps, ref) => {
     }
   }));
 
-  // Map state to the user's Mimo Cyber-Noir styling
-  let baseBorderColor = '#333';
-  let staticBackgroundColor = '#1A1A1A';
-  let baseTextColor = '#AAA';
+  // Map state to dynamic theme styling
+  let baseBorderColor = theme.border;
+  let staticBackgroundColor = theme.bgInput;
+  let baseTextColor = theme.textSecondary;
 
   if (isAnswered) {
     if (idx === correctIdx) {
-      baseBorderColor = '#1D9E75';
-      staticBackgroundColor = 'rgba(29,158,117,0.1)';
-      baseTextColor = '#FFF';
+      baseBorderColor = theme.green;
+      staticBackgroundColor = isDark ? 'rgba(74, 222, 128, 0.1)' : 'rgba(22, 163, 74, 0.1)';
+      baseTextColor = theme.textPrimary;
     } else if (isSelected && !isCorrect) {
-      baseBorderColor = '#FF4444';
-      staticBackgroundColor = 'rgba(255,68,68,0.1)';
-      baseTextColor = '#FFF';
+      baseBorderColor = theme.red;
+      staticBackgroundColor = isDark ? 'rgba(239, 68, 68, 0.1)' : 'rgba(220, 38, 38, 0.1)';
+      baseTextColor = theme.textPrimary;
     }
   } else if (isSelected) {
-    baseBorderColor = Colors.accent.primary;
-    staticBackgroundColor = 'rgba(57,255,20,0.05)';
-    baseTextColor = '#FFF';
+    baseBorderColor = theme.purple;
+    staticBackgroundColor = isDark ? 'rgba(124, 58, 237, 0.1)' : 'rgba(124, 58, 237, 0.05)';
+    baseTextColor = theme.textPrimary;
   }
 
   // Flash color interpolation (to show the instant flash on top of standard styles)
   const animatedBackgroundColor = colorIndex.interpolate({
     inputRange: [0, 1, 2],
-    outputRange: [staticBackgroundColor, 'rgba(29, 158, 117, 0.8)', 'rgba(255, 68, 68, 0.8)']
+    outputRange: [
+      staticBackgroundColor, 
+      theme.green + 'CC', // With some alpha
+      theme.red + 'CC'   // With some alpha
+    ]
   });
 
   return (

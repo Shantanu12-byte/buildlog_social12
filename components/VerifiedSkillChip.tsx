@@ -6,7 +6,8 @@
 
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import { Colors, Radius } from '../constants/theme';
+import { Radius } from '../constants/theme';
+import { useTheme } from '@/context/ThemeContext';
 
 export type SkillLevel = 'claimed' | 'beginner' | 'proficient' | 'community';
 
@@ -17,39 +18,36 @@ interface SkillChipProps {
   size?: 'sm' | 'md';
 }
 
-const LEVEL_CONFIG = {
+const getLevelConfig = (theme: any, isDark: boolean) => ({
   claimed: {
-    bg: '#1A2236',
-    border: 'rgba(255,255,255,0.08)',
-    text: '#4A5568',
+    bg: isDark ? '#1A2236' : '#E2E8F0',
+    border: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)',
+    text: isDark ? '#A0AEC0' : '#4A5568',
     badge: null,
-    label: null,
   },
   beginner: {
-    bg: '#1E3A5F',
-    border: '#1D4ED8',
-    text: '#93C5FD',
+    bg: isDark ? '#1E3A5F' : '#DBEAFE',
+    border: isDark ? '#1D4ED8' : '#3B82F6',
+    text: isDark ? '#93C5FD' : '#1E40AF',
     badge: '✓',
-    label: null,
   },
   proficient: {
-    bg: '#1E1B4B',
-    border: 'rgba(127,119,221,0.5)',
-    text: '#AFA9EC',
+    bg: isDark ? '#1E1B4B' : '#EDE9FE',
+    border: isDark ? 'rgba(127,119,221,0.5)' : '#A78BFA',
+    text: isDark ? '#AFA9EC' : '#5B21B6',
     badge: '✓✓',
-    label: null,
   },
   community: {
-    bg: '#451A03',
-    border: '#92400E',
-    text: '#FCD34D',
+    bg: isDark ? '#451A03' : '#FFEDD5',
+    border: isDark ? '#92400E' : '#F97316',
+    text: isDark ? '#FCD34D' : '#9A3412',
     badge: '⚡',
-    label: null,
   },
-};
+});
 
 export function VerifiedSkillChip({ skill, level = 'claimed', onPress, size = 'md' }: SkillChipProps) {
-  const config = LEVEL_CONFIG[level as keyof typeof LEVEL_CONFIG] || LEVEL_CONFIG.claimed;
+  const { theme, isDark } = useTheme();
+  const config = getLevelConfig(theme, isDark)[level as keyof ReturnType<typeof getLevelConfig>] || getLevelConfig(theme, isDark).claimed;
   const isSm = size === 'sm';
 
   const content = (
@@ -94,15 +92,18 @@ interface SkillsSectionProps {
 }
 
 export function VerifiedSkillsSection({ skills, verifiedSkills, onSkillPress }: SkillsSectionProps) {
+  const { theme, isDark } = useTheme();
+  const styles = React.useMemo(() => getStyles(theme, isDark), [theme, isDark]);
+  
   const verified = skills.filter(s => verifiedSkills[s] && verifiedSkills[s] !== 'claimed');
   const claimed = skills.filter(s => !verifiedSkills[s] || verifiedSkills[s] === 'claimed');
 
   return (
     <View>
       {verified.length > 0 && (
-        <View style={s.group}>
-          <Text style={s.groupLabel}>VERIFIED SKILLS</Text>
-          <View style={s.chipsRow}>
+        <View style={styles.group}>
+          <Text style={styles.groupLabel}>VERIFIED SKILLS</Text>
+          <View style={styles.chipsRow}>
             {verified.map(skill => (
               <VerifiedSkillChip
                 key={skill}
@@ -115,9 +116,9 @@ export function VerifiedSkillsSection({ skills, verifiedSkills, onSkillPress }: 
         </View>
       )}
       {claimed.length > 0 && (
-        <View style={s.group}>
-          <Text style={s.groupLabel}>CLAIMED (no proof yet)</Text>
-          <View style={s.chipsRow}>
+        <View style={styles.group}>
+          <Text style={styles.groupLabel}>CLAIMED (no proof yet)</Text>
+          <View style={styles.chipsRow}>
             {claimed.map(skill => (
               <VerifiedSkillChip
                 key={skill}
@@ -148,19 +149,24 @@ const s = StyleSheet.create({
     fontFamily: 'monospace',
     fontWeight: '500',
   },
-  group: {
-    marginBottom: 12,
-  },
-  groupLabel: {
-    fontSize: 9,
-    fontWeight: '500',
-    color: Colors.text.tertiary,
-    letterSpacing: 0.8,
-    marginBottom: 7,
-  },
-  chipsRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
-  },
 });
+
+function getStyles(theme: any, isDark: boolean) {
+  return StyleSheet.create({
+    group: {
+      marginBottom: 12,
+    },
+    groupLabel: {
+      fontSize: 9,
+      fontWeight: '500',
+      color: theme.textSecondary,
+      letterSpacing: 0.8,
+      marginBottom: 7,
+    },
+    chipsRow: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 6,
+    },
+  });
+}
