@@ -37,32 +37,45 @@ async function subscribe(req, res) {
   }
 }
 
+const { Expo } = require('expo-server-sdk');
+const expo = new Expo();
+
 async function sendPushNotification(userId, title, body, url = '/') {
   try {
-    const { data: subscriptions, error } = await supabase
+    // 1. WEB PUSH (Subscription-based)
+    const { data: subscriptions } = await supabase
       .from('push_subscriptions')
       .select('subscription')
       .eq('user_id', userId);
 
-    if (error) throw error;
+    const payload = JSON.stringify({ title, body, url });
 
-    const payload = JSON.stringify({
-      title,
-      body,
-      url,
-    });
-
-    const notifications = (subscriptions || []).map(sub => 
+    const webNotifications = (subscriptions || []).map(sub => 
       webpush.sendNotification(sub.subscription, payload).catch(err => {
         if (err.statusCode === 404 || err.statusCode === 410) {
-          // Subscription expired or invalid, remove it
           return supabase.from('push_subscriptions').delete().match({ subscription: sub.subscription });
         }
-        console.error('Error sending push notification:', err);
       })
     );
 
-    await Promise.all(notifications);
+    // 2. EXPO PUSH (Token-based for iOS/Android)
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('expo_push_token')
+      .eq('id', userId)
+      .single();
+
+    if (profile?.expo_push_token && Expo.isExpoPushToken(profile.expo_push_token)) {
+      await expo.sendPushNotificationsAsync([{
+        to: profile.expo_push_token,
+        sound: 'default',
+        title,
+        body,
+        data: { url },
+      }]);
+    }
+
+    await Promise.all(webNotifications);
   } catch (error) {
     console.error('Error in sendPushNotification:', error);
   }

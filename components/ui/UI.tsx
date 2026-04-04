@@ -34,19 +34,24 @@ export function Avatar({ username, uri, size = 36, style }: AvatarProps) {
   }, [uri]);
 
   const initials = (
-    <Text style={{ color: colors.text, fontSize: size * 0.35, fontWeight: '700', fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace' }}>
+    <Text style={{ 
+      color: colors.text, 
+      fontSize: size * 0.4, 
+      fontWeight: '800',
+      fontFamily: Platform.OS === 'ios' ? 'System' : 'sans-serif'
+    }}>
       {getInitials(username)}
     </Text>
   );
 
   return (
     <View style={[{
-      width: size, height: size, borderRadius: Radius.sm,
+      width: size, height: size, borderRadius: size / 2,
       backgroundColor: colors.bg,
       alignItems: 'center', justifyContent: 'center',
       overflow: 'hidden',
       borderWidth: 1,
-      borderColor: colors.text + '30'
+      borderColor: colors.text + '20'
     }, style]}>
       {(!!finalUri && finalUri.trim() !== '' && !error) ? (
         <View style={StyleSheet.absoluteFill}>

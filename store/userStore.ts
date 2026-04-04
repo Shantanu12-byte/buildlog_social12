@@ -13,7 +13,7 @@ interface UserProfile {
   level: string;
   github_url: string;
   linkedin_url: string;
-  public_key: string | null;
+  public_key?: string | null;
   expo_push_token: string | null;
   onboarding_complete: boolean;
   learning_focus?: string | null;
@@ -71,14 +71,25 @@ export const useUserStore = create<UserState>((set, get) => ({
 
       const { data, error } = await supabase
         .from('profiles')
-        .select('id, username, bio, avatar_url, skills, languages, streak_count, level, github_url, linkedin_url, expo_push_token, onboarding_complete, campus_id, campus_name, is_joined_to_campus, verified_skills, public_key')
+        .select('id, username, bio, avatar_url, skills, languages, streak_count, level, github_url, linkedin_url, expo_push_token, onboarding_complete, campus_id, campus_name, is_joined_to_campus')
         .eq('id', userId)
         .maybeSingle();
+
+      // Separately fetch optional columns that may not exist in all DB versions
+      let extraData: Record<string, any> = {};
+      if (data) {
+        const { data: extra } = await supabase
+          .from('profiles')
+          .select('verified_skills, public_key')
+          .eq('id', userId)
+          .maybeSingle();
+        if (extra) extraData = extra;
+      }
 
       if (error) throw error;
       
       set({ 
-        userProfile: data || null, 
+        userProfile: data ? { ...data, ...extraData } : null, 
         profileFetched: true,
         lastFetched: Date.now()
       });

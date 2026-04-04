@@ -22,7 +22,7 @@ export const AvatarBlock = ({ url, username = '?', size = 40, tier = 'Default' }
   return (
     <View style={[
       styles.container, 
-      { width: size, height: size }
+      { width: size, height: size, borderRadius: size / 2 }
     ]}>
       {url ? (
         <Image 
@@ -45,8 +45,6 @@ export const AvatarBlock = ({ url, username = '?', size = 40, tier = 'Default' }
           </Text>
         </View>
       )}
-      {/* 8-Bit Bevel Overlay */}
-      <View style={[styles.bevelOverlay, { pointerEvents: 'none' }]} />
     </View>
   );
 };
@@ -67,16 +65,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#222',
   },
   fallbackText: {
-    fontFamily: 'monospace',
     fontWeight: 'bold',
     fontSize: 16,
-  },
-  bevelOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    borderWidth: 4,
-    borderTopColor: 'rgba(255,255,255,0.3)',
-    borderLeftColor: 'rgba(255,255,255,0.3)',
-    borderBottomColor: 'rgba(0,0,0,0.6)',
-    borderRightColor: 'rgba(0,0,0,0.6)',
   },
 });

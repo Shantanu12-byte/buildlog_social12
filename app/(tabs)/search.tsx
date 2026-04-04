@@ -52,6 +52,7 @@ export default function ExploreScreen() {
         const { data } = await supabase
           .from('posts_with_profiles')
           .select('*')
+          .order('created_at', { ascending: false })
           .limit(20);
         setProjects(data || []);
       }
@@ -80,7 +81,7 @@ export default function ExploreScreen() {
         const { data } = await supabase
           .from('posts_with_profiles')
           .select('*')
-          .ilike('title', `%${val}%`)
+          .or(`title.ilike.%${val}%,projectTitle.ilike.%${val}%,caption.ilike.%${val}%`)
           .limit(20);
         setProjects(data || []);
       }
@@ -131,11 +132,11 @@ export default function ExploreScreen() {
             activeTab === 'developers' ? (
               <TouchableOpacity 
                 style={s.devCard}
-                onPress={() => router.push(`/user/${item.username}`)}
+                onPress={() => item.username && router.push(`/user/${item.username}`)}
               >
-                <Avatar uri={item.avatar_url} username={item.username} size={50} />
+                <Avatar uri={item.avatar_url} username={item.username || '?'} size={50} />
                 <View style={{ flex: 1, marginLeft: 12 }}>
-                  <Text style={s.devName}>{item.username}</Text>
+                  <Text style={s.devName}>{item.username || 'Anonymous'}</Text>
                   <Text style={s.devBio} numberOfLines={1}>{item.bio || 'Exploring the frontier'}</Text>
                   <Text style={s.devCollege}>{item.college?.toUpperCase() || 'UNLINKED_ACADEMY'}</Text>
                   <View style={s.skillsRow}>
@@ -154,8 +155,8 @@ export default function ExploreScreen() {
                 onPress={() => router.push(`/(stack)/post/${item.id}`)}
               >
                  <View style={s.projHeader}>
-                    <Avatar uri={item.avatar_url} username={item.username} size={24} />
-                    <Text style={s.projUser}>{item.username}</Text>
+                    <Avatar uri={item.avatar_url} username={item.username || '?'} size={24} />
+                    <Text style={s.projUser}>{item.username || 'Anonymous'}</Text>
                     <View style={s.gravBadge}>
                       <Text style={s.gravText}>PROOF_OF_WORK</Text>
                     </View>
