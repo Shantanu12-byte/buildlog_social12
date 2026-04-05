@@ -279,7 +279,7 @@ function ChatView({
             onContentSizeChange={() => flatRef.current?.scrollToEnd()}
             initialNumToRender={20}
             maxToRenderPerBatch={10}
-            windowSize={5}
+            windowSize={10}
             removeClippedSubviews={Platform.OS !== 'ios'}
             ListEmptyComponent={
               <View style={s.emptyList}>
@@ -1151,6 +1151,10 @@ export default function TavernScreen() {
               onJoin={(id) => joinRoom(id)}
             />
           )}
+          initialNumToRender={10}
+          maxToRenderPerBatch={10}
+          windowSize={5}
+          removeClippedSubviews={Platform.OS !== 'ios'}
         />
       )}
 

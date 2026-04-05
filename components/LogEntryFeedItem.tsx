@@ -1,5 +1,5 @@
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Platform, ViewStyle } from 'react-native';
+import React, { memo } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Platform, ViewStyle, Alert } from 'react-native';
 import { Image } from 'expo-image';
 import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import { Typography, Spacing, Radius } from '@/constants/theme';
@@ -8,7 +8,6 @@ import UsernameLink from './UsernameLink';
 import { Avatar } from './ui/UI';
 import { submitReport } from '@/services/analyticsService';
 import { useUserStore } from '@/store/userStore';
-import { Alert } from 'react-native';
 
 interface PostData {
   id?: string;
@@ -46,7 +45,7 @@ interface LogEntryFeedItemProps {
  * LogEntryFeedItem - Professional 'Cyber-Noir' Project Card
  * Precisely matched to the high-fidelity design from image_10.png, now theme-aware.
  */
-export default function LogEntryFeedItem({ 
+function LogEntryFeedItem({ 
   post = {}, 
   onHypePress = () => {}, 
   onCommentPress = () => {}, 
@@ -203,6 +202,22 @@ export default function LogEntryFeedItem({
     </View>
   );
 }
+
+// Optimized comparison function to prevent redundant re-renders
+const areEqual = (prev: LogEntryFeedItemProps, next: LogEntryFeedItemProps) => {
+  return (
+    prev.post.id === next.post.id &&
+    prev.post.likes === next.post.likes &&
+    prev.post.likes_count === next.post.likes_count &&
+    prev.post.isLiked === next.post.isLiked &&
+    prev.post.comments === next.post.comments &&
+    prev.post.username === next.post.username &&
+    prev.post.userAvatar === next.post.userAvatar &&
+    prev.style === next.style
+  );
+};
+
+export default memo(LogEntryFeedItem, areEqual);
 
 const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
   card: {

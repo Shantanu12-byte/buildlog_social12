@@ -155,6 +155,15 @@ export default function FeedScreen() {
     router.push(`/post/${id}` as any);
   };
 
+  const renderItem = useCallback(({ item }: { item: any }) => (
+    <LogEntryFeedItem
+      post={{ ...item, userAvatar: item.avatar_url }}
+      onHypePress={() => handleLike(item.id)}
+      onCommentPress={() => handleComment(item.id)}
+      onSharePress={() => {}}
+    />
+  ), [handleLike]);
+
   // Swiping Logic
   const panoGesture = Gesture.Pan()
     .activeOffsetX([-10, 10]) 
@@ -248,14 +257,7 @@ export default function FeedScreen() {
               <FlatList
                 data={posts}
                 keyExtractor={item => item.id}
-                renderItem={({ item }) => (
-                  <LogEntryFeedItem
-                    post={{ ...item, userAvatar: item.avatar_url }}
-                    onHypePress={() => handleLike(item.id)}
-                    onCommentPress={() => handleComment(item.id)}
-                    onSharePress={() => {}}
-                  />
-                )}
+                renderItem={renderItem}
                 ListHeaderComponent={
                   <DevNewsFeed 
                     onOpenReader={(items, status) => {
@@ -273,6 +275,10 @@ export default function FeedScreen() {
                 }
                 onEndReached={() => fetchPosts()}
                 onEndReachedThreshold={0.5}
+                initialNumToRender={5}
+                maxToRenderPerBatch={5}
+                windowSize={10}
+                removeClippedSubviews={Platform.OS !== 'ios'}
                 ListFooterComponent={loadingMore ? (
                   <View style={{ padding: 20, alignItems: 'center' }}>
                     <ActivityIndicator color={theme.purple} />
