@@ -1,1 +1,0 @@
-components/CampusGroupController.tsx(103,26): error TS2339: Property 'xl' does not exist on type '{ sm: number; md: number; lg: number; full: number; }'.

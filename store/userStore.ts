@@ -20,6 +20,7 @@ interface UserProfile {
   skill_level?: string | null;
   campus_id?: string | null;
   campus_name?: string | null;
+  college?: string | null;
   is_joined_to_campus?: boolean;
   verified_skills?: Record<string, any>;
   is_public?: boolean;
@@ -32,10 +33,11 @@ interface UserState {
   profileFetched: boolean; // Flag to prevent infinite fetch loops
   isEnderMode: boolean;
   lastFetched: number;
-  fetchUserProfile: () => Promise<void>;
+  fetchUserProfile: (force?: boolean) => Promise<void>;
   updateUserProfile: (profile: Partial<UserProfile>) => Promise<void>;
   toggleEnderMode: () => Promise<void>;
   initialize: () => Promise<void>;
+  refreshProfile: () => Promise<void>;
   clearUser: () => void;
 }
 
@@ -48,12 +50,12 @@ export const useUserStore = create<UserState>((set, get) => ({
 
   lastFetched: 0,
 
-  fetchUserProfile: async () => {
+  fetchUserProfile: async (force = false) => {
     if (get().isLoading) return;
     
-    // 5-minute TTL cache to reduce redundant DB pressure
+    // 5-minute TTL cache, but bypass if force is true
     const isFresh = Date.now() - get().lastFetched < 5 * 60000;
-    if (isFresh && get().userProfile) {
+    if (isFresh && get().userProfile && !force) {
       set({ profileFetched: true });
       return;
     }
@@ -71,7 +73,7 @@ export const useUserStore = create<UserState>((set, get) => ({
 
       const { data, error } = await supabase
         .from('profiles')
-        .select('id, username, bio, avatar_url, skills, languages, streak_count, level, github_url, linkedin_url, expo_push_token, onboarding_complete, campus_id, campus_name, is_joined_to_campus')
+        .select('id, username, bio, avatar_url, skills, languages, streak_count, level, github_url, linkedin_url, expo_push_token, onboarding_complete, campus_id, campus_name, college, is_joined_to_campus')
         .eq('id', userId)
         .maybeSingle();
 
@@ -107,21 +109,47 @@ export const useUserStore = create<UserState>((set, get) => ({
     const updatedProfile = { ...currentProfile, ...newData };
     set({ userProfile: updatedProfile });
 
-    try {
-      const { error } = await supabase
-        .from('profiles')
-        .upsert(updatedProfile);
+    // 1. Safe Update: Only send valid DB columns to Supabase
+    // This prevents errors if the local object has extra properties (e.g. verified_skills, UI state)
+    const VALID_PROFILES_COLUMNS = [
+      'id', 'username', 'bio', 'avatar_url', 'skills', 'languages', 
+      'streak_count', 'level', 'github_url', 'linkedin_url', 'public_key',
+      'expo_push_token', 'onboarding_complete', 'campus_id', 'campus_name', 
+      'college', 'is_joined_to_campus', 'is_public', 'learning_focus', 'skill_level'
+    ];
 
-      if (error) throw error;
+    const dbPayload = Object.keys(updatedProfile)
+      .filter(key => VALID_PROFILES_COLUMNS.includes(key))
+      .reduce((obj, key) => {
+        obj[key] = (updatedProfile as any)[key];
+        return obj;
+      }, {} as Record<string, any>);
+
+    try {
+      // 1. Update the 'profiles' table using the cleaned payload
+      const { error: dbError } = await supabase
+        .from('profiles')
+        .upsert(dbPayload);
+
+      if (dbError) {
+        console.warn('[userStore] DB Update Error:', dbError);
+        throw new Error(dbError.message);
+      }
       
-      await supabase.auth.updateUser({
+      // 2. Update Auth metadata (for display names in common areas)
+      const { error: authError } = await supabase.auth.updateUser({
         data: { 
           username: updatedProfile.username,
           avatar_url: updatedProfile.avatar_url 
         }
       });
 
-      // Cache Invalidation (Non-blocking)
+      if (authError) {
+        console.warn('[userStore] Auth Update Error:', authError);
+        // We don't throw here as the main profile table is updated
+      }
+
+      // 3. Cache Invalidation (Non-blocking)
       const backendUrl = process.env.EXPO_PUBLIC_BACKEND_URL || 'http://localhost:5000';
       const usernames = [updatedProfile.username];
       if (currentProfile.username && currentProfile.username !== updatedProfile.username) {
@@ -140,8 +168,10 @@ export const useUserStore = create<UserState>((set, get) => ({
         body: JSON.stringify({ usernames }),
       }).catch(() => {});
       
-    } catch (error) {
-      // Error handled silently
+    } catch (error: any) {
+      console.error('[userStore] updateUserProfile failed:', error);
+      // Revert local state on failure
+      set({ userProfile: currentProfile });
       throw error;
     }
   },
@@ -185,6 +215,23 @@ export const useUserStore = create<UserState>((set, get) => ({
     } catch (e) {
       // Error handled silently
       set({ profileFetched: true });
+    }
+  },
+
+  refreshProfile: async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    
+    console.log('[userStore] Manual Profile Refresh Triggered...');
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', user.id)
+      .single();
+      
+    if (profile) {
+      console.log('[userStore] Fresh DB data received:', profile.campus_id, profile.is_joined_to_campus);
+      set({ userProfile: profile, lastFetched: Date.now() });
     }
   },
 

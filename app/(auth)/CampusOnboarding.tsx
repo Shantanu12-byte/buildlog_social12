@@ -5,6 +5,7 @@ import {
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import { supabase } from '@/lib/supabase';
 import { useUserStore } from '@/store/userStore';
 import { Spacing, Radius } from '@/constants/theme';
 import { useTheme } from '@/context/ThemeContext';
@@ -40,22 +41,44 @@ export default function CampusOnboardingScreen() {
     if (!campus) return;
 
     setIsLoading(true);
-    try {
-      await updateUserProfile({
-        campus_id: campus.id,
-        campus_name: campus.name,
-        is_joined_to_campus: true
-      });
+    console.log('[CampusOnboarding] Starting join for:', campus.name);
 
-      if (Platform.OS === 'web') {
-        window.alert(`You have successfully joined ${campus.name}!`);
-        router.replace('/(tabs)/tavern');
-      } else {
-        Alert.alert('Success', `You have successfully joined ${campus.name}!`, [
-          { text: 'Enter Hub', onPress: () => router.replace('/(tabs)/tavern') }
-        ]);
-      }
-    } catch (err: any) { Alert.alert('Error', err.message || 'Could not join campus.');
+    try {
+      // 1. Update Profile with clean payload
+      const { data, error } = await supabase
+        .from('profiles')
+        .update({
+          campus_id: campus.id,
+          campus_name: campus.name,
+          is_joined_to_campus: true,
+          college: campus.id // Keep for compatibility
+        })
+        .eq('id', userProfile?.id)
+        .select()
+        .single();
+
+      if (error || !data) throw new Error(error?.message || 'Update failed');
+
+      console.log('[CampusOnboarding] DB update success. Refreshing store...');
+
+      // 2. Refresh Zustand store and wait
+      await useUserStore.getState().refreshProfile();
+
+      console.log('[CampusOnboarding] Store refreshed. Finalizing...');
+
+      // 3. Navigate after state update
+      Alert.alert('Success', `You have successfully joined ${campus.name}!`, [
+        { 
+          text: 'Enter Hub', 
+          onPress: () => {
+            console.log('[CampusOnboarding] Navigating to tavern...');
+            router.replace('/(tabs)/tavern');
+          }
+        }
+      ]);
+    } catch (err: any) { 
+      console.error('[CampusOnboarding] Join failed:', err);
+      Alert.alert('Error', err.message || 'Could not join campus.');
     } finally {
       setIsLoading(false);
     }

@@ -336,7 +336,8 @@ export default function CompleteProfileScreen() {
         id: user.id,
         username: cleanUsername,
         bio: sanitizeBio(bio),
-        college: college.trim(),
+        campus_name: college.trim(),
+        college: college.trim(), // Keep for backward compatibility
         skills: selectedStack,
         github_url: sanitizeUrl(githubUrl) ?? '',
         linkedin_url: sanitizeUrl(linkedinUrl) ?? '',

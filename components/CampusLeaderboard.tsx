@@ -30,7 +30,7 @@ interface LeaderboardUser {
   full_name: string;
   avatar_url: string | null;
   streak: number;
-  campus: string;
+  campus_id: string;
 }
 
 function FlameIcon() {
@@ -111,7 +111,7 @@ function RankRow({ user, rank, isEven, onPress }: { user: LeaderboardUser; rank:
       <Avatar username={user.username} size={36} style={s.rowAvatar} />
       <View style={s.userInfo}>
         <Text style={s.rowUsername}>@{user.username}</Text>
-        <Text style={s.rowCampus}>{user.campus || 'Global'}</Text>
+        <Text style={s.rowCampus}>{user.campus_id || 'Global'}</Text>
       </View>
       <View style={s.rowStreak}>
         <MaterialCommunityIcons name="fire" size={16} color="#f97316" />
@@ -141,7 +141,7 @@ export default function CampusLeaderboard() {
     try {
       const { data, error } = await supabase
         .from('profiles')
-        .select('id, username, full_name, avatar_url, streak, campus')
+        .select('id, username, full_name, avatar_url, streak, campus_id')
         .order('streak', { ascending: false })
         .limit(50);
 
@@ -149,7 +149,7 @@ export default function CampusLeaderboard() {
       
       let filteredData = data || [];
       if (filter === 'my' && userProfile?.campus_id) {
-        filteredData = filteredData.filter(u => u.campus === userProfile.campus_id);
+        filteredData = filteredData.filter(u => u.campus_id === userProfile.campus_id);
       }
 
       setUsers(filteredData);

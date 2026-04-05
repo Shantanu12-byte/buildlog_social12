@@ -61,15 +61,17 @@ export default function LogEntryFeedItem({
     collabStatus = post.collabStatus || 'Open to collab',
     repoName = post.repoName,
     language = post.language,
-    title = post.projectTitle || post.title || 'untitled project',
-    description = post.caption || post.description || 'show',
-    imageUrl = post.image_url || post.imageUrl,
     achievements = post.achievements || [],
     tags = post.tags || ['React', 'Node', 'Open AI'],
     likes = post.likes_count ?? post.likes ?? 0,
     comments = post.comments ?? 0,
     isLiked = post.isLiked || false
   } = post;
+
+  // Manual fallback resolution for key fields that might be null in DB
+  const title = post.projectTitle || post.title || 'untitled project';
+  const description = post.caption || post.description || 'show';
+  const imageUrl = post.image_url || post.imageUrl || null;
 
   return (
     <View style={[s.card, style]}>
@@ -82,10 +84,10 @@ export default function LogEntryFeedItem({
             <Text style={s.timestamp}>{timestamp}</Text>
             <View style={s.dot} />
             <View style={s.statusPill}>
-              <Text style={s.statusText}>{status.toUpperCase()}</Text>
+              <Text style={s.statusText}>{(status || '').toUpperCase()}</Text>
             </View>
             <View style={[s.statusPill, s.collabPill]}>
-              <Text style={s.collabText}>{collabStatus.toUpperCase()}</Text>
+              <Text style={s.collabText}>{(collabStatus || '').toUpperCase()}</Text>
             </View>
           </View>
         </View>
@@ -126,12 +128,12 @@ export default function LogEntryFeedItem({
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 }}>
               {repoName && (
                 <View style={[s.statusPill, { backgroundColor: theme.bgInput }]}>
-                   <Text style={s.statusText}>{repoName.toUpperCase()}</Text>
+                   <Text style={s.statusText}>{(repoName || '').toUpperCase()}</Text>
                 </View>
               )}
-              {language && <Text style={s.timestamp}>// {language.toUpperCase()}</Text>}
+              {language && <Text style={s.timestamp}>// {(language || '').toUpperCase()}</Text>}
             </View>
-            <Text style={s.title}>{title.toUpperCase()}</Text>
+            <Text style={s.title}>{(title || '').toUpperCase()}</Text>
             <Text style={s.description}>{description}</Text>
          </View>
 
@@ -139,7 +141,7 @@ export default function LogEntryFeedItem({
          <View style={s.tagRow}>
             {tags.slice(0, 3).map((tag: string, i: number) => (
               <View key={i} style={s.tagPill}>
-                <Text style={s.tagText}>{tag.toUpperCase()}</Text>
+                <Text style={s.tagText}>{(tag || '').toUpperCase()}</Text>
               </View>
             ))}
          </View>
@@ -325,26 +327,26 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
     alignItems: 'center',
     gap: 12,
   },
-  hypeBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: isDark ? 'rgba(124, 58, 237, 0.1)' : 'rgba(124, 58, 237, 0.05)',
-    paddingVertical: 10,
-    paddingHorizontal: 18,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: theme.border,
-    gap: 8,
-  },
-  hypeBtnActive: {
-    backgroundColor: theme.purple,
-    borderColor: theme.purple,
-  },
   hypeText: {
     color: theme.purple,
     fontWeight: '900',
     fontSize: 12,
     fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+  },
+  hypeBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: isDark ? 'rgba(124, 58, 237, 0.1)' : 'white',
+    paddingVertical: 10,
+    paddingHorizontal: 18,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: isDark ? theme.border : theme.purple + '40',
+    gap: 8,
+  },
+  hypeBtnActive: {
+    backgroundColor: theme.purple,
+    borderColor: theme.purple,
   },
   hypeTextActive: {
     color: isDark ? '#000' : '#FFF',
@@ -352,12 +354,12 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
   commentBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: theme.bgInput,
+    backgroundColor: isDark ? theme.bgInput : 'white',
     paddingVertical: 10,
     paddingHorizontal: 18,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: theme.border,
+    borderColor: isDark ? theme.border : theme.border + '80',
     gap: 8,
   },
   commentCount: {

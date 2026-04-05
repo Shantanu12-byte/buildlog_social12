@@ -92,6 +92,8 @@ export default function FeedScreen() {
           username: p.profiles?.username || p.username || 'builder',
           avatar_url: p.profiles?.avatar_url || p.avatar_url,
           userAvatar: p.profiles?.avatar_url || p.avatar_url,
+          imageUrl: p.imageUrl || p.image_url, // Ensure it's explicitly mapped
+          image_url: p.image_url || p.imageUrl,
           title: p.projectTitle || p.title || 'untitled project',
           description: p.caption || p.description || 'show',
           likes: p.likes_count ?? 0,

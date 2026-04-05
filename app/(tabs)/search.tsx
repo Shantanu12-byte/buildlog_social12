@@ -20,7 +20,7 @@ interface Developer {
   username: string;
   avatar_url?: string;
   bio?: string;
-  college?: string;
+  campus_name?: string;
   skills?: string[];
 }
 
@@ -45,7 +45,7 @@ export default function ExploreScreen() {
       if (activeTab === 'developers') {
         const { data } = await supabase
           .from('profiles')
-          .select('id, username, avatar_url, bio, college, skills')
+          .select('id, username, avatar_url, bio, campus_name, skills')
           .limit(20);
         setDevelopers(data || []);
       } else {
@@ -73,7 +73,7 @@ export default function ExploreScreen() {
       if (activeTab === 'developers') {
         const { data } = await supabase
           .from('profiles')
-          .select('id, username, avatar_url, bio, college, skills')
+          .select('id, username, avatar_url, bio, campus_name, skills')
           .ilike('username', `%${val}%`)
           .limit(20);
         setDevelopers(data || []);
@@ -138,7 +138,7 @@ export default function ExploreScreen() {
                 <View style={{ flex: 1, marginLeft: 12 }}>
                   <Text style={s.devName}>{item.username || 'Anonymous'}</Text>
                   <Text style={s.devBio} numberOfLines={1}>{item.bio || 'Exploring the frontier'}</Text>
-                  <Text style={s.devCollege}>{item.college?.toUpperCase() || 'UNLINKED_ACADEMY'}</Text>
+                  <Text style={s.devCollege}>{item.campus_name?.toUpperCase() || 'UNLINKED_ACADEMY'}</Text>
                   <View style={s.skillsRow}>
                     {(item.skills || []).slice(0, 3).map((skill: string, i: number) => (
                       <Tag key={i} label={skill.toUpperCase()} />
