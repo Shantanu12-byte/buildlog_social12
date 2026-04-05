@@ -29,11 +29,10 @@ const UsersPage = () => {
   }
 
   const handleMakeModerator = async (userId: string) => {
-    const { error } = await supabase
-      .from('profiles')
-      .update({ role: 'moderator' })
-      .eq('id', userId)
-
+    const { error } = await supabase.rpc('admin_set_user_role', {
+      target_user_id: userId,
+      new_role: 'moderator'
+    })
     if (!error) fetchUsers()
     setMenuOpen(null)
   }

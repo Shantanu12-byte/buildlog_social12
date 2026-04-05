@@ -30,7 +30,10 @@ const RolesPage = () => {
   }
 
   const handleUpdateRole = async (userId: string, role: 'user' | 'moderator' | 'admin') => {
-    const { error } = await supabase.from('profiles').update({ role }).eq('id', userId)
+    const { error } = await supabase.rpc('admin_set_user_role', {
+      target_user_id: userId,
+      new_role: role
+    })
     if (!error) fetchRoles()
   }
 
