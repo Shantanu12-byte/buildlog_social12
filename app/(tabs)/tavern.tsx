@@ -12,7 +12,8 @@ import {
   StyleSheet, SafeAreaView, StatusBar, KeyboardAvoidingView,
   Platform, ActivityIndicator, Modal, Alert, ScrollView,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
+import { trackPageView } from '@/services/analyticsService';
 import { supabase } from '@/lib/supabase';
 import { LoadingScreen } from '@/components/ui/UI';
 import { useUserStore } from '@/store/userStore';
@@ -44,6 +45,7 @@ interface Message {
   sender_campus_name?: string;
   content: string;
   created_at: string;
+  type?: 'text' | 'system';
 }
 
 type TabType = 'campus' | 'global';
@@ -120,6 +122,19 @@ const MessageBubble = React.memo(({ msg, isMe, onLongPress }: { msg: Message; is
   const { theme, isDark } = useTheme();
   const s = React.useMemo(() => getStyles(theme, isDark), [theme, isDark]);
   const initials = msg.sender_username.slice(0, 2).toUpperCase();
+
+  // Handle System Messages (e.g. User Joined)
+  if (msg.type === 'system') {
+    return (
+      <View style={{ width: '100%', alignItems: 'center', marginVertical: 12 }}>
+        <View style={{ backgroundColor: theme.bgInput, paddingHorizontal: 16, paddingVertical: 6, borderRadius: 20, borderWidth: 1, borderColor: theme.border }}>
+          <Text style={{ color: theme.textSecondary, fontSize: 12, fontWeight: '700' }}>
+            {msg.content}
+          </Text>
+        </View>
+      </View>
+    );
+  }
 
   // FIX - Flagging Logic (URLs + Promotional keywords)
   const isFlagged = msg.content.match(/https?:\/\//) &&
@@ -305,6 +320,13 @@ function ChatView({
 export default function TavernScreen() {
   const router = useRouter();
   const { userProfile, userId, updateUserProfile, profileFetched, fetchUserProfile } = useUserStore();
+
+  useEffect(() => {
+    if (userId) {
+      trackPageView(userId, 'tavern');
+    }
+  }, [userId]);
+
   const { theme, isDark } = useTheme();
   const s = React.useMemo(() => getStyles(theme, isDark), [theme, isDark]);
 
@@ -355,47 +377,47 @@ export default function TavernScreen() {
   useEffect(() => {
     if (!!userProfile?.is_joined_to_campus || !!userProfile?.campus_id) {
       if (isCampusPicking) {
-        console.log('[Tavern] Profile updated, closing picker...');
         setIsCampusPicking(false);
       }
       if (!isJoined) setIsJoined(true);
     }
   }, [userProfile]);
 
-  async function checkCampusStatus() {
-    if (!userId) return;
+  async function checkCampusStatus(): Promise<boolean> {
+    if (!userId) return false;
     setIsCheckingStatus(true);
-    console.log('[Tavern] 1. Checking fresh campus status from DB...');
     
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('is_joined_to_campus, campus_id, campus_name')
-      .eq('id', userId)
-      .single();
-      
-    if (!error && data) {
-      console.log('[Tavern] 2. Fresh status:', data.is_joined_to_campus);
-      setIsJoined(data.is_joined_to_campus);
-      // If store is out of sync, trigger a background refresh
-      if (data.is_joined_to_campus !== userProfile?.is_joined_to_campus) {
-        useUserStore.getState().refreshProfile();
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('is_joined_to_campus, campus_id, campus_name')
+        .eq('id', userId)
+        .single();
+        
+      if (!error && data) {
+        setIsJoined(data.is_joined_to_campus);
+        if (data.is_joined_to_campus !== userProfile?.is_joined_to_campus) {
+          useUserStore.getState().refreshProfile();
+        }
+        return !!data.is_joined_to_campus;
       }
+    } catch (e) {
+    } finally {
+      setIsCheckingStatus(false);
     }
-    setIsCheckingStatus(false);
+    return false;
   }
 
   async function initScreen() {
     if (!profileFetched) return;
     if (!userId) { router.replace('/(auth)/login' as any); return; }
 
-    await checkCampusStatus();
+    const isActuallyJoined = await checkCampusStatus();
 
-    // 1. One-Time Campus Selection Flow
-    if (!userProfile?.campus_id && !userProfile?.is_joined_to_campus && !isJoined) {
+    if (!userProfile?.campus_id && !userProfile?.is_joined_to_campus && !isActuallyJoined) {
       setIsCampusPicking(true);
     }
 
-    // 2. Ensure user is actually IN their campus rooms if they have a campus_id
     if (userProfile?.campus_id) {
        await ensureCampusRooms(userProfile.campus_id, userProfile.campus_name || 'Campus');
     }
@@ -407,14 +429,9 @@ export default function TavernScreen() {
     setLoading(false);
   }
 
-  /**
-   * Helper to find/create/join official campus rooms.
-   * Ensures the Tavern isn't empty for users with a campus_id.
-   */
   async function ensureCampusRooms(campusId: string, campusName: string) {
     if (!userId) return;
     try {
-      // 1. Check for existing campus rooms
       const { data: rooms, error: fetchError } = await supabase
         .from('chat_rooms')
         .select('id')
@@ -423,7 +440,6 @@ export default function TavernScreen() {
 
       if (fetchError) return;
 
-      // 2. Auto-Create Official Hub if no rooms exist for this campus
       if (!rooms || rooms.length === 0) {
         const { data: newRoom, error: createError } = await supabase
           .from('chat_rooms')
@@ -444,14 +460,11 @@ export default function TavernScreen() {
           await joinRoom(newRoom.id);
         }
       } else {
-        // 3. Join any existing rooms that the user isn't already in
-        // (joinRoom handles the duplicate check internally)
         for (const r of rooms) {
           await joinRoom(r.id);
         }
       }
     } catch (e) {
-      // Silent fail for background sync
     }
   }
 
@@ -470,7 +483,6 @@ export default function TavernScreen() {
   async function joinRoom(roomId: string, enterImmediately = false) {
     if (!userId) return;
     
-    // 1. Check if membership already exists to avoid 409 Conflict / 403 Forbidden on upsert
     const { data: existing } = await supabase
       .from('room_members')
       .select('id')
@@ -497,14 +509,47 @@ export default function TavernScreen() {
     if (!error) {
       setJoinedRooms(prev => [...prev, roomId]);
       setRooms(prev => prev.map(r => r.id === roomId ? { ...r, member_count: (r.member_count ?? 0) + 1 } : r));
+      
+      const username = userProfile?.username || 'builder';
+      await supabase.from('messages').insert({
+        room_id: roomId,
+        sender_id: userId,
+        sender_username: 'System',
+        content: `👋 @${username} joined the community!`,
+        type: 'system'
+      });
+
       showToast('Joined successfully! 🎉');
+
+      try {
+        const backendUrl = process.env.EXPO_PUBLIC_BACKEND_URL || 'http://localhost:5000';
+        const { data: { session } } = await supabase.auth.getSession();
+        const token = session?.access_token;
+        const room = rooms.find(r => r.id === roomId);
+        
+        if (token && room) {
+          fetch(`${backendUrl}/api/user/push/notify/chat`, {
+            method: 'POST',
+            headers: { 
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({
+              roomId: roomId,
+              senderUsername: 'System',
+              roomName: room.name,
+              message: `@${username} joined the community! 👋`
+            }),
+          }).catch(() => {});
+        }
+      } catch (e) {
+      }
+
       if (enterImmediately) {
         const room = rooms.find(r => r.id === roomId);
         if (room) openRoom(room);
       }
     } else {
-      console.error('[Tavern] Join error:', error);
-      // If it's just a duplicate, we can ignore and pretend success
       if (error.code === '23505') { 
          setJoinedRooms(prev => [...prev, roomId]);
       } else {
@@ -534,15 +579,7 @@ export default function TavernScreen() {
     if (!userId) return;
     setIsJoinLoading(true);
     
-    console.log('1. Starting campus join...');
-    console.log('2. Updating DB with clean payload:', {
-      campus_id: campusId,
-      campus_name: campusName,
-      is_joined_to_campus: true
-    });
-
     try {
-      // 1. Update Profile in Supabase directly with CLEAN PAYLOAD
       const { data, error } = await supabase
         .from('profiles')
         .update({
@@ -558,29 +595,19 @@ export default function TavernScreen() {
         throw new Error(error?.message || 'Update failed to return data');
       }
 
-      console.log('3. DB response confirmed update:', data.is_joined_to_campus);
-
       if (!data.is_joined_to_campus) {
-        console.error('Update did not persist!');
         throw new Error('Update did not persist in database.');
       }
 
-      // 2. Clear picker state immediately
       setIsCampusPicking(false);
 
-      // 3. Sync Rooms
       await ensureCampusRooms(campusId, campusName);
       
-      // 4. Force state sync - WAIT for refresh
-      console.log('4. Refreshing store...');
       await useUserStore.getState().refreshProfile();
-      console.log('5. Store after refresh:', useUserStore.getState().userProfile?.is_joined_to_campus);
 
-      // 5. Small delay for state to settle
       await new Promise(r => setTimeout(r, 300));
 
       setIsJoined(true);
-      console.log('6. Finalizing join. Showing alert...');
 
       Alert.alert(
         '🎉 Welcome!',
@@ -588,13 +615,11 @@ export default function TavernScreen() {
         [{ 
           text: 'Enter The Tavern', 
           onPress: () => {
-             console.log('7. User dismissed alert. Flow complete.');
           }
         }]
       );
 
     } catch (err: any) { 
-      console.error('Join process failed:', err);
       Alert.alert('Join Failed', err.message || 'Could not join campus.');
     } finally {
       setIsJoinLoading(false);

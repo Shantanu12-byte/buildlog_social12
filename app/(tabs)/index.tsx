@@ -23,6 +23,7 @@ import Animated, {
   runOnJS 
 } from 'react-native-reanimated';
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
+import { trackPageView } from '@/services/analyticsService';
 
 export default function FeedScreen() {
   const router = useRouter();
@@ -63,6 +64,12 @@ export default function FeedScreen() {
       supabase.removeChannel(channel);
     };
   }, []);
+
+  useEffect(() => {
+    if (userId) {
+      trackPageView(userId, 'feed');
+    }
+  }, [userId]);
 
 
   async function fetchPosts(reset = false) {

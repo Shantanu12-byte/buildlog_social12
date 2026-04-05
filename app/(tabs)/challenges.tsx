@@ -1,475 +1,501 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Alert, Animated, Easing, ScrollView, Platform } from 'react-native';
+import { 
+  View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, 
+  ScrollView, Platform, Animated, Image, Dimensions
+} from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Typography, Spacing, Radius } from '@/constants/theme';
-import { Feather, FontAwesome5 } from '@expo/vector-icons';
-import LottieView from 'lottie-react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useAudioPlayer } from 'expo-audio';
-import { useUserStore } from '@/store/userStore';
+import { Feather, FontAwesome5, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme } from '@/context/ThemeContext';
-import { COURSE_DATA } from '@/constants/courseData';
-import AnimatedProgressBar from '@/components/AnimatedProgressBar';
-import QuizOption from '@/components/QuizOption';
-import TutorModal from '@/components/TutorModal';
-import { getTutoringFeedback } from '@/services/TutorController';
-import { manageLanguageProgress } from '@/services/AsyncProgressManager';
+import { useUserStore } from '@/store/userStore';
+import { supabase } from '@/lib/supabase';
+import { useRouter, useLocalSearchParams } from 'expo-router';
+import { trackPageView } from '@/services/analyticsService';
+
+const { width } = Dimensions.get('window');
+
+interface Problem {
+  id: string;
+  title: string;
+  difficulty: 'Easy' | 'Medium' | 'Hard';
+  type: 'coding' | 'mcq' | 'bug_fix' | 'output_predict';
+  tags: string[];
+  companies: string[];
+  status?: 'solved' | 'attempted' | 'none';
+}
 
 export default function ChallengesScreen() {
   const { theme, isDark } = useTheme();
-  const styles = React.useMemo(() => getStyles(theme, isDark), [theme, isDark]);
-  const { userProfile } = useUserStore();
+  const s = React.useMemo(() => getStyles(theme, isDark), [theme, isDark]);
+  const { userProfile, userId } = useUserStore();
+  const router = useRouter();
+
   const [loading, setLoading] = useState(true);
-  
-  // Onboarding State
-  const [learningFocus, setLearningFocus] = useState<string | null>(null);
-  const [skillLevel, setSkillLevel] = useState<string | null>(null);
+  const [dailyChallenge, setDailyChallenge] = useState<Problem | null>(null);
+  const [problems, setProblems] = useState<Problem[]>([]);
+  const [userProgress, setUserProgress] = useState<Record<string, 'solved' | 'attempted'>>({});
+  const [filter, setFilter] = useState<'All' | 'Easy' | 'Medium' | 'Hard'>('All');
+  const [typeFilter, setTypeFilter] = useState<string | null>(null);
 
-  // Challenge Engine State
-  const [sessionQuestions, setSessionQuestions] = useState<any[]>([]);
-  const [questionIndex, setQuestionIndex] = useState(0);
-  const [roundScore, setRoundScore] = useState(0);
-  const [isRoundFinished, setIsRoundFinished] = useState(false);
-  const [selectedOption, setSelectedOption] = useState<string | null>(null);
-  
-  // Validation State
-  const [isAnswered, setIsAnswered] = useState(false);
-  const [isCorrect, setIsCorrect] = useState<boolean | null>(null);
-  
-  // Animation
-  const scaleAnim = useRef(new Animated.Value(0)).current;
-  const animationRef = useRef<LottieView>(null);
-  const [showConfetti, setShowConfetti] = useState(false);
+  // Stats
+  const solvedCount = userProfile?.problems_solved || 0;
+  const streakCount = userProfile?.streak_count || 5; // Fallback for UI demo
+  const totalProblems = 50; // Mock total
 
-  // Constants
-  const TOPICS = ['HTML', 'CSS', 'Python', 'React', 'Java', 'DSA', 'Web3'];
-  const COURSE_THEMES: Record<string, string> = {
-    HTML: '#E34F26', CSS: '#1572B6', Python: '#FFD43B',
-    React: '#61DAFB', Java: '#f89820', DSA: '#FF2A2A', Web3: '#5D3FD3'
-  };
-  const TOPIC_ICONS: Record<string, string> = {
-    HTML: 'code', CSS: 'feather', Python: 'terminal',
-    React: 'layers', Java: 'coffee', DSA: 'share-2', Web3: 'link'
-  };
-  const LEVELS = ['Beginner', 'Pro', 'Expert'];
-  
-  // Dashboard & Quiz Animations
-  const dashboardAnims = useRef(TOPICS.map(() => new Animated.Value(0))).current;
-  const optionRefs = useRef<any[]>([]);
+  const [timeLeft, setTimeLeft] = useState('');
 
   useEffect(() => {
-    if (!learningFocus || !skillLevel) {
-      dashboardAnims.forEach(anim => anim.setValue(0));
-      Animated.stagger(100, dashboardAnims.map(anim => Animated.timing(anim, {
-        toValue: 1, duration: 600, easing: Easing.out(Easing.exp), useNativeDriver: true
-      }))).start();
-    }
-  }, [learningFocus, skillLevel, dashboardAnims]);
-  
-  // Progress State
-  const [learningStats, setLearningStats] = useState<Record<string, number>>({});
-  
-  // Tutor State
-  const [showTutor, setShowTutor] = useState(false);
-  const [tutorText, setTutorText] = useState('');
-  const [tutorSnippet, setTutorSnippet] = useState<string | null>(null);
+    loadData();
+    const updateCountdown = () => setTimeLeft(getTimeLeft());
+    updateCountdown();
+    const timer = setInterval(updateCountdown, 60000);
+    return () => clearInterval(timer);
+  }, [userId]);
 
-  // Audio Players
-  const successPlayer = useAudioPlayer('https://www.myinstants.com/media/sounds/level-up-191997.mp3');
-  const victoryPlayer = useAudioPlayer('https://www.myinstants.com/media/sounds/victory-royal_1.mp3');
+  const getTimeLeft = () => {
+    const now = new Date();
+    const midnight = new Date();
+    midnight.setHours(24,0,0,0);
+    const diff = midnight.getTime() - now.getTime();
+    const hours = Math.floor(diff / (1000 * 60 * 60));
+    const mins = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+    return `${hours}h ${mins}m left`;
+  };
 
-  useEffect(() => {
-    loadProgress();
-  }, []);
-
-  const loadProgress = async () => {
+  const loadData = async () => {
+    if (!userId) return;
     setLoading(true);
     try {
-      const keys = await AsyncStorage.getAllKeys();
-      const progressKeys = keys.filter(k => k.startsWith('progress_'));
-      const values = await AsyncStorage.multiGet(progressKeys);
-      
-      const stats: Record<string, number> = {};
-      values.forEach(([key, val]) => {
-        const cleanKey = key.replace('progress_', '');
-        stats[cleanKey] = val ? parseInt(val, 10) : 0;
+      // 1. Fetch Daily Challenge
+      const { data: dailyData } = await supabase
+        .from('daily_challenges')
+        .select('problem_id, problems(*)')
+        .eq('date', new Date().toISOString().split('T')[0])
+        .maybeSingle();
+
+      if (dailyData?.problems) {
+        setDailyChallenge(dailyData.problems as any);
+      } else {
+        // Deterministic fallback: pick a problem based on the date
+        const { data: all } = await supabase.from('problems').select('*');
+        if (all && all.length > 0) {
+          const dayOfYear = Math.floor((new Date().getTime() - new Date(new Date().getFullYear(), 0, 0).getTime()) / (1000 * 60 * 60 * 24));
+          const index = dayOfYear % all.length;
+          setDailyChallenge(all[index] as any);
+        }
+      }
+
+      // 2. Fetch User Progress
+      const { data: progress } = await supabase
+        .from('user_problems')
+        .select('problem_id, status')
+        .eq('user_id', userId);
+
+      const progressMap: Record<string, 'solved' | 'attempted'> = {};
+      progress?.forEach(p => {
+        progressMap[p.problem_id] = p.status as any;
       });
-      setLearningStats(stats);
-    } catch {
+      setUserProgress(progressMap);
+
+      // 3. Fetch All Problems
+      let query = supabase.from('problems').select('*').order('created_at', { ascending: false });
+      const { data: allProblems } = await query;
+      
+      if (allProblems) {
+        setProblems(allProblems.map(p => ({
+          ...p,
+          status: progressMap[p.id] || 'none'
+        })) as any);
+      }
+
+    } catch (error) {
+      console.error('Error loading challenges:', error);
     } finally {
       setLoading(false);
     }
   };
 
-  const isLevelLocked = (topic: string, level: string) => {
-    if (level === 'Beginner') return false;
-    if (level === 'Pro') return (learningStats[`${topic}_Beginner`] || 0) < 100;
-    if (level === 'Expert') return (learningStats[`${topic}_Pro`] || 0) < 100;
-    return true;
-  };
+  const filteredProblems = problems.filter(p => {
+    const diffMatch = filter === 'All' || p.difficulty === filter;
+    const typeMatch = !typeFilter || p.type === typeFilter;
+    return diffMatch && typeMatch;
+  });
 
-  const startRound = (topic: string, level: string) => {
-    const questions = (COURSE_DATA as any)[topic]?.[level];
-    
-    if (!questions) {
-      Alert.alert('Quest Unavailable', `We are still compiling the ${topic} ${level} challenges.`);
-      return;
+  const getDifficultyColor = (diff: string) => {
+    switch (diff) {
+      case 'Easy': return theme.green;
+      case 'Medium': return theme.amber;
+      case 'Hard': return theme.red;
+      default: return theme.textMuted;
     }
-
-    setLearningFocus(topic);
-    setSkillLevel(level);
-    setSessionQuestions(questions.slice(0, 5));
-    setQuestionIndex(0);
-    setRoundScore(0);
-    setIsRoundFinished(false);
-    setIsAnswered(false);
-    setIsCorrect(null);
-    setSelectedOption(null);
-  };
-
-  const submitAnswer = async (optIdx: number) => {
-    if (isAnswered) return;
-    
-    const correctIdx = sessionQuestions[questionIndex].answer;
-    const correct = optIdx === correctIdx;
-    
-    if (correct) {
-      optionRefs.current[optIdx]?.playCorrectAnimation();
-      successPlayer.play();
-    } else {
-      optionRefs.current[optIdx]?.playIncorrectAnimation();
-      optionRefs.current[correctIdx]?.playCorrectAnimation();
-      
-      const feedback = getTutoringFeedback(`${learningFocus}_${skillLevel}`, sessionQuestions[questionIndex].id, optIdx);
-      if (feedback) {
-        setTutorText(feedback.feedback);
-        setTutorSnippet(feedback.codeSnippet || null);
-        setTimeout(() => setShowTutor(true), 600);
-      }
-    }
-
-    setIsAnswered(true);
-    setIsCorrect(correct);
-    if (correct) setRoundScore(s => s + 1);
-  };
-
-  const handleNext = async () => {
-    if (questionIndex < 4) {
-      setQuestionIndex(i => i + 1);
-      setIsAnswered(false);
-      setIsCorrect(null);
-      setSelectedOption(null);
-    } else {
-      setIsRoundFinished(true);
-      const totalCorrect = roundScore; 
-      const percent = Math.round((totalCorrect / 5) * 100);
-      
-      if (totalCorrect === 5) {
-        victoryPlayer.play();
-      }
-
-      if (userProfile?.id) {
-        await manageLanguageProgress(userProfile.id, learningFocus!, skillLevel!, percent);
-      }
-      
-      await loadProgress();
-    }
-  };
-
-  useEffect(() => {
-    if (isRoundFinished && roundScore === 5) {
-      triggerConfetti();
-    }
-  }, [isRoundFinished, roundScore]);
-
-  const triggerConfetti = () => {
-    Animated.sequence([
-      Animated.timing(scaleAnim, { toValue: 1.1, duration: 250, easing: Easing.bounce, useNativeDriver: true }),
-      Animated.timing(scaleAnim, { toValue: 1, duration: 200, useNativeDriver: true })
-    ]).start();
-
-    setShowConfetti(true);
-    setTimeout(() => {
-        animationRef.current?.play();
-    }, 50);
   };
 
   if (loading) {
     return (
-      <View style={styles.centerLoading}>
-        <ActivityIndicator size="large" color={theme.purple} />
-        <Text style={styles.loadingText}>Loading Quests...</Text>
-      </View>
-    );
-  }
-
-  // 1. Course Selection Dashboard
-  if (!learningFocus || !skillLevel) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.dashboardContainer}>
-          <Text style={styles.headerTitle}>DARE TO CHALLENGE</Text>
-          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 60 }}>
-            {TOPICS.map((topic, index) => {
-              const bgBeg = learningStats[`${topic}_Beginner`] || 0;
-              const bgPro = learningStats[`${topic}_Pro`] || 0;
-              const bgExp = learningStats[`${topic}_Expert`] || 0;
-              const overall = Math.round((bgBeg + bgPro + bgExp) / 3);
-              const color = COURSE_THEMES[topic];
-              
-              const translateY = dashboardAnims[index].interpolate({
-                inputRange: [0, 1],
-                outputRange: [50, 0]
-              });
-
-              return (
-                <Animated.View 
-                  key={topic} 
-                  style={[styles.materialCard, { opacity: dashboardAnims[index], transform: [{ translateY }] }]}
-                >
-                  <TouchableOpacity 
-                    activeOpacity={0.8}
-                    style={styles.cardHeader}
-                    onPress={() => startRound(topic, 'Beginner')}
-                  >
-                    <View style={[styles.iconBox, { backgroundColor: isDark ? `${color}20` : `${color}10` }]}>
-                      <FontAwesome5 name={(TOPIC_ICONS as any)[topic]} size={20} color={color} />
-                    </View>
-                    <View style={{ flex: 1, marginLeft: 16 }}>
-                      <Text style={styles.cardTopicTitle}>{topic}</Text>
-                      <Text style={styles.cardTopicSub}>{overall}% XP Earned</Text>
-                    </View>
-                    <View style={[styles.overallRing, { borderColor: theme.border }]}>
-                      <Text style={[styles.overallText, { color }]}>{overall}%</Text>
-                    </View>
-                  </TouchableOpacity>
-
-                  <View style={styles.pillRow}>
-                    {LEVELS.map(level => {
-                      const locked = isLevelLocked(topic, level);
-                      const isLevelActive = learningStats[`${topic}_${level}`] === 100;
-                      
-                      return (
-                        <TouchableOpacity
-                          key={level}
-                          activeOpacity={locked ? 1 : 0.6}
-                          style={[
-                            styles.pillBtn,
-                            locked && styles.pillBtnLocked
-                          ]}
-                          onPress={() => !locked && startRound(topic, level)}
-                        >
-                          {locked && <Feather name="lock" size={10} color={theme.textMuted} style={{ marginRight: 4 }} />}
-                          <Text style={[styles.pillText, locked && styles.pillTextLocked, isLevelActive && { color: theme.green }]}>
-                            {level}
-                          </Text>
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </View>
-                </Animated.View>
-              );
-            })}
-          </ScrollView>
+      <SafeAreaView style={s.container}>
+        <View style={s.center}>
+          <ActivityIndicator size="large" color={theme.purple} />
+          <Text style={s.loadingText}>INITIALIZING CHALLENGES...</Text>
         </View>
       </SafeAreaView>
     );
   }
 
-  // 2. Round Completion
-  if (isRoundFinished) {
-    return (
-      <SafeAreaView style={styles.center}>
-        <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
-          <Feather name={roundScore === 5 ? "zap" : "award"} size={80} color={roundScore === 5 ? theme.purple : theme.textMuted} />
-        </Animated.View>
-        <Text style={[styles.title, { marginTop: Spacing.xl }]}>
-          {roundScore === 5 ? "CHALLENGE CONQUERED!" : "QUEST COMPLETE"}
-        </Text>
-        <Text style={styles.subtitle}>You scored {roundScore}/5 in {learningFocus} {skillLevel}.</Text>
-        
-        <TouchableOpacity 
-          style={styles.nextBtnCorrect} 
-          onPress={() => { setLearningFocus(null); setSkillLevel(null); }}
-        >
-          <Text style={styles.submitBtnText}>RETURN TO QUESTS</Text>
-        </TouchableOpacity>
-
-        {showConfetti && (
-          <View style={[StyleSheet.absoluteFill, { zIndex: 999, pointerEvents: 'none' } as any]}>
-            <LottieView
-              ref={animationRef}
-              source={{ uri: 'https://lottie.host/7ae6588f-4ba0-42f5-b6d1-cd4cd1540854/D5eJ0lWe36.json' }}
-              style={{ flex: 1 }}
-              loop={false}
-              onAnimationFinish={() => setShowConfetti(false)}
-            />
-          </View>
-        )}
-      </SafeAreaView>
-    );
-  }
-
-  const currentQ = sessionQuestions[questionIndex];
-
-  // 3. Adaptive Challenge Engine
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.challengeHeader}>
-        <TouchableOpacity 
-           onPress={() => { setLearningFocus(null); setSkillLevel(null); }} 
-           style={{ position: 'absolute', left: 20, top: 18, zIndex: 10 }}
-        >
-            <Feather name="arrow-left" size={24} color={theme.textMuted} />
-        </TouchableOpacity>
-        <Text style={styles.challengeHeaderTitle}>{learningFocus} QUEST • {skillLevel}</Text>
-        <AnimatedProgressBar progress={questionIndex / 5} />
-      </View>
-
-      <ScrollView contentContainerStyle={styles.scrollContent}>
-        <Animated.View style={[
-          styles.card, 
-          isAnswered && isCorrect && styles.cardCorrect,
-          isAnswered && isCorrect === false && styles.cardWrong,
-        ]}>
-          <Text style={styles.questionText}>
-            {currentQ.q}
-          </Text>
-
-          <View style={styles.mcqContainer}>
-            {currentQ.options?.map((opt: string, idx: number) => (
-              <QuizOption
-                key={opt}
-                ref={(el) => { optionRefs.current[idx] = el; }}
-                opt={opt}
-                idx={idx}
-                isSelected={selectedOption === opt}
-                isAnswered={isAnswered}
-                isCorrect={isCorrect}
-                correctIdx={currentQ.answer}
-                onPress={() => setSelectedOption(opt)}
-              />
-            ))}
-          </View>
-
-          {isAnswered && (
-            <View style={styles.feedbackContainer}>
-              {isCorrect ? (
-                <>
-                  <Text style={styles.feedbackCorrectTitle}>Success!</Text>
-                  <Text style={styles.feedbackText}>Knowledge verified.</Text>
-                </>
-              ) : (
-                <>
-                  <Text style={styles.feedbackWrongTitle}>Failed</Text>
-                  <Text style={styles.feedbackText}>Correct syntax: {currentQ.options[currentQ.answer]}</Text>
-                </>
-              )}
+    <SafeAreaView style={s.container} edges={['top']}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={s.content}>
+        {/* Header Section */}
+        <View style={s.header}>
+          <View style={s.headerTopRow}>
+            <View>
+              <Text style={s.headerSubtitle}>OP_PLACEMENT_PREP</Text>
+              <Text style={s.headerTitle}>CHALLENGES</Text>
             </View>
-          )}
-        </Animated.View>
-      </ScrollView>
+            <View style={s.xpBadge}>
+              <Text style={s.xpText}>⚡ {userProfile?.xp || 0} XP</Text>
+            </View>
+          </View>
+          
+          <View style={s.headerProgressWrap}>
+            <View style={s.headerProgressBarBg}>
+              <View style={[s.headerProgressBarFill, { width: `${(solvedCount / totalProblems) * 100}%` }]} />
+            </View>
+            <View style={s.headerProgressTextRow}>
+              <Text style={s.headerProgressStatus}>{solvedCount} problems solved</Text>
+              <Text style={s.headerProgressCount}>{solvedCount}/{totalProblems}</Text>
+            </View>
+          </View>
+        </View>
 
-      <View style={styles.footer}>
-        {!isAnswered ? (
+        {/* Daily Challenge Card */}
+        {dailyChallenge && (
           <TouchableOpacity 
-            style={[styles.submitBtn, !selectedOption && styles.btnDisabled]}
-            onPress={() => {
-              const idx = currentQ.options.indexOf(selectedOption);
-              submitAnswer(idx);
-            }}
-            disabled={!selectedOption}
+            activeOpacity={0.9}
+            onPress={() => router.push({ pathname: '/(stack)/problem-solver', params: { id: dailyChallenge.id } } as any)}
           >
-            <Text style={styles.submitBtnText}>VERIFY ANSWER</Text>
-          </TouchableOpacity>
-        ) : (
-          <TouchableOpacity 
-            style={isCorrect ? styles.nextBtnCorrect : styles.nextBtnWrong}
-            onPress={handleNext}
-          >
-            <Text style={styles.submitBtnText}>
-              {questionIndex === 4 ? "COMPLETE QUEST" : "NEXT CHALLENGE"}
-            </Text>
+            <LinearGradient
+              colors={isDark ? ['#1a0a2e', '#0f0a1a'] : ['#f5f3ff', '#ede9fe']}
+              style={s.dailyCard}
+            >
+              <View style={s.dailyAccent} />
+              <View style={s.dailyHeader}>
+                <View style={s.dailyHeaderLeft}>
+                  <Text style={s.dailyLabel}>🔥 DAILY CHALLENGE</Text>
+                </View>
+                <Text style={s.dailyCountdown}>⏰ {timeLeft}</Text>
+              </View>
+              
+              <Text style={s.dailyTitle}>{dailyChallenge.title}</Text>
+              
+              <View style={s.dailyMeta}>
+                <View style={s.tagPill}><Text style={[s.tagText, { color: getDifficultyColor(dailyChallenge.difficulty) }]}>{dailyChallenge.difficulty}</Text></View>
+                {dailyChallenge.tags?.[0] && <View style={s.tagPill}><Text style={s.tagText}>{dailyChallenge.tags[0]}</Text></View>}
+                <View style={s.companyTags}>
+                  {dailyChallenge.companies?.slice(0, 2).map((c, i) => (
+                    <View key={i} style={s.companyPill}>
+                      <Text style={s.companyPillText}>{c}</Text>
+                    </View>
+                  ))}
+                </View>
+              </View>
+              
+              <View style={s.dailyAction}>
+                <Text style={s.dailyActionText}>Solve Today →</Text>
+              </View>
+            </LinearGradient>
           </TouchableOpacity>
         )}
-      </View>
 
-      <TutorModal 
-        visible={showTutor} 
-        feedback={tutorText} 
-        codeSnippet={tutorSnippet}
-        onClose={() => setShowTutor(false)} 
-      />
+        {/* Quick Actions Row */}
+        <View style={s.quickActions}>
+          <TouchableOpacity 
+            style={s.actionCard} 
+            onPress={() => router.push('/(stack)/daily-memos')}
+          >
+            <View style={[s.actionIconBox, { backgroundColor: isDark ? 'rgba(124, 58, 237, 0.15)' : 'rgba(124, 58, 237, 0.08)' }]}>
+              <MaterialCommunityIcons name="brain" size={24} color={theme.purple} />
+            </View>
+            <Text style={s.actionTitle}>Daily Memos</Text>
+            <Text style={s.actionSubtitle}>3/10 Today</Text>
+            <View style={s.actionProgressBg}>
+              <View style={[s.actionProgressFill, { width: '30%', backgroundColor: theme.purple }]} />
+            </View>
+          </TouchableOpacity>
+          
+          <TouchableOpacity 
+            style={s.actionCard}
+            onPress={() => router.push('/(stack)/company-tracks')}
+          >
+            <View style={[s.actionIconBox, { backgroundColor: isDark ? 'rgba(34, 197, 94, 0.15)' : 'rgba(34, 197, 94, 0.08)' }]}>
+              <Feather name="briefcase" size={20} color={theme.green} />
+            </View>
+            <Text style={s.actionTitle}>Company Tracks</Text>
+            <Text style={s.actionSubtitle}>{dailyChallenge?.companies?.[0] || 'TCS'}, etc.</Text>
+            <View style={s.tracksBadge}>
+              <Text style={s.tracksBadgeText}>4 tracks</Text>
+            </View>
+          </TouchableOpacity>
+        </View>
+
+        {/* Your Progress Section */}
+        <View style={s.progressSection}>
+          <View style={s.sectionHeader}>
+            <Text style={s.sectionTitle}>YOUR PROGRESS</Text>
+            <View style={s.streakBadge}>
+              <Text style={s.streakText}>🔥 {streakCount} DAY STREAK</Text>
+            </View>
+          </View>
+          
+          <View style={s.statsStatRow}>
+            <View style={s.statsCard}>
+              <Text style={s.statsValLarge}>{userProfile?.easy_solved || 0}</Text>
+              <Text style={[s.statsLabelSmall, { color: theme.green }]}>Easy</Text>
+              <Text style={s.statsSubLabel}>solved</Text>
+            </View>
+            <View style={s.statsCard}>
+              <Text style={s.statsValLarge}>{userProfile?.medium_solved || 0}</Text>
+              <Text style={[s.statsLabelSmall, { color: theme.amber }]}>Medium</Text>
+              <Text style={s.statsSubLabel}>solved</Text>
+            </View>
+            <View style={s.statsCard}>
+              <Text style={s.statsValLarge}>{userProfile?.hard_solved || 0}</Text>
+              <Text style={[s.statsLabelSmall, { color: theme.red }]}>Hard</Text>
+              <Text style={s.statsSubLabel}>solved</Text>
+            </View>
+          </View>
+
+          <View style={s.totalProgressWrap}>
+            <View style={s.totalProgressHeader}>
+              <Text style={s.totalProgressStatus}>Total: {solvedCount}/{totalProblems}</Text>
+              <Text style={s.totalProgressPercent}>{Math.round((solvedCount/totalProblems)*100)}%</Text>
+            </View>
+            <View style={s.totalProgressBarBg}>
+              <View style={[s.totalProgressBarFill, { width: `${(solvedCount/totalProblems)*100}%` }]} />
+            </View>
+          </View>
+        </View>
+
+        {/* Filters */}
+        <View style={s.filterWrapper}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.filterRow}>
+            {['All', 'Easy', 'Medium', 'Hard'].map((f) => (
+              <TouchableOpacity 
+                key={f} 
+                style={[s.filterBtn, filter === f && s.filterBtnActive]}
+                onPress={() => setFilter(f as any)}
+              >
+                <Text style={[s.filterBtnText, filter === f && s.filterBtnTextActive]}>{f}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.filterRow}>
+            {[
+              { id: 'coding', label: 'Coding' },
+              { id: 'mcq', label: 'MCQ' },
+              { id: 'bug_fix', label: 'Bug Fix' },
+              { id: 'output_predict', label: 'Output' }
+            ].map((t) => (
+              <TouchableOpacity 
+                key={t.id} 
+                style={[s.typeFilterBtn, typeFilter === t.id && s.typeFilterBtnActive]}
+                onPress={() => setTypeFilter(typeFilter === t.id ? null : t.id)}
+              >
+                <Text style={[s.filterBtnText, typeFilter === t.id && s.filterBtnTextActive]}>{t.label}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
+
+        {/* Problem List Cluster */}
+        <View style={s.listWrapper}>
+          <View style={s.problemList}>
+            {filteredProblems.map((p, index) => {
+              const isFirst = index === 0;
+              const isLast = index === filteredProblems.length - 1;
+              
+              return (
+                <TouchableOpacity 
+                  key={p.id} 
+                  style={[
+                    s.problemCard,
+                    isFirst && s.problemCardFirst,
+                    isLast && s.problemCardLast
+                  ]}
+                  onPress={() => router.push({ pathname: '/(stack)/problem-solver', params: { id: p.id } } as any)}
+                >
+                  <View style={[
+                    s.statusCircle,
+                    { backgroundColor: p.status === 'solved' ? theme.green : p.status === 'attempted' ? theme.amber : isDark ? theme.border : theme.bgInput }
+                  ]}>
+                    {p.status === 'solved' ? (
+                      <Feather name="check" size={16} color={isDark ? '#000' : '#FFF'} />
+                    ) : p.status === 'attempted' ? (
+                      <Feather name="refresh-cw" size={16} color={isDark ? '#000' : '#FFF'} />
+                    ) : (
+                      <Feather name="lock" size={16} color={theme.textMuted} />
+                    )}
+                  </View>
+                  
+                  <View style={s.problemInfo}>
+                    <Text style={s.problemTitle}>{p.title}</Text>
+                    <View style={s.problemTagsRow}>
+                      {p.tags?.slice(0, 2).map((t, ti) => (
+                        <View key={ti} style={s.listTag}><Text style={s.listTagText}>{t}</Text></View>
+                      ))}
+                      <View style={s.companyTagsInline}>
+                        {p.companies?.slice(0, 1).map((c, ci) => (
+                          <View key={ci} style={s.listCompanyPill}><Text style={s.listCompanyPillText}>{c}</Text></View>
+                        ))}
+                        {p.companies && p.companies.length > 1 && (
+                          <Text style={s.moreCompanies}>+{p.companies.length - 1} more</Text>
+                        )}
+                      </View>
+                    </View>
+                  </View>
+                  
+                  <View style={s.problemMeta}>
+                    <Text style={[s.difficultyBadgeText, { color: getDifficultyColor(p.difficulty) }]}>
+                      {p.difficulty}
+                    </Text>
+                    <Text style={s.companyCount}>{p.companies?.length || 0} Comp.</Text>
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
+            {filteredProblems.length === 0 && (
+              <View style={s.emptyState}>
+                <MaterialCommunityIcons name="script-text-outline" size={48} color={theme.border} />
+                <Text style={s.emptyText}>No problems matching your selection</Text>
+              </View>
+            )}
+          </View>
+        </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }
 
-const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
-    container: { flex: 1, backgroundColor: theme.bg },
-    center: { flex: 1, backgroundColor: theme.bg, justifyContent: 'center', alignItems: 'center', padding: Spacing.xl },
-    centerLoading: { flex: 1, backgroundColor: theme.bg, justifyContent: 'center', alignItems: 'center' },
-    loadingText: { color: theme.purple, marginTop: Spacing.md, fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace' },
+const getStyles = (theme: any, isDark: boolean) => {
+  const bg = isDark ? '#0a0a0a' : '#f0f2f5';
+  const bgCard = isDark ? '#111111' : '#ffffff';
+  const bgCardAlt = isDark ? '#161616' : '#f8fafc';
+  const border = isDark ? '#1f2937' : '#e2e8f0';
+  const textPrimary = isDark ? '#ffffff' : '#0f172a';
+  const textSecondary = isDark ? '#9ca3af' : '#475569';
+  const textMuted = isDark ? '#6b7280' : '#94a3b8';
+
+  const shadow = !isDark ? {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 2,
+  } : {};
+
+  return StyleSheet.create({
+    container: { flex: 1, backgroundColor: bg },
+    center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+    loadingText: { color: theme.purple, marginTop: 16, fontSize: 10, fontWeight: '900', letterSpacing: 2 },
+    content: { padding: 20, paddingBottom: 100 },
     
-    title: { fontSize: 22, fontWeight: '800', color: theme.textPrimary, fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace', textAlign: 'center' },
-    subtitle: { fontSize: 13, color: theme.textSecondary, textAlign: 'center', marginTop: Spacing.sm, fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace' },
+    // Section Labels
+    sectionTitle: { color: textMuted, fontSize: 11, fontWeight: '900', letterSpacing: 2, textTransform: 'uppercase', marginBottom: 12 },
     
-    btnDisabled: { opacity: 0.5 },
-
-    // Course Dashboard
-    dashboardContainer: { flex: 1, padding: 20 },
-    headerTitle: { color: theme.textMuted, fontSize: 12, fontWeight: '900', letterSpacing: 2, marginBottom: 20, textAlign: 'center' },
-    materialCard: { 
-      backgroundColor: theme.bgCard, 
-      borderRadius: 20, 
-      padding: 20, 
-      marginBottom: 20, 
-      borderWidth: 1, 
-      borderColor: theme.border,
-    },
-    cardHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 20 },
-    iconBox: { width: 44, height: 44, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
-    cardTopicTitle: { color: theme.textPrimary, fontSize: 18, fontWeight: '800', letterSpacing: 1 },
-    cardTopicSub: { color: theme.textSecondary, fontSize: 13, marginTop: 2 },
-    overallRing: { width: 45, height: 45, borderRadius: 22.5, borderWidth: 2, justifyContent: 'center', alignItems: 'center' },
-    overallText: { fontSize: 11, fontWeight: 'bold' },
-
-    pillRow: { flexDirection: 'row', backgroundColor: theme.bgInput, borderRadius: 30, padding: 4, gap: 4 },
-    pillBtn: { flex: 1, paddingVertical: 10, alignItems: 'center', justifyContent: 'center', borderRadius: 25, backgroundColor: theme.bg, flexDirection: 'row' },
-    pillBtnLocked: { backgroundColor: 'transparent', opacity: 0.6 },
-    pillText: { color: theme.textSecondary, fontSize: 12, fontWeight: '700' },
-    pillTextLocked: { color: theme.textMuted },
-
     // Header
-    challengeHeader: { padding: Spacing.lg, borderBottomWidth: 1, borderBottomColor: theme.border, justifyContent: 'center' },
-    challengeHeaderTitle: { color: theme.textMuted, fontSize: 11, fontWeight: '800', fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace', textAlign: 'center', marginBottom: Spacing.md, letterSpacing: 2 },
+    header: { marginBottom: 32, paddingVertical: 10 },
+    headerTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 },
+    headerSubtitle: { color: theme.purple, fontSize: 10, fontWeight: '900', letterSpacing: 2, marginBottom: 4 },
+    headerTitle: { color: textPrimary, fontSize: 28, fontWeight: '800' },
+    xpBadge: { backgroundColor: theme.purple, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20 },
+    xpText: { color: '#ffffff', fontSize: 13, fontWeight: '800' },
     
-    // Card
-    scrollContent: { padding: Spacing.lg, paddingBottom: 100 },
-    card: { 
-      backgroundColor: theme.bgCard, 
-      borderRadius: 16, 
-      padding: Spacing.xl, 
-      borderWidth: 1, 
-      borderColor: theme.border
-    },
-    cardCorrect: { borderColor: theme.green },
-    cardWrong: { borderColor: theme.red },
+    headerProgressWrap: { marginTop: 8 },
+    headerProgressBarBg: { height: 4, backgroundColor: border, borderRadius: 2, overflow: 'hidden', marginBottom: 8 },
+    headerProgressBarFill: { height: '100%', backgroundColor: theme.purple, borderRadius: 2 },
+    headerProgressTextRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+    headerProgressStatus: { color: textSecondary, fontSize: 12, fontWeight: '600' },
+    headerProgressCount: { color: textMuted, fontSize: 12, fontWeight: '700' },
 
-    questionText: { color: theme.textPrimary, fontSize: 18, fontWeight: '700', lineHeight: 26 },
-    
-    // Multiple Choice
-    mcqContainer: { gap: Spacing.md, marginTop: Spacing.xl },
-    
-    // Feedback
-    feedbackContainer: { marginTop: Spacing.xl, padding: Spacing.lg, backgroundColor: theme.bg, borderRadius: 8, borderWidth: 1, borderColor: theme.border },
-    feedbackCorrectTitle: { color: theme.green, fontSize: 16, fontWeight: 'bold', fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace', marginBottom: 8 },
-    feedbackWrongTitle: { color: theme.red, fontSize: 16, fontWeight: 'bold', fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace', marginBottom: 8 },
-    feedbackText: { color: theme.textSecondary, fontSize: 13, lineHeight: 18 },
+    // Daily Challenge
+    dailyCard: { borderRadius: 24, padding: 24, marginBottom: 24, borderWidth: 1, borderColor: isDark ? 'rgba(124, 58, 237, 0.25)' : 'rgba(124, 58, 237, 0.15)', position: 'relative', overflow: 'hidden', ...shadow },
+    dailyAccent: { position: 'absolute', left: 0, top: 24, bottom: 24, width: 3, backgroundColor: theme.purple, borderRadius: 2 },
+    dailyHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
+    dailyHeaderLeft: { flexDirection: 'row', alignItems: 'center' },
+    dailyLabel: { color: isDark ? '#f97316' : theme.purple, fontSize: 11, fontWeight: '800', letterSpacing: 1 },
+    dailyCountdown: { color: textMuted, fontSize: 11, fontWeight: '600' },
+    dailyTitle: { color: textPrimary, fontSize: 24, fontWeight: '800', marginBottom: 16 },
+    dailyMeta: { flexDirection: 'row', gap: 8, flexWrap: 'wrap', alignItems: 'center' },
+    tagPill: { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, borderWidth: 1, borderColor: border },
+    tagText: { fontSize: 11, fontWeight: '700', color: textSecondary },
+    companyTags: { flexDirection: 'row', gap: 6 },
+    companyPill: { backgroundColor: border, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
+    companyPillText: { color: textSecondary, fontSize: 10, fontWeight: '800' },
+    dailyAction: { marginTop: 24, alignSelf: 'flex-end' },
+    dailyActionText: { color: theme.purple, fontSize: 15, fontWeight: '800' },
 
-    // Footer Buttons
-    footer: { padding: Spacing.xl, backgroundColor: theme.bg, borderTopWidth: 1, borderTopColor: theme.border },
-    submitBtn: { backgroundColor: theme.purple, padding: 18, alignItems: 'center', borderRadius: 30 },
-    submitBtnText: { color: isDark ? '#000' : '#FFF', fontSize: 15, fontWeight: '900', letterSpacing: 1, fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace' },
-    nextBtnCorrect: { backgroundColor: theme.green, padding: 18, alignItems: 'center', borderRadius: 30 },
-    nextBtnWrong: { backgroundColor: theme.red, padding: 18, alignItems: 'center', borderRadius: 30 },
-});
+    // Quick Actions
+    quickActions: { flexDirection: 'row', gap: 12, marginBottom: 32 },
+    actionCard: { flex: 1, backgroundColor: bgCard, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: border, ...shadow },
+    actionIconBox: { width: 40, height: 40, borderRadius: 10, alignItems: 'center', justifyContent: 'center', marginBottom: 12 },
+    actionTitle: { color: textPrimary, fontSize: 15, fontWeight: '800' },
+    actionSubtitle: { color: textSecondary, fontSize: 11, marginTop: 4, marginBottom: 12 },
+    actionProgressBg: { height: 4, backgroundColor: border, borderRadius: 2, overflow: 'hidden' },
+    actionProgressFill: { height: '100%', borderRadius: 2 },
+    tracksBadge: { alignSelf: 'flex-start', backgroundColor: border, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, marginTop: 8 },
+    tracksBadgeText: { color: textSecondary, fontSize: 10, fontWeight: '800' },
+
+    // Your Progress
+    progressSection: { marginBottom: 32 },
+    sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
+    streakBadge: { backgroundColor: isDark ? '#7c2d12' : '#fff7ed', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 12 },
+    streakText: { color: isDark ? '#f97316' : '#ea580c', fontSize: 11, fontWeight: '800' },
+    
+    statsStatRow: { flexDirection: 'row', gap: 10, marginBottom: 20 },
+    statsCard: { flex: 1, alignItems: 'center', backgroundColor: bgCard, padding: 12, borderRadius: 12, borderWidth: 1, borderColor: border, ...shadow },
+    statsValLarge: { color: textPrimary, fontSize: 20, fontWeight: '800' },
+    statsLabelSmall: { fontSize: 10, fontWeight: '900', marginTop: 4, textTransform: 'uppercase' },
+    statsSubLabel: { color: textMuted, fontSize: 9, fontWeight: '600' },
+
+    totalProgressWrap: { marginTop: 4 },
+    totalProgressHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
+    totalProgressStatus: { color: textSecondary, fontSize: 12, fontWeight: '600' },
+    totalProgressPercent: { color: textPrimary, fontSize: 12, fontWeight: '800' },
+    totalProgressBarBg: { height: 8, backgroundColor: border, borderRadius: 4, overflow: 'hidden' },
+    totalProgressBarFill: { height: '100%', backgroundColor: theme.purple, borderRadius: 4 },
+
+    // Filters
+    filterWrapper: { marginBottom: 20, gap: 12 },
+    filterRow: { gap: 8, paddingRight: 20 },
+    filterBtn: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, backgroundColor: bgCard, borderWidth: 1, borderColor: border, ...shadow },
+    filterBtnActive: { backgroundColor: theme.purple, borderColor: theme.purple },
+    typeFilterBtn: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, backgroundColor: bgCard, borderWidth: 1, borderColor: border, ...shadow },
+    typeFilterBtnActive: { backgroundColor: theme.purple, borderColor: theme.purple },
+    filterBtnText: { color: textSecondary, fontSize: 13, fontWeight: '600' },
+    filterBtnTextActive: { color: '#ffffff', fontWeight: '700' },
+
+    // List Wrapper
+    listWrapper: { backgroundColor: bgCard, borderRadius: 16, borderWidth: 1, borderColor: border, overflow: 'hidden', ...shadow },
+    problemList: {},
+    problemCard: { flexDirection: 'row', alignItems: 'center', padding: 16, borderBottomWidth: 1, borderBottomColor: isDark ? border : '#f1f5f9', gap: 16 },
+    problemCardFirst: { borderTopLeftRadius: 16, borderTopRightRadius: 16 },
+    problemCardLast: { borderBottomWidth: 0, borderBottomLeftRadius: 16, borderBottomRightRadius: 16 },
+    
+    statusCircle: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
+    problemInfo: { flex: 1 },
+    problemTitle: { color: textPrimary, fontSize: 16, fontWeight: '700', marginBottom: 6 },
+    problemTagsRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6 },
+    listTag: { backgroundColor: isDark ? border : '#f1f5f9', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
+    listTagText: { color: textSecondary, fontSize: 10, fontWeight: '600' },
+    companyTagsInline: { flexDirection: 'row', alignItems: 'center', gap: 4, marginLeft: 4 },
+    listCompanyPill: { backgroundColor: border, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
+    listCompanyPillText: { color: textSecondary, fontSize: 10, fontWeight: '700' },
+    moreCompanies: { color: textMuted, fontSize: 10, fontWeight: '600' },
+    
+    problemMeta: { alignItems: 'flex-end' },
+    difficultyBadgeText: { fontSize: 13, fontWeight: '800', marginBottom: 4 },
+    companyCount: { color: textMuted, fontSize: 10, fontWeight: '600' },
+    
+    emptyState: { alignItems: 'center', paddingVertical: 60, gap: 12 },
+    emptyText: { color: textMuted, fontSize: 14, textAlign: 'center', maxWidth: 200 }
+  });
+};

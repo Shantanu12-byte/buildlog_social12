@@ -24,6 +24,11 @@ interface UserProfile {
   is_joined_to_campus?: boolean;
   verified_skills?: Record<string, any>;
   is_public?: boolean;
+  xp?: number;
+  problems_solved?: number;
+  easy_solved?: number;
+  medium_solved?: number;
+  hard_solved?: number;
 }
 
 interface UserState {
@@ -73,7 +78,7 @@ export const useUserStore = create<UserState>((set, get) => ({
 
       const { data, error } = await supabase
         .from('profiles')
-        .select('id, username, bio, avatar_url, skills, languages, streak_count, level, github_url, linkedin_url, expo_push_token, onboarding_complete, campus_id, campus_name, college, is_joined_to_campus')
+        .select('id, username, bio, avatar_url, skills, languages, streak_count, level, github_url, linkedin_url, expo_push_token, onboarding_complete, campus_id, campus_name, college, is_joined_to_campus, xp, problems_solved, easy_solved, medium_solved, hard_solved')
         .eq('id', userId)
         .maybeSingle();
 
@@ -115,7 +120,8 @@ export const useUserStore = create<UserState>((set, get) => ({
       'id', 'username', 'bio', 'avatar_url', 'skills', 'languages', 
       'streak_count', 'level', 'github_url', 'linkedin_url', 'public_key',
       'expo_push_token', 'onboarding_complete', 'campus_id', 'campus_name', 
-      'college', 'is_joined_to_campus', 'is_public', 'learning_focus', 'skill_level'
+      'college', 'is_joined_to_campus', 'is_public', 'learning_focus', 'skill_level',
+      'xp', 'problems_solved', 'easy_solved', 'medium_solved', 'hard_solved'
     ];
 
     const dbPayload = Object.keys(updatedProfile)

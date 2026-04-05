@@ -5,12 +5,13 @@ import {
   RefreshControl, Image, Modal, FlatList, Switch, Platform
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useRouter, useFocusEffect } from 'expo-router';
+import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
+import { trackPageView } from '@/services/analyticsService';
 import { supabase } from '@/lib/supabase';
 import { useTheme } from '@/context/ThemeContext';
 import { Typography, Spacing, Radius, Shadows } from '@/constants/theme';
 import { Avatar, LoadingScreen } from '@/components/ui/UI';
-import { Feather, FontAwesome5 } from '@expo/vector-icons';
+import { Feather, FontAwesome5, MaterialCommunityIcons } from '@expo/vector-icons';
 import { VerifiedSkillsSection, SkillLevel } from '@/components/VerifiedSkillChip';
 import { GitHubProject } from '@/services/githubPortfolio';
 import { ProfilePortfolioController } from '@/services/ProfilePortfolioController';
@@ -26,6 +27,12 @@ export default function ProfileScreen() {
   const [profile, setProfile] = useState<any>(userProfile);
   const [stats, setStats] = useState({ projects: 0, builds: 0, followers: 0, collabs: 0, streak: 0, timeSpent: 0, following: 0 });
   const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (userId) {
+      trackPageView(userId, 'profile');
+    }
+  }, [userId]);
   const [refreshing, setRefreshing] = useState(false);
   const [verifiedSkills, setVerifiedSkills] = useState<Record<string, SkillLevel>>({});
   const [learningStats, setLearningStats] = useState<Record<string, { total: number; done: number }>>({});
@@ -419,9 +426,52 @@ export default function ProfileScreen() {
 
           {activeTab === 'matrix' && (
             <View>
-              {Object.keys(learningStats).length > 0 ? (
+              {/* Placement Prep Coding Stats */}
+              <View style={s.codingStatsSection}>
+                <Text style={s.stackHeader}>CODING STATS</Text>
+                <View style={s.statsStatRow}>
+                  <View style={s.statsCard}>
+                    <Text style={s.statsValLarge}>{activeProfile?.easy_solved || 0}</Text>
+                    <Text style={[s.statsLabelSmall, { color: theme.green }]}>Easy</Text>
+                  </View>
+                  <View style={s.statsCard}>
+                    <Text style={s.statsValLarge}>{activeProfile?.medium_solved || 0}</Text>
+                    <Text style={[s.statsLabelSmall, { color: theme.amber }]}>Med</Text>
+                  </View>
+                  <View style={s.statsCard}>
+                    <Text style={s.statsValLarge}>{activeProfile?.hard_solved || 0}</Text>
+                    <Text style={[s.statsLabelSmall, { color: theme.red }]}>Hard</Text>
+                  </View>
+                </View>
+                
+                <View style={s.xpStreakRow}>
+                  <View style={s.xpBadgeMini}>
+                    <MaterialCommunityIcons name="lightning-bolt" size={14} color={theme.purple} />
+                    <Text style={s.xpTextMini}>{activeProfile?.xp || 0} XP</Text>
+                  </View>
+                  <View style={s.streakBadgeMini}>
+                    <FontAwesome5 name="fire-alt" size={12} color="#FF5F1F" />
+                    <Text style={s.streakTextMini}>{activeProfile?.streak_count || 0} DAY STREAK</Text>
+                  </View>
+                </View>
+
+                {githubProjects.length > 0 && (
+                  <View style={s.githubLangSection}>
+                    <Text style={s.githubLangHeader}>Top GitHub Languages</Text>
+                    <View style={s.langPillRow}>
+                      {Array.from(new Set(githubProjects.map(p => p.language).filter(l => !!l))).slice(0, 3).map(lang => (
+                        <View key={lang} style={s.langPill}>
+                          <Text style={s.langPillText}>{lang}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  </View>
+                )}
+              </View>
+
+              {Object.keys(learningStats).length > 0 && (
                 <View style={s.learningSection}>
-                  <Text style={s.stackHeader}>MATRIX PROGRESS</Text>
+                  <Text style={s.stackHeader}>QUEST PROGRESS (Legacy)</Text>
                   {Object.entries(learningStats).map(([topic, data]) => {
                     const percent = data.total > 0 ? Math.round((data.done / data.total) * 100) : 0;
                     return (
@@ -436,11 +486,6 @@ export default function ProfileScreen() {
                       </View>
                     );
                   })}
-                </View>
-              ) : (
-                <View style={s.emptyGrid}>
-                  <Feather name="activity" size={40} color={theme.border} />
-                  <Text style={s.emptyGridText}>No matrix data</Text>
                 </View>
               )}
 
@@ -620,6 +665,21 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
   progressPercent: { color: theme.green, fontSize: 14, fontWeight: '900', fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace' },
   progressBarBg: { height: 8, backgroundColor: theme.bgInput, borderRadius: 4, overflow: 'hidden' },
   progressBarFill: { height: '100%', backgroundColor: theme.green, borderRadius: 4 },
+  codingStatsSection: { marginBottom: 24, backgroundColor: theme.bgCard, padding: 20, borderRadius: 16, borderWidth: 1, borderColor: theme.border },
+  statsStatRow: { flexDirection: 'row', gap: 12, marginBottom: 20 },
+  statsCard: { flex: 1, alignItems: 'center', backgroundColor: theme.bg, padding: 12, borderRadius: 12, borderWidth: 1, borderColor: theme.border },
+  statsValLarge: { color: theme.textPrimary, fontSize: 20, fontWeight: '800' },
+  statsLabelSmall: { fontSize: 10, fontWeight: '900', marginTop: 4, textTransform: 'uppercase' },
+  xpStreakRow: { flexDirection: 'row', gap: 12, marginBottom: 20 },
+  xpBadgeMini: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: isDark ? 'rgba(124,58,237,0.1)' : 'rgba(124,58,237,0.05)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20 },
+  xpTextMini: { color: theme.purple, fontSize: 12, fontWeight: '800' },
+  streakBadgeMini: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: isDark ? 'rgba(255, 95, 31, 0.1)' : 'rgba(255, 95, 31, 0.05)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20 },
+  streakTextMini: { color: '#FF5F1F', fontSize: 11, fontWeight: '800' },
+  githubLangSection: { marginTop: 10 },
+  githubLangHeader: { color: theme.textSecondary, fontSize: 12, fontWeight: '700', marginBottom: 12 },
+  langPillRow: { flexDirection: 'row', gap: 8 },
+  langPill: { backgroundColor: theme.bgInput, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, borderWidth: 1, borderColor: theme.border },
+  langPillText: { color: theme.textPrimary, fontSize: 11, fontWeight: '700' },
   tabBar: { flexDirection: 'row', borderTopWidth: 1, borderTopColor: theme.border, marginTop: 20 },
   tabItem: { flex: 1, alignItems: 'center', paddingVertical: 15, borderBottomWidth: 2, borderBottomColor: 'transparent', gap: 4 },
   tabItemActive: { borderBottomColor: theme.purple },

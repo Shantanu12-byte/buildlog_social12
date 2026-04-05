@@ -12,7 +12,7 @@ const pushNotificationRoutes = require('./routes/pushNotifications');
 const chatRoutes = require('./routes/chat');
 const { initChatService } = require('./ChatServiceController');
 const { initStreakReminder } = require('./cron/streakReminder');
-const { initDailyNews } = require('./cron/dailyNews');
+const { initDailyNotifications } = require('./cron/dailyNews');
 
 const app = express();
 const server = http.createServer(app);
@@ -37,7 +37,7 @@ app.get('/health', (req, res) => {
 
 initChatService(server);
 initStreakReminder();
-initDailyNews();
+initDailyNotifications();
 
 server.listen(PORT, () => {
   console.log(`BuildLog Backend running on port ${PORT}`);

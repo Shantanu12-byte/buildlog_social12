@@ -14,6 +14,8 @@ import { useTheme } from '@/context/ThemeContext';
 import { FeedPostCard as PostCard, FeedPost as Post } from '@/components/FeedPostCard';
 import { EmptyState, Avatar, LoadingScreen, Tag } from '@/components/ui/UI';
 import { Feather } from '@expo/vector-icons';
+import { trackPageView } from '@/services/analyticsService';
+import { useUserStore } from '@/store/userStore';
 
 interface Developer {
   id: string;
@@ -34,6 +36,13 @@ export default function ExploreScreen() {
   const [developers, setDevelopers] = useState<Developer[]>([]);
   const [projects, setProjects] = useState<any[]>([]);
   const [activeTab, setActiveTab] = useState<'developers' | 'projects'>('developers');
+  const { userId } = useUserStore();
+
+  useEffect(() => {
+    if (userId) {
+      trackPageView(userId, 'search');
+    }
+  }, [userId]);
 
   useEffect(() => {
     fetchTrending();

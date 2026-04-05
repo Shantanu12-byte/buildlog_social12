@@ -1,11 +1,14 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Platform, ViewStyle } from 'react-native';
 import { Image } from 'expo-image';
-import { Feather } from '@expo/vector-icons';
+import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import { Typography, Spacing, Radius } from '@/constants/theme';
 import { useTheme } from '@/context/ThemeContext';
 import UsernameLink from './UsernameLink';
 import { Avatar } from './ui/UI';
+import { submitReport } from '@/services/analyticsService';
+import { useUserStore } from '@/store/userStore';
+import { Alert } from 'react-native';
 
 interface PostData {
   id?: string;
@@ -51,7 +54,29 @@ export default function LogEntryFeedItem({
   style
 }: LogEntryFeedItemProps) {
   const { theme, isDark } = useTheme();
+  const { userId } = useUserStore();
   const s = React.useMemo(() => getStyles(theme, isDark), [theme, isDark]);
+
+  const handleReport = () => {
+    if (!userId || !post.id) return;
+    
+    Alert.alert(
+      "Report Content",
+      "Why are you reporting this post?",
+      [
+        { text: "Spam", onPress: () => sendReport("Spam Content") },
+        { text: "Inappropriate", onPress: () => sendReport("Inappropriate Content") },
+        { text: "Cancel", style: "cancel" }
+      ]
+    );
+  };
+
+  const sendReport = async (reason: string) => {
+    const { success } = await submitReport(userId!, post.id!, 'post', reason);
+    if (success) {
+      Alert.alert("Reported", "Thank you for helping us keep the community safe.");
+    }
+  };
 
   const {
     username = post.username || 'builder',
@@ -91,6 +116,14 @@ export default function LogEntryFeedItem({
             </View>
           </View>
         </View>
+
+        <TouchableOpacity 
+          style={s.moreBtn} 
+          onPress={handleReport}
+          activeOpacity={0.7}
+        >
+          <MaterialCommunityIcons name="dots-vertical" size={24} color={theme.textMuted} />
+        </TouchableOpacity>
       </View>
 
       {/* 2. Visual Project Content Section */}
@@ -376,5 +409,9 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
     borderColor: theme.border,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  moreBtn: {
+    padding: 8,
+    marginRight: -Spacing.md,
   }
 });
