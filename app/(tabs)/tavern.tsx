@@ -363,7 +363,21 @@ export default function TavernScreen() {
   const memberChannelRef = useRef<any>(null);
 
   useEffect(() => {
-    initScreen();
+    const profile = useUserStore.getState().userProfile;
+
+    // Early exit — if campus_id exists and shows joined in store, unlock immediately
+    if (profile?.campus_id && (profile?.is_joined_to_campus || !!profile?.campus_id)) {
+      setIsJoined(true);
+      setIsCheckingStatus(false);
+      
+      // Initialize other data while unlocked
+      Promise.all([fetchRooms(), fetchJoinedRooms(), ensureCampusRooms(profile.campus_id, profile.campus_name || 'Campus')]);
+      setLoading(false);
+      return; // ← skip DB call entirely
+    }
+
+    checkCampusFromDB();
+
     return () => {
       if (channelRef.current) {
         supabase.removeChannel(channelRef.current).then(() => {
@@ -372,6 +386,37 @@ export default function TavernScreen() {
       }
     };
   }, []);
+
+  async function checkCampusFromDB() {
+    setIsCheckingStatus(true);
+    try {
+      if (!userId) return;
+      
+      const { data } = await supabase
+        .from('profiles')
+        .select('campus_id, is_joined_to_campus, campus_name')
+        .eq('id', userId)
+        .single();
+
+      if (data?.is_joined_to_campus) {
+        // Sync to store if DB has it
+        useUserStore.getState().updateUserProfile(data);
+        if (data.campus_id) {
+           await ensureCampusRooms(data.campus_id, data.campus_name || 'Campus');
+        }
+      }
+
+      setIsJoined(!!(data?.is_joined_to_campus || data?.campus_id));
+      
+      await Promise.all([fetchRooms(), fetchJoinedRooms()]);
+    } catch (err) {
+      console.error('Campus check failed:', err);
+      setIsJoined(false);
+    } finally {
+      setIsCheckingStatus(false);
+      setLoading(false);
+    }
+  }
 
   // 0. Auto-Close Guard: If userProfile updates and shows joined, unlock the UI
   useEffect(() => {
@@ -383,55 +428,6 @@ export default function TavernScreen() {
     }
   }, [userProfile]);
 
-  async function checkCampusStatus(): Promise<boolean> {
-    if (!userId) return false;
-    setIsCheckingStatus(true);
-    
-    try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('is_joined_to_campus, campus_id, campus_name')
-        .eq('id', userId)
-        .single();
-        
-      if (!error && data) {
-        const joined = !!(data.is_joined_to_campus || data.campus_id);
-        setIsJoined(joined);
-        if (joined !== userProfile?.is_joined_to_campus) {
-          useUserStore.getState().refreshProfile();
-        }
-        return joined;
-      }
-    } catch (e) {
-    } finally {
-      setIsCheckingStatus(false);
-    }
-    return false;
-  }
-
-  async function initScreen() {
-    if (!profileFetched) return;
-    if (!userId) { router.replace('/(auth)/login' as any); return; }
-
-    // If we have a campus ID in the store, we are already joined!
-    if (userProfile?.campus_id) {
-       setIsJoined(true);
-       setIsCampusPicking(false);
-       await ensureCampusRooms(userProfile.campus_id, userProfile.campus_name || 'Campus');
-    } else {
-      // If store is empty, double check with the DB
-      const isActuallyJoined = await checkCampusStatus();
-      if (!isActuallyJoined) {
-        setIsCampusPicking(true);
-      }
-    }
-
-    await Promise.all([
-      fetchRooms(),
-      fetchJoinedRooms()
-    ]);
-    setLoading(false);
-  }
 
   async function ensureCampusRooms(campusId: string, campusName: string) {
     if (!userId) return;

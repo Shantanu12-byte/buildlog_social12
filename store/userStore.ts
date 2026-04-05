@@ -39,6 +39,7 @@ interface UserState {
   isEnderMode: boolean;
   lastFetched: number;
   fetchUserProfile: (force?: boolean) => Promise<void>;
+  fetchOrCreateProfile: (user: any) => Promise<any>;
   updateUserProfile: (profile: Partial<UserProfile>) => Promise<void>;
   toggleEnderMode: () => Promise<void>;
   initialize: () => Promise<void>;
@@ -117,6 +118,55 @@ export const useUserStore = create<UserState>((set, get) => ({
     } finally {
       set({ isLoading: false });
     }
+  },
+
+  fetchOrCreateProfile: async (user: any) => {
+    if (!user) return null;
+    
+    // First try to get existing profile
+    const { data: existing } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', user.id)
+      .single();
+
+    if (existing) {
+      set({ userProfile: existing, profileFetched: true });
+      return existing;
+    }
+
+    // Profile missing — create it atomically
+    const newProfile = {
+      id: user.id,
+      username: user.email?.split('@')[0] + '_' + Math.random().toString(36).slice(2, 6),
+      full_name: user.user_metadata?.full_name || '',
+      avatar_url: user.user_metadata?.avatar_url || null,
+      role: 'user',
+      xp: 0,
+      is_joined_to_campus: false,
+      onboarding_complete: false,
+      created_at: new Date().toISOString()
+    };
+
+    const { data: created, error } = await supabase
+      .from('profiles')
+      .upsert(newProfile, { 
+        onConflict: 'id',
+        ignoreDuplicates: false 
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Profile creation failed:', error);
+      // Show guest profile instead of crashing
+      const guestProfile = { ...newProfile, username: 'Guest' } as any;
+      set({ userProfile: guestProfile, profileFetched: true });
+      return null;
+    }
+
+    set({ userProfile: created, profileFetched: true });
+    return created;
   },
 
   updateUserProfile: async (newData) => {
@@ -212,20 +262,20 @@ export const useUserStore = create<UserState>((set, get) => ({
 
       // 2. Initial Session Check
       const { data: { session } } = await supabase.auth.getSession();
-      if (session) {
+      if (session?.user) {
         set({ userId: session.user.id });
-        await get().fetchUserProfile();
+        await get().fetchOrCreateProfile(session.user);
       } else {
         set({ profileFetched: true });
       }
 
       // 3. Listen for Auth Changes
       supabase.auth.onAuthStateChange(async (event, session) => {
-        if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && session) {
-          if (!get().userId) {
+        if (session?.user) {
+          if (!get().userId || get().userId !== session.user.id) {
             set({ userId: session.user.id });
-            await get().fetchUserProfile();
           }
+          await get().fetchOrCreateProfile(session.user);
         } else if (event === 'SIGNED_OUT') {
           get().clearUser();
         }
