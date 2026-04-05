@@ -76,13 +76,27 @@ export const useUserStore = create<UserState>((set, get) => ({
       const userId = session.user.id;
       set({ userId });
 
+      // 1. ATOMIC UPSERT-ON-FETCH: Ensure profile record always exists
+      // This solves the 'username not loading' bug by guaranteeing a row.
+      const initialProfile = {
+        id: userId,
+        username: session.user.user_metadata?.user_name || `builder_${userId.slice(0, 5)}`,
+        onboarding_complete: false,
+        created_at: new Date().toISOString()
+      };
+
       const { data, error } = await supabase
         .from('profiles')
-        .select('id, username, bio, avatar_url, skills, languages, streak_count, level, github_url, linkedin_url, expo_push_token, onboarding_complete, campus_id, campus_name, college, is_joined_to_campus, xp, problems_solved, easy_solved, medium_solved, hard_solved')
-        .eq('id', userId)
-        .maybeSingle();
+        .upsert(initialProfile, { onConflict: 'id', ignoreDuplicates: true }) // Only insert if missing
+        .select('*')
+        .single();
 
-      // Separately fetch optional columns that may not exist in all DB versions
+      if (error) {
+        console.error('[userStore] Fetch/Upsert profile error:', error);
+        throw error;
+      }
+
+      // 2. Fetch optional metadata (badges, keys)
       let extraData: Record<string, any> = {};
       if (data) {
         const { data: extra } = await supabase
@@ -93,8 +107,6 @@ export const useUserStore = create<UserState>((set, get) => ({
         if (extra) extraData = extra;
       }
 
-      if (error) throw error;
-      
       set({ 
         userProfile: data ? { ...data, ...extraData } : null, 
         profileFetched: true,

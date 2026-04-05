@@ -1,6 +1,7 @@
 const express = require('express');
 const axios = require('axios');
 const { createClient } = require('@supabase/supabase-js');
+const authMiddleware = require('../middleware/auth');
 const router = express.Router();
 
 const supabase = createClient(
@@ -11,16 +12,18 @@ const supabase = createClient(
 /**
  * Exchange temporary code for access token
  * POST /api/auth/github/exchange
+ * [SECURED]: Uses authMiddleware and req.user.id
  */
-router.post('/exchange', async (req, res) => {
-  const { code, userId } = req.body;
+router.post('/exchange', authMiddleware, async (req, res) => {
+  const { code } = req.body;
+  const userId = req.user.id; // Secure identification
 
-  if (!code || !userId) {
-    return res.status(400).json({ error: 'Code and userId are required' });
+  if (!code) {
+    return res.status(400).json({ error: 'OAuth code is required' });
   }
 
   try {
-    // 1. Exchange code for access token
+    // 1. Exchange code for access token with GitHub
     const tokenResponse = await axios.post(
       'https://github.com/login/oauth/access_token',
       {
@@ -36,42 +39,49 @@ router.post('/exchange', async (req, res) => {
     const { access_token, error } = tokenResponse.data;
 
     if (error) {
-      return res.status(400).json({ error });
+      console.error('[GitHub Exchange Error]:', error);
+      return res.status(400).json({ error: 'Failed to exchange GitHub code' });
     }
 
-    // 2. Save token to Supabase profile
+    // 2. Save token to Supabase 'user_secrets' table (Secured storage)
     const { error: dbError } = await supabase
-      .from('profiles')
-      .update({ github_access_token: access_token })
-      .eq('id', userId);
+      .from('user_secrets')
+      .upsert({ 
+        id: userId, 
+        github_access_token: access_token,
+        updated_at: new Date().toISOString()
+      });
 
     if (dbError) {
-      console.error('Database Error:', dbError);
-      return res.status(500).json({ error: 'Failed to save token to profile' });
+      console.error('[Database Error]:', dbError);
+      return res.status(500).json({ error: 'Failed to securely store GitHub token' });
     }
 
-    res.json({ success: true, message: 'GitHub connected successfully' });
+    // 3. Mark profile as GitHub-connected (Optional UI flag)
+    await supabase
+      .from('profiles')
+      .update({ is_github_connected: true })
+      .eq('id', userId);
+
+    res.json({ success: true, message: 'GitHub connected securely' });
   } catch (err) {
-    console.error('Exchange Error:', err.message);
-    res.status(500).json({ error: 'Internal server error' });
+    console.error('GitHub Exchange Error:', err.message);
+    res.status(500).json({ error: 'Internal server error during exchange' });
   }
 });
 
 /**
  * Fetch repositories for the authenticated user
  * GET /api/user/github/repos
+ * [SECURED]: Uses authMiddleware and req.user.id
  */
-router.get('/repos', async (req, res) => {
-  const { userId } = req.query;
-
-  if (!userId) {
-    return res.status(400).json({ error: 'userId is required' });
-  }
+router.get('/repos', authMiddleware, async (req, res) => {
+  const userId = req.user.id;
 
   try {
-    // 1. Get token from Supabase
+    // 1. Get token from user_secrets table
     const { data, error: dbError } = await supabase
-      .from('profiles')
+      .from('user_secrets')
       .select('github_access_token')
       .eq('id', userId)
       .single();

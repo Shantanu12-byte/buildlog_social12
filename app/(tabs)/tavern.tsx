@@ -395,11 +395,12 @@ export default function TavernScreen() {
         .single();
         
       if (!error && data) {
-        setIsJoined(data.is_joined_to_campus);
-        if (data.is_joined_to_campus !== userProfile?.is_joined_to_campus) {
+        const joined = !!(data.is_joined_to_campus || data.campus_id);
+        setIsJoined(joined);
+        if (joined !== userProfile?.is_joined_to_campus) {
           useUserStore.getState().refreshProfile();
         }
-        return !!data.is_joined_to_campus;
+        return joined;
       }
     } catch (e) {
     } finally {
@@ -412,14 +413,17 @@ export default function TavernScreen() {
     if (!profileFetched) return;
     if (!userId) { router.replace('/(auth)/login' as any); return; }
 
-    const isActuallyJoined = await checkCampusStatus();
-
-    if (!userProfile?.campus_id && !userProfile?.is_joined_to_campus && !isActuallyJoined) {
-      setIsCampusPicking(true);
-    }
-
+    // If we have a campus ID in the store, we are already joined!
     if (userProfile?.campus_id) {
+       setIsJoined(true);
+       setIsCampusPicking(false);
        await ensureCampusRooms(userProfile.campus_id, userProfile.campus_name || 'Campus');
+    } else {
+      // If store is empty, double check with the DB
+      const isActuallyJoined = await checkCampusStatus();
+      if (!isActuallyJoined) {
+        setIsCampusPicking(true);
+      }
     }
 
     await Promise.all([
