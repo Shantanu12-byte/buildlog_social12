@@ -150,6 +150,9 @@ function InnerRootLayout() {
       } else {
         const profile = userProfile;
         
+        // Priority: If either the DB or the local Auth context says onboarding is done, trust it.
+        const isOnboarded = !!profile?.onboarding_complete || isOnboardingFinished;
+
         if (profile && profile.onboarding_complete !== isOnboardingFinished) {
           updateOnboardingStatus(!!profile.onboarding_complete);
         }
@@ -158,8 +161,6 @@ function InnerRootLayout() {
           registerPushNotifications(profile.id);
         }
 
-        const isOnboarded = !!profile?.onboarding_complete || isOnboardingFinished;
-
         if (!isOnboarded) {
           const onSetupScreen = segs.includes('CompleteProfileScreen');
           if (!onSetupScreen) {
@@ -167,7 +168,8 @@ function InnerRootLayout() {
           }
         } else {
           const isAllowedRootScreen = (segs.length === 1 && !segs[0].startsWith('('));
-          const isAuthAllowedScreen = segs.includes('CampusOnboarding');
+          const isAuthAllowedScreen = segs.includes('CampusOnboarding') || segs.includes('CompleteProfileScreen');
+          
           if (!isAllowedRootScreen && ((inAuthGroup && !isAuthAllowedScreen) || segs.length === 0 || segs[0] === '')) {
             router.replace('/(tabs)');
           }

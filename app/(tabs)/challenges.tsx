@@ -66,43 +66,46 @@ export default function ChallengesScreen() {
     if (!userId) return;
     setLoading(true);
     try {
-      // 1. Fetch Daily Challenge
-      const { data: dailyData } = await supabase
-        .from('daily_challenges')
-        .select('problem_id, problems(*)')
-        .eq('date', new Date().toISOString().split('T')[0])
-        .maybeSingle();
+      // Parallelize all initial data fetching
+      const [dailyRes, progressRes, problemsRes] = await Promise.all([
+        supabase
+          .from('daily_challenges')
+          .select('problem_id, problems(*)')
+          .eq('date', new Date().toISOString().split('T')[0])
+          .maybeSingle(),
+        supabase
+          .from('user_problems')
+          .select('problem_id, status')
+          .eq('user_id', userId),
+        supabase
+          .from('problems')
+          .select('*')
+          .order('created_at', { ascending: false })
+          .limit(50) // Don't fetch everything at once
+      ]);
 
-      if (dailyData?.problems) {
-        setDailyChallenge(dailyData.problems as any);
+      // 1. Process Daily Challenge
+      if (dailyRes.data?.problems) {
+        setDailyChallenge(dailyRes.data.problems as any);
       } else {
-        // Deterministic fallback: pick a problem based on the date
-        const { data: all } = await supabase.from('problems').select('*');
-        if (all && all.length > 0) {
+        // Efficient fallback: Pick from first few problems instead of fetching all
+        if (problemsRes.data && problemsRes.data.length > 0) {
           const dayOfYear = Math.floor((new Date().getTime() - new Date(new Date().getFullYear(), 0, 0).getTime()) / (1000 * 60 * 60 * 24));
-          const index = dayOfYear % all.length;
-          setDailyChallenge(all[index] as any);
+          const index = dayOfYear % problemsRes.data.length;
+          setDailyChallenge(problemsRes.data[index] as any);
         }
       }
 
-      // 2. Fetch User Progress
-      const { data: progress } = await supabase
-        .from('user_problems')
-        .select('problem_id, status')
-        .eq('user_id', userId);
-
+      // 2. Process User Progress
       const progressMap: Record<string, 'solved' | 'attempted'> = {};
-      progress?.forEach(p => {
+      progressRes.data?.forEach(p => {
         progressMap[p.problem_id] = p.status as any;
       });
       setUserProgress(progressMap);
 
-      // 3. Fetch All Problems
-      let query = supabase.from('problems').select('*').order('created_at', { ascending: false });
-      const { data: allProblems } = await query;
-      
-      if (allProblems) {
-        setProblems(allProblems.map(p => ({
+      // 3. Process Problems
+      if (problemsRes.data) {
+        setProblems(problemsRes.data.map(p => ({
           ...p,
           status: progressMap[p.id] || 'none'
         })) as any);

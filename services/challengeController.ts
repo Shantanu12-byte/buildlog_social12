@@ -50,8 +50,16 @@ export async function executeCode(code: string, language: string, input: string)
  */
 export async function runTestCases(code: string, language: string, problem: any) {
   if (problem.type === 'output_predict') {
-    const isCorrect = code.trim() === problem.expected_output.trim();
-    return [{ passed: isCorrect, got: code.trim(), expected: problem.expected_output }];
+    const normalize = (s: string) => (s || '').replace(/\\n/g, '\n').replace(/\r\n/g, '\n').trim();
+    const cleanExpected = normalize(problem.expected_output);
+    const cleanGot = normalize(code);
+    const isCorrect = cleanGot === cleanExpected;
+    
+    return [{ 
+      passed: isCorrect, 
+      got: code.trim(), 
+      expected: problem.expected_output.replace(/\\n/g, '\n') 
+    }];
   }
 
   if (problem.type === 'mcq') {

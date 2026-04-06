@@ -12,6 +12,8 @@ import { useUserStore } from '@/store/userStore';
 import { supabase } from '@/lib/supabase';
 import { runTestCases, submitSolution } from '@/services/challengeController';
 
+const unescape = (str: string) => (str || '').replace(/\\n/g, '\n');
+
 type TabType = 'Problem' | 'Solution' | 'Discuss';
 
 export default function ProblemSolverScreen() {
@@ -26,6 +28,7 @@ export default function ProblemSolverScreen() {
   const [activeTab, setActiveTab] = useState<TabType>('Problem');
   const [language, setLanguage] = useState('python');
   const [code, setCode] = useState('');
+  const [isUnlocked, setIsUnlocked] = useState(false);
   const [executing, setExecuting] = useState(false);
   const [results, setResults] = useState<any[] | null>(null);
   const [timer, setTimer] = useState(0);
@@ -40,7 +43,7 @@ export default function ProblemSolverScreen() {
     try {
       const { data, error } = await supabase
         .from('problems')
-        .select('*')
+        .select('*, user_problems(status)')
         .eq('id', id)
         .single();
       
@@ -48,6 +51,11 @@ export default function ProblemSolverScreen() {
         setProblem(data);
         const starter = data.starter_code?.[language] || '';
         setCode(starter);
+        // Unlock if user has solved or attempted this problem before
+        const status = data.user_problems?.[0]?.status;
+        if (status === 'solved' || status === 'attempted') {
+          setIsUnlocked(true);
+        }
       }
     } catch (e) {
       console.error(e);
@@ -82,6 +90,7 @@ export default function ProblemSolverScreen() {
     try {
       const res = await submitSolution(userId, problem, code, language, results);
       if (res.success) {
+        setIsUnlocked(true);
         if (res.allPassed) {
           Alert.alert('Success!', `Congratulations! You've solved this challenge. +${problem.difficulty === 'Easy' ? 10 : 25} XP`, [
             { text: 'Return', onPress: () => router.back() }
@@ -146,7 +155,7 @@ export default function ProblemSolverScreen() {
         <ScrollView style={s.content} showsVerticalScrollIndicator={false}>
           {activeTab === 'Problem' ? (
             <View style={s.problemContainer}>
-              <Text style={s.description}>{problem.description}</Text>
+              <Text style={s.description}>{unescape(problem.description)}</Text>
               
               {/* Language Selector */}
               <View style={s.langSelector}>
@@ -195,17 +204,41 @@ export default function ProblemSolverScreen() {
                       />
                       <Text style={s.resultText}>Case {i + 1}: {res.passed ? 'PASSED' : 'FAILED'}</Text>
                       {!res.passed && (
-                        <Text style={s.resultDetail}>Expected: {res.expected}, Got: {res.got}</Text>
+                        <Text style={s.resultDetail}>Expected: {unescape(res.expected)}, Got: {unescape(res.got)}</Text>
                       )}
                     </View>
                   ))}
                 </View>
               )}
             </View>
+          ) : isUnlocked ? (
+            <View style={s.solutionContainer}>
+              {activeTab === 'Solution' ? (
+                <>
+                  <Text style={s.sectionHeader}>EXPLANATION</Text>
+                  <Text style={s.explanationText}>{unescape(problem.explanation) || 'No explanation available for this problem yet.'}</Text>
+                  
+                  {problem.solution?.[language] && (
+                    <>
+                      <Text style={[s.sectionHeader, { marginTop: 32 }]}>OPTIMAL SOLUTION ({language.toUpperCase()})</Text>
+                      <View style={s.solutionCodeBox}>
+                        <Text style={s.solutionCodeText}>{problem.solution[language]}</Text>
+                      </View>
+                    </>
+                  )}
+                </>
+              ) : (
+                <View style={s.discussPlaceholder}>
+                  <Feather name="message-square" size={48} color={theme.border} />
+                  <Text style={s.discussTitle}>COMMUNITY DISCUSSION</Text>
+                  <Text style={s.discussSubtitle}>The discussion forum for this problem is being initialized. Check back soon to see how others solved it!</Text>
+                </View>
+              )}
+            </View>
           ) : (
             <View style={s.emptyTab}>
               <MaterialCommunityIcons name="lock-outline" size={48} color={theme.border} />
-              <Text style={s.emptyTabText}>Submit to unlock {activeTab.toLowerCase()}</Text>
+              <Text style={s.emptyTabText}>Submit your first attempt to unlock {activeTab.toLowerCase()}</Text>
             </View>
           )}
         </ScrollView>
@@ -305,6 +338,16 @@ const getStyles = (theme: any, isDark: boolean) => {
     btnDisabled: { opacity: 0.5 },
 
     emptyTab: { padding: 100, alignItems: 'center' },
-    emptyTabText: { color: textMuted, marginTop: 16, fontWeight: '700', fontSize: 14, textAlign: 'center' }
+    emptyTabText: { color: textMuted, marginTop: 16, fontWeight: '700', fontSize: 14, textAlign: 'center' },
+
+    solutionContainer: { padding: 24 },
+    sectionHeader: { color: theme.purple, fontSize: 11, fontWeight: '900', letterSpacing: 1.5, marginBottom: 16 },
+    explanationText: { color: textPrimary, fontSize: 15, lineHeight: 24 },
+    solutionCodeBox: { backgroundColor: isDark ? '#000' : '#f8fafc', padding: 16, borderRadius: 12, borderWidth: 1, borderColor: border, marginTop: 8 },
+    solutionCodeText: { color: isDark ? '#4ade80' : '#475569', fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace', fontSize: 13, lineHeight: 20 },
+    
+    discussPlaceholder: { padding: 60, alignItems: 'center' },
+    discussTitle: { color: textPrimary, fontSize: 14, fontWeight: '900', marginTop: 20, letterSpacing: 1 },
+    discussSubtitle: { color: textMuted, fontSize: 13, textAlign: 'center', marginTop: 12, lineHeight: 20 }
   });
 };

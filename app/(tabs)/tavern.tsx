@@ -460,9 +460,8 @@ export default function TavernScreen() {
           await joinRoom(newRoom.id);
         }
       } else {
-        for (const r of rooms) {
-          await joinRoom(r.id);
-        }
+        // Parallel Join
+        await Promise.all(rooms.map(r => joinRoom(r.id)));
       }
     } catch (e) {
     }

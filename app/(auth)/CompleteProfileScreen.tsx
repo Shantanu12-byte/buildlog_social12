@@ -365,10 +365,17 @@ export default function CompleteProfileScreen() {
         await AsyncStorage.setItem('@buildlog_badges', JSON.stringify(earnedBadges));
       }
       
+      
       await AsyncStorage.setItem('onboarding_complete', 'true');
       updateOnboardingStatus(true);
+      
+      // Atomic Store Sync: Don't just fetch, update immediately to prevent redirect loops
+      useUserStore.getState().updateUserProfile(profileData);
+      
       await fetchUserProfile();
-      router.replace('/(tabs)/' as any);
+      
+      // Final Redirection
+      router.replace('/(tabs)');
     } catch (err: any) {
       setError(err.message ?? 'Failed to save profile');
     } finally {
