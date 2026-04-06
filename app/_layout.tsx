@@ -74,8 +74,13 @@ function InnerRootLayout() {
   const notificationListener = useRef<any>(null);
   const responseListener = useRef<any>(null);
 
+  const isInitialized = useRef(false);
+
   // 1. Initialize Global Store once
   useEffect(() => {
+    if (isInitialized.current) return;
+    isInitialized.current = true;
+    
     initializeStore();
     getOrCreateKeyPair().catch(() => {});
   }, []);

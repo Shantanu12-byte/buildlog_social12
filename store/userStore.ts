@@ -45,6 +45,7 @@ interface UserState {
   initialize: () => Promise<void>;
   refreshProfile: () => Promise<void>;
   clearUser: () => void;
+  isInitializing: boolean;
 }
 
 export const useUserStore = create<UserState>((set, get) => ({
@@ -52,6 +53,7 @@ export const useUserStore = create<UserState>((set, get) => ({
   userId: null,
   isLoading: false,
   profileFetched: false,
+  isInitializing: false,
   isEnderMode: false,
 
   lastFetched: 0,
@@ -255,13 +257,27 @@ export const useUserStore = create<UserState>((set, get) => ({
   },
 
   initialize: async () => {
+    if (get().isInitializing) return;
+    set({ isInitializing: true });
+
     try {
       // 1. Load Ender Mode
       const val = await AsyncStorage.getItem('isEnderMode');
       if (val !== null) set({ isEnderMode: JSON.parse(val) });
 
-      // 2. Initial Session Check
-      const { data: { session } } = await supabase.auth.getSession();
+      // 2. Initial Session Check - Wrap in try/catch for "Lock stolen" stability
+      let session = null;
+      try {
+        const result = await supabase.auth.getSession();
+        session = result.data.session;
+      } catch (e: any) {
+        if (e.message?.includes('Lock broken')) {
+          console.warn('[userStore] Auth lock stolen by another tab, retrying...');
+          const secondResult = await supabase.auth.getSession().catch(() => ({ data: { session: null } }));
+          session = secondResult.data.session;
+        }
+      }
+
       if (session?.user) {
         set({ userId: session.user.id });
         await get().fetchOrCreateProfile(session.user);
@@ -281,8 +297,9 @@ export const useUserStore = create<UserState>((set, get) => ({
         }
       });
     } catch (e) {
-      // Error handled silently
       set({ profileFetched: true });
+    } finally {
+      set({ isInitializing: false });
     }
   },
 

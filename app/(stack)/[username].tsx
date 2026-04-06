@@ -105,24 +105,20 @@ export default function PublicProfileScreen() {
         }
 
         setProfile(prof);
-        if (user?.id === prof.id) {
-          setIsOwner(true);
-        } else if (user?.id) {
-          const { data: followData } = await supabase
-            .from('followers')
-            .select('id')
-            .eq('follower_id', user.id)
-            .eq('following_id', prof.id)
-            .maybeSingle();
-          setIsFollowing(!!followData);
-        }
-
-        const [projRes, buildsRes, followersRes, hypesRes] = await Promise.all([
+        
+        const [followRes, projRes, buildsRes, followersRes, hypesRes] = await Promise.all([
+          user?.id ? supabase.from('followers').select('id').eq('follower_id', user.id).eq('following_id', prof.id).maybeSingle() : Promise.resolve({ data: null }),
           supabase.from('posts').select('id', { count: 'exact', head: true }).eq('author_id', prof.id),
           supabase.from('quest_logs').select('id', { count: 'exact', head: true }).eq('user_id', prof.id),
           supabase.from('followers').select('id', { count: 'exact', head: true }).eq('following_id', prof.id),
-          supabase.from('likes').select('id', { count: 'exact', head: true }).eq('post_id', prof.id), // Simplified for fallback
+          supabase.from('likes').select('id', { count: 'exact', head: true }).eq('post_id', prof.id),
         ]);
+
+        if (user?.id === prof.id) {
+          setIsOwner(true);
+        } else {
+          setIsFollowing(!!followRes.data);
+        }
 
         setStats({
           projects: projRes.count || 0,
