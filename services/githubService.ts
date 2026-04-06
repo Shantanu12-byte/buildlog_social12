@@ -1,3 +1,5 @@
+import { supabase } from '@/lib/supabase';
+
 const GITHUB_API_URL = 'https://api.github.com';
 const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL || 'http://localhost:5000'; // Fallback for development
 
@@ -18,10 +20,14 @@ export const githubService = {
    */
   exchangeGithubCode: async (code: string, userId: string): Promise<boolean> => {
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+
       const response = await fetch(`${BACKEND_URL}/api/auth/github/exchange`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({ code, userId }),
       });
@@ -41,7 +47,14 @@ export const githubService = {
    */
   fetchUserReposFromBackend: async (userId: string): Promise<GithubRepo[]> => {
     try {
-      const response = await fetch(`${BACKEND_URL}/api/user/github/repos?userId=${userId}`);
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+
+      const response = await fetch(`${BACKEND_URL}/api/user/github/repos?userId=${userId}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
 
       if (!response.ok) {
         throw new Error('FAILED_TO_FETCH_REPOS');

@@ -3,6 +3,8 @@
  * Client-side logic for managing GitHub project visibility and status.
  */
 
+import { supabase } from '../lib/supabase';
+
 const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL || 'http://localhost:5000';
 
 export const ProfilePortfolioController = {
@@ -13,7 +15,14 @@ export const ProfilePortfolioController = {
    */
   async checkGitHubStatus(userId) {
     try {
-      const response = await fetch(`${BACKEND_URL}/api/user/github/status?userId=${userId}`);
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+
+      const response = await fetch(`${BACKEND_URL}/api/user/github/status?userId=${userId}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
       if (!response.ok) {
         if (response.status === 404) return { isConnected: false, hasSufficientScopes: false };
         throw new Error('STATUS_CHECK_FAILED');
@@ -32,7 +41,14 @@ export const ProfilePortfolioController = {
     // This uses the existing githubPortfolio service logic but abstracted here
     // as requested by the user for the controller-based architecture.
     try {
-      const response = await fetch(`${BACKEND_URL}/api/user/projects?userId=${userId}`);
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+
+      const response = await fetch(`${BACKEND_URL}/api/user/projects?userId=${userId}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
       if (!response.ok) throw new Error('FAILED_TO_LOAD_PROJECTS');
       return await response.json();
     } catch (error) {
@@ -46,9 +62,15 @@ export const ProfilePortfolioController = {
    */
   async disconnectGitHub(userId) {
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+
       const response = await fetch(`${BACKEND_URL}/api/user/github/disconnect`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
         body: JSON.stringify({ userId }),
       });
       return await response.json();

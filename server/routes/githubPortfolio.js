@@ -28,7 +28,12 @@ router.get('/', async (req, res) => {
       .single();
 
     if (dbError || !data?.github_access_token) {
-      return res.status(404).json({ error: 'GitHub account not linked. Please authorize via OAuth.' });
+      return res.json({ 
+        notLinked: true, 
+        projects: [], 
+        total_count: 0,
+        message: 'GitHub account not linked. Please authorize via OAuth.' 
+      });
     }
 
     const accessToken = data.github_access_token;

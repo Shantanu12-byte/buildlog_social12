@@ -3,6 +3,8 @@
  * Frontend service for fetching automated GitHub project data.
  */
 
+import { supabase } from '@/lib/supabase';
+
 const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL || 'http://localhost:5000'; // Fallback for development
 
 export interface GitHubProject {
@@ -31,7 +33,14 @@ export interface GitHubPortfolioResponse {
  */
 export async function fetchUserProjects(userId: string): Promise<GitHubPortfolioResponse> {
   try {
-    const response = await fetch(`${BACKEND_URL}/api/user/projects?userId=${userId}`);
+    const { data: { session } } = await supabase.auth.getSession();
+    const token = session?.access_token;
+
+    const response = await fetch(`${BACKEND_URL}/api/user/projects?userId=${userId}`, {
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    });
 
     if (!response.ok) {
       if (response.status === 404) {

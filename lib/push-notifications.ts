@@ -1,3 +1,4 @@
+import { supabase } from './supabase';
 import { Platform } from 'react-native';
 
 const VAPID_PUBLIC_KEY = 'BPCZ_tRb3cxK0dKea6HD_i1fNgkrfh_K3fUrOt31utrcpvQrwBw4HZ88QMX7ayPaqgfNwQDHOtbU2osEPPipulk';
@@ -35,9 +36,15 @@ export async function registerPushNotifications(userId: string) {
 
     const subscription = await registration.pushManager.subscribe(subscribeOptions);
 
+    const { data: { session } } = await supabase.auth.getSession();
+    const token = session?.access_token;
+
     const response = await fetch(`${BACKEND_URL}/api/user/push/subscribe`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
       body: JSON.stringify({
         userId,
         subscription,

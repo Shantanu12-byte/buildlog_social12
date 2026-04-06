@@ -47,7 +47,14 @@ export default function PublicProfileScreen() {
 
       let apiSuccess = false;
       try {
-        const res = await fetch(`${BACKEND_URL}/api/user/profile/${username}`);
+        const { data: { session } } = await supabase.auth.getSession();
+        const token = session?.access_token;
+
+        const res = await fetch(`${BACKEND_URL}/api/user/profile/${username}`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
         if (res.ok) {
           const payload = await res.json();
           setProfile(payload.user);
@@ -179,9 +186,15 @@ export default function PublicProfileScreen() {
           });
 
           // 🔔 Trigger Push Notification (Backend handles platform routing)
+          const { data: { session: notificationSession } } = await supabase.auth.getSession();
+          const notificationToken = notificationSession?.access_token;
+
           fetch(`${BACKEND_URL}/api/user/push/notify/follow`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${notificationToken}`
+            },
             body: JSON.stringify({
               targetUserId: profile.id,
               followerUsername: user.user_metadata?.username || 'Someone',
