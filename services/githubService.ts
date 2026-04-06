@@ -1,7 +1,7 @@
 import { supabase } from '@/lib/supabase';
 
 const GITHUB_API_URL = 'https://api.github.com';
-const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL || 'http://localhost:5000'; // Fallback for development
+const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL || 'https://buildlog-social12.onrender.com'; // Fallback for development
 
 export interface GithubRepo {
   id: number;

@@ -5,7 +5,7 @@
 
 import { supabase } from '../lib/supabase';
 
-const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL || 'http://localhost:5000';
+const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL || 'https://buildlog-social12.onrender.com';
 
 export const ProfilePortfolioController = {
   /**

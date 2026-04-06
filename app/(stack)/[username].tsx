@@ -37,7 +37,7 @@ export default function PublicProfileScreen() {
   const [portfolio, setPortfolio] = useState<any[]>([]);
   const [insight, setInsight] = useState('');
 
-  const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL || 'http://localhost:5000';
+  const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL || 'https://buildlog-social12.onrender.com';
 
   const fetchProfileData = useCallback(async () => {
     if (!username) return;

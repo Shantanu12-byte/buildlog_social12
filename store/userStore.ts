@@ -218,7 +218,7 @@ export const useUserStore = create<UserState>((set, get) => ({
       }
 
       // 3. Cache Invalidation (Non-blocking)
-      const backendUrl = process.env.EXPO_PUBLIC_BACKEND_URL || 'http://localhost:5000';
+      const backendUrl = process.env.EXPO_PUBLIC_BACKEND_URL || 'https://buildlog-social12.onrender.com';
       const usernames = [updatedProfile.username];
       if (currentProfile.username && currentProfile.username !== updatedProfile.username) {
         usernames.push(currentProfile.username);

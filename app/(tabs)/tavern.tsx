@@ -522,7 +522,7 @@ export default function TavernScreen() {
       showToast('Joined successfully! 🎉');
 
       try {
-        const backendUrl = process.env.EXPO_PUBLIC_BACKEND_URL || 'http://localhost:5000';
+        const backendUrl = process.env.EXPO_PUBLIC_BACKEND_URL || 'https://buildlog-social12.onrender.com';
         const { data: { session } } = await supabase.auth.getSession();
         const token = session?.access_token;
         const room = rooms.find(r => r.id === roomId);
@@ -773,7 +773,7 @@ export default function TavernScreen() {
     let processedText = text;
     let wasFiltered = false;
 
-    const backendUrl = process.env.EXPO_PUBLIC_BACKEND_URL || 'http://localhost:5000';
+    const backendUrl = process.env.EXPO_PUBLIC_BACKEND_URL || 'https://buildlog-social12.onrender.com';
     const { data: { session } } = await supabase.auth.getSession();
     const token = session?.access_token;
 
