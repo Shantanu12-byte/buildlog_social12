@@ -9,7 +9,7 @@ import { processImage } from '@/lib/imageProcessor';
 import { useUserStore } from '@/store/userStore';
 import { Spacing, Radius, Typography } from '@/constants/theme';
 import { Feather } from '@expo/vector-icons';
-import { Input, Button, Avatar } from '@/components/ui/UI';
+import { Input, Button, Avatar, LoadingScreen } from '@/components/ui/UI';
 import { useTheme } from '@/context/ThemeContext';
 
 export default function EditProfileScreen() {
@@ -171,12 +171,19 @@ export default function EditProfileScreen() {
     }
   };
 
-  if (isLoading) {
-    return (
-      <View style={s.loadingContainer}>
-        <ActivityIndicator size="large" color={theme.purple} />
-      </View>
-    );
+  const [showSkeleton, setShowSkeleton] = useState(true);
+
+  useEffect(() => {
+    if (!isLoading) {
+      const timer = setTimeout(() => setShowSkeleton(false), 500);
+      return () => clearTimeout(timer);
+    } else {
+      setShowSkeleton(true);
+    }
+  }, [isLoading]);
+
+  if (showSkeleton) {
+    return <LoadingScreen type="form" />;
   }
 
   return (

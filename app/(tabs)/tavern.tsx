@@ -20,6 +20,8 @@ import { useUserStore } from '@/store/userStore';
 import CampusLeaderboard from '@/components/CampusLeaderboard';
 import CampusPicker from '@/components/CampusPicker';
 import { useTheme } from '@/context/ThemeContext';
+import { useResponsive } from '@/hooks/useResponsive';
+import { DesktopLayout } from '@/components/ui/DesktopLayout';
 
 // ─── Types ────────────────────────────────────────────────────
 interface Room {
@@ -190,7 +192,7 @@ function ChatView({
   room, messages, loading, userId, onSend, onBack, onViewMembers, onViewAbout, onLeave, onDeleteMessage 
 }: {
   room: Room; messages: Message[]; loading: boolean;
-  userId: string; onSend: (t: string) => void; onBack: () => void;
+  userId: string; onSend: (t: string) => void; onBack?: () => void;
   onViewMembers: () => void; onViewAbout: () => void;
   onLeave: () => void;
   onDeleteMessage: (id: string) => void;
@@ -234,9 +236,11 @@ function ChatView({
   return (
     <View style={s.chatView}>
       <View style={s.chatHeader}>
-        <TouchableOpacity style={s.backBtn} onPress={onBack}>
-          <Text style={s.backIcon}>←</Text>
-        </TouchableOpacity>
+        {onBack && (
+          <TouchableOpacity style={s.backBtn} onPress={onBack}>
+            <Text style={s.backIcon}>←</Text>
+          </TouchableOpacity>
+        )}
         <TouchableOpacity style={{ flex: 1, alignItems: 'center' }} onPress={onViewAbout}>
           <Text style={s.chatTitle}>{room.name}</Text>
           <Text style={s.chatHeaderSub}>{room.member_count ?? 0} members</Text>
@@ -345,6 +349,16 @@ export default function TavernScreen() {
   const [roomForPrompt, setRoomForPrompt] = useState<Room | null>(null);
   const [isJoined, setIsJoined] = useState(false);
   const [isCheckingStatus, setIsCheckingStatus] = useState(true);
+  const [showSkeleton, setShowSkeleton] = useState(true);
+
+  useEffect(() => {
+    if (!loading && !isCheckingStatus) {
+      const timer = setTimeout(() => setShowSkeleton(false), 500);
+      return () => clearTimeout(timer);
+    } else {
+      setShowSkeleton(true);
+    }
+  }, [loading, isCheckingStatus]);
 
   // Toast State
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -841,204 +855,9 @@ export default function TavernScreen() {
     // Note: Local state updated via realtime listener
   }
 
+  const { isDesktop, isTablet } = useResponsive();
+
   if (loading) return <LoadingScreen />;
-
-  if (selectedRoom) {
-    return (
-      <SafeAreaView style={s.container}>
-        <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={theme.bg} />
-        <ChatView
-          room={selectedRoom}
-          messages={messages}
-          loading={chatLoading}
-          userId={userId || ''}
-          onSend={handleSend}
-          onBack={() => {
-            setSelectedRoom(null);
-            if (channelRef.current) supabase.removeChannel(channelRef.current);
-            if (memberChannelRef.current) supabase.removeChannel(memberChannelRef.current);
-          }}
-          onViewMembers={() => {
-            fetchRoomMembers(selectedRoom.id);
-            setIsMembersVisible(true);
-          }}
-          onViewAbout={() => {
-            fetchRoomStats(selectedRoom.id);
-            fetchRoomMembers(selectedRoom.id);
-            setIsAboutVisible(true);
-          }}
-          onLeave={() => {
-            Alert.alert('Leave Room', 'Are you sure you want to leave this room?', [
-              { text: 'Cancel', style: 'cancel' },
-              { text: 'Leave', style: 'destructive', onPress: () => {
-                const roomId = selectedRoom.id;
-                leaveRoom(roomId);
-              }}
-            ]);
-          }}
-          onDeleteMessage={handleDeleteMessage}
-        />
-
-        {/* Members Modal */}
-        <Modal visible={isMembersVisible} transparent animationType="slide">
-          <View style={s.modalOverlay}>
-            <View style={[s.modalContent, { height: '80%' }]}>
-              <View style={s.modalHeader}>
-                <TouchableOpacity onPress={() => setIsMembersVisible(false)}>
-                  <Text style={s.modalCloseText}>← Members ({roomMembers.length})</Text>
-                </TouchableOpacity>
-              </View>
-
-              <ScrollView showsVerticalScrollIndicator={false}>
-                <Text style={s.memberSectionTitle}>🟢 Online ({roomMembers.filter(m => {
-                  const lastSeen = m.profiles?.last_seen;
-                  if (!lastSeen) return false;
-                  return new Date().getTime() - new Date(lastSeen).getTime() < 5 * 60000;
-                }).length})</Text>
-
-                {roomMembers.filter(m => {
-                  const lastSeen = m.profiles?.last_seen;
-                  if (!lastSeen) return false;
-                  return new Date().getTime() - new Date(lastSeen).getTime() < 5 * 60000;
-                }).map((m, i) => (
-                  <View key={i} style={s.memberRow}>
-                    <View style={s.memberAvatar}>
-                      <Text style={s.memberAvatarText}>{(m.profiles?.username || 'U').slice(0, 1).toUpperCase()}</Text>
-                    </View>
-                    <Text style={s.memberUsername}>{m.profiles?.username}</Text>
-                    <View style={s.onlineDot} />
-                  </View>
-                ))}
-
-                <Text style={s.memberSectionTitle}>👥 All Members ({roomMembers.length})</Text>
-                {roomMembers.map((m, i) => (
-                  <View key={i} style={s.memberRow}>
-                    <View style={[s.memberAvatar, { backgroundColor: theme.bgInput }]}>
-                      <Text style={s.memberAvatarText}>{(m.profiles?.username || 'U').slice(0, 1).toUpperCase()}</Text>
-                    </View>
-                    <Text style={s.memberUsername}>{m.profiles?.username}</Text>
-                  </View>
-                ))}
-
-                <TouchableOpacity
-                  style={s.leaveBtn}
-                  onPress={() => {
-                    if (selectedRoom) {
-                      const roomId = selectedRoom.id;
-                      Alert.alert('Leave Room', 'Are you sure you want to leave this room?', [
-                        { text: 'Cancel', style: 'cancel' },
-                        {
-                          text: 'Leave', style: 'destructive', onPress: () => {
-                            leaveRoom(roomId);
-                            setIsMembersVisible(false);
-                          }
-                        }
-                      ]);
-                    }
-                  }}
-                >
-                  <Text style={s.leaveBtnText}>Leave Room</Text>
-                </TouchableOpacity>
-              </ScrollView>
-            </View>
-          </View>
-        </Modal>
-
-        {/* About Modal */}
-        <Modal visible={isAboutVisible} transparent animationType="slide">
-          <View style={s.modalOverlay}>
-            <View style={[s.modalContent, { height: '80%' }]}>
-              <View style={s.modalHeader}>
-                <TouchableOpacity onPress={() => setIsAboutVisible(false)}>
-                  <Text style={s.modalCloseText}>← About</Text>
-                </TouchableOpacity>
-              </View>
-
-              <ScrollView showsVerticalScrollIndicator={false}>
-                <View style={{ alignItems: 'center', marginVertical: 20 }}>
-                  <Text style={{ fontSize: 48 }}>{selectedRoom?.type === 'global' ? '🌐' : '🏛️'}</Text>
-                  <Text style={s.aboutTitle}>{selectedRoom?.name}</Text>
-                  <Text style={s.aboutHandle}>@{selectedRoom?.name.toLowerCase().replace(/\s/g, '_')}</Text>
-                </View>
-
-                <View style={s.aboutSection}>
-                  <Text style={s.aboutSectionTitle}>📋 Description</Text>
-                  <Text style={s.aboutSectionBody}>{selectedRoom?.description || 'No description provided.'}</Text>
-                </View>
-
-                <View style={s.aboutSection}>
-                  <Text style={s.aboutSectionTitle}>📌 Tags</Text>
-                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-                    {(selectedRoom?.tags || ['Campus', 'Community']).map((tag: string, i: number) => (
-                      <View key={i} style={s.tagPill}>
-                        <Text style={s.tagText}>[{tag}]</Text>
-                      </View>
-                    ))}
-                  </View>
-                </View>
-
-                <View style={s.aboutSection}>
-                  <Text style={s.aboutSectionTitle}>📜 Rules</Text>
-                  <Text style={s.aboutSectionBody}>{selectedRoom?.rules || "1. Be respectful\n2. No spam\n3.Follow the chat rules"}</Text>
-                </View>
-
-                <View style={s.aboutSection}>
-                  <Text style={s.aboutSectionTitle}>📊 Stats</Text>
-                  <View style={s.statRow}>
-                    <Text style={s.statLabel}>👥 Members</Text>
-                    <Text style={s.statValue}>{selectedRoom?.member_count ?? 0}</Text>
-                  </View>
-                  <View style={s.statRow}>
-                    <Text style={s.statLabel}>💬 Messages</Text>
-                    <Text style={s.statValue}>{roomStats.messageCount}</Text>
-                  </View>
-                  <View style={s.statRow}>
-                    <Text style={s.statLabel}>📅 Created</Text>
-                    <Text style={s.statValue}>{new Date(roomStats.createdAt).toLocaleDateString(undefined, { month: 'short', year: 'numeric' })}</Text>
-                  </View>
-                </View>
-
-                <View style={{ marginTop: 24, marginBottom: 8 }}>
-                  <Text style={s.memberSectionTitle}>👥 Members ({roomMembers.length})</Text>
-                  {roomMembers.map((m, i) => (
-                    <View key={i} style={s.memberRow}>
-                      <View style={[s.memberAvatar, { backgroundColor: theme.bgInput }]}>
-                        <Text style={s.memberAvatarText}>{(m.profiles?.username || 'U').slice(0, 1).toUpperCase()}</Text>
-                      </View>
-                      <Text style={s.memberUsername}>{m.profiles?.username}</Text>
-                    </View>
-                  ))}
-                </View>
-
-                <TouchableOpacity
-                  style={s.leaveBtn}
-                  onPress={() => {
-                    if (selectedRoom) {
-                      const roomId = selectedRoom.id;
-                      Alert.alert(
-                        'Leave Room', 
-                        'Are you sure you want to leave this room?', 
-                      [
-                        { text: 'Cancel', style: 'cancel' },
-                        {
-                          text: 'Leave', style: 'destructive', onPress: () => {
-                            leaveRoom(roomId);
-                            setIsAboutVisible(false);
-                          }
-                        }
-                      ]);
-                    }
-                  }}
-                >
-                  <Text style={s.leaveBtnText}>Leave Room</Text>
-                </TouchableOpacity>
-              </ScrollView>
-            </View>
-          </View>
-        </Modal>
-      </SafeAreaView>
-    );
-  }
 
   const filteredRooms = rooms.filter(r => {
     if (activeTab === 'campus') {
@@ -1048,20 +867,18 @@ export default function TavernScreen() {
     return r.type === 'global';
   });
 
-  const isJoinedToCampus = (isJoined || !!userProfile?.is_joined_to_campus || !!userProfile?.campus_id);
-
-  return (
-    <SafeAreaView style={s.container}>
-      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={theme.bg} />
-
+  const renderRoomList = () => (
+    <View style={isDesktop ? s.desktopRoomList : { flex: 1 }}>
       {/* Header */}
-      <View style={s.header}>
-        <Text style={s.screenTitle}>The Tavern</Text>
-        <View style={s.liveIndicator}>
-          <View style={s.onlineDot} />
-          <Text style={s.liveText}>LIVE</Text>
+      {!isDesktop && (
+        <View style={s.header}>
+          <Text style={s.screenTitle}>The Tavern</Text>
+          <View style={s.liveIndicator}>
+            <View style={s.onlineDot} />
+            <Text style={s.liveText}>LIVE</Text>
+          </View>
         </View>
-      </View>
+      )}
 
       {/* Main Pill Toggle */}
       <View style={s.tabs}>
@@ -1074,7 +891,7 @@ export default function TavernScreen() {
           >
             <Text style={s.tabIcon}>{tab === 'campus' ? '🏫' : '🌐'}</Text>
             <Text style={[s.tabLabel, activeTab === tab && s.tabLabelActive]}>
-              {tab === 'campus' ? 'Campus' : 'Global'}
+              {tab === 'campus' ? (isDesktop ? 'Campus' : 'Campus') : 'Global'}
             </Text>
           </TouchableOpacity>
         ))}
@@ -1093,7 +910,7 @@ export default function TavernScreen() {
             style={[s.subTab, campusSubTab === 'leaderboard' && s.subTabActive]}
             onPress={() => setCampusSubTab('leaderboard')}
           >
-            <Text style={[s.subTabText, campusSubTab === 'leaderboard' && s.subTabTextActive]}>Leaderboard</Text>
+            <Text style={[s.subTabText, campusSubTab === 'leaderboard' && s.subTabTextActive]}>Rank</Text>
           </TouchableOpacity>
         </View>
       )}
@@ -1102,24 +919,26 @@ export default function TavernScreen() {
         <CampusLeaderboard />
       ) : activeTab === 'campus' && (!isJoined && !userProfile?.is_joined_to_campus) ? (
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 20 }}>
-          {isCheckingStatus ? (
-            <ActivityIndicator color={theme.purple} size="large" />
+          {showSkeleton ? (
+            <LoadingScreen type="tavern" />
           ) : (
             <View style={{ backgroundColor: theme.bgCard, padding: 30, borderRadius: 24, alignItems: 'center', borderWidth: 1, borderColor: theme.border, width: '100%' }}>
               <Text style={{ fontSize: 48, marginBottom: 16 }}>🎓</Text>
-              <Text style={{ color: theme.textPrimary, fontSize: 18, fontWeight: '700', marginBottom: 8 }}>Campus Hub Locked</Text>
-              <Text style={{ color: theme.textSecondary, fontSize: 14, textAlign: 'center', marginBottom: 24, lineHeight: 20 }}>
-                You must select and officially join a campus community to access chat groups and projects.
+              <Text style={{ color: theme.textPrimary, fontSize: 18, fontWeight: '700', marginBottom: 8 }}>Hub Locked</Text>
+              <Text style={{ color: theme.textSecondary, fontSize: 12, textAlign: 'center', marginBottom: 24, lineHeight: 18 }}>
+                Select a campus.
               </Text>
               <TouchableOpacity
                 style={{ backgroundColor: theme.purple, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 12 }}
                 onPress={() => setIsCampusPicking(true)}
               >
-                <Text style={{ color: isDark ? '#000' : '#fff', fontSize: 16, fontWeight: '700' }}>Join Community</Text>
+                <Text style={{ color: isDark ? '#000' : '#fff', fontSize: 16, fontWeight: '700' }}>Join</Text>
               </TouchableOpacity>
             </View>
           )}
         </View>
+      ) : showSkeleton ? (
+        <LoadingScreen type="tavern" />
       ) : (
         <FlatList
           data={filteredRooms}
@@ -1129,22 +948,14 @@ export default function TavernScreen() {
           ListEmptyComponent={
             <View style={s.emptyList}>
               <Text style={s.emptyIcon}>{activeTab === 'campus' ? '🎓' : '🌐'}</Text>
-              <Text style={s.emptyTitle}>{activeTab === 'campus' ? 'No campus chats yet' : 'No global servers yet'}</Text>
-              <Text style={s.emptySub}>{activeTab === 'campus' ? 'Join your college community or create one!' : 'Global servers coming soon'}</Text>
-              {activeTab === 'campus' && (
-                <TouchableOpacity
-                  style={[s.modalBtnCreate, { marginTop: 20, paddingHorizontal: 30 }]}
-                  onPress={() => setIsCreating(true)}
-                >
-                  <Text style={s.modalCreateText}>+ Create Room</Text>
-                </TouchableOpacity>
-              )}
+              <Text style={s.emptyTitle}>{activeTab === 'campus' ? 'No chats' : 'No servers'}</Text>
+              <Text style={s.emptySub}>Join or create one!</Text>
             </View>
           }
           renderItem={({ item }) => (
             <RoomCard
               room={item}
-              isActive={false}
+              isActive={selectedRoom?.id === item.id}
               isJoined={joinedRooms.includes(item.id)}
               onPress={() => handleRoomPress(item)}
               onJoin={(id) => joinRoom(id)}
@@ -1162,91 +973,209 @@ export default function TavernScreen() {
           <Text style={s.fabIcon}>+</Text>
         </TouchableOpacity>
       )}
+    </View>
+  );
 
-      {/* Campus Selection One-Time Flow */}
-      <CampusPicker
-        visible={isCampusPicking}
-        isLoading={isJoinLoading}
-        onConfirm={handleSetCampus}
+  const renderChat = (isDesktopView = false) => {
+    if (!selectedRoom) {
+      return (
+        <View style={s.emptyChatContainer}>
+          <Text style={{ fontSize: 48, marginBottom: 20 }}>💬</Text>
+          <Text style={s.emptyChatTitle}>Select a room</Text>
+          <Text style={s.emptyChatSub}>Start syncing with other builders</Text>
+        </View>
+      );
+    }
+
+    return (
+      <ChatView
+        room={selectedRoom}
+        messages={messages}
+        loading={chatLoading}
+        userId={userId || ''}
+        onSend={handleSend}
+        onBack={isDesktopView ? undefined : () => {
+          setSelectedRoom(null);
+          if (channelRef.current) supabase.removeChannel(channelRef.current);
+          if (memberChannelRef.current) supabase.removeChannel(memberChannelRef.current);
+        }}
+        onViewMembers={() => {
+          fetchRoomMembers(selectedRoom.id);
+          setIsMembersVisible(true);
+        }}
+        onViewAbout={() => {
+          fetchRoomStats(selectedRoom.id);
+          fetchRoomMembers(selectedRoom.id);
+          setIsAboutVisible(true);
+        }}
+        onLeave={() => {
+          Alert.alert('Leave Room', 'Are you sure you want to leave this room?', [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Leave', style: 'destructive', onPress: () => {
+              const roomId = selectedRoom.id;
+              leaveRoom(roomId);
+            }}
+          ]);
+        }}
+        onDeleteMessage={handleDeleteMessage}
       />
+    );
+  };
 
-      {/* Join Prompt Modal */}
-      <Modal visible={isJoinPromptVisible} transparent animationType="fade">
-        <View style={s.joinPromptOverlay}>
-          <View style={s.joinPromptContent}>
-            <Text style={s.joinPromptIcon}>{roomForPrompt?.type === 'global' ? '🌐' : '🏛️'}</Text>
-            <Text style={s.joinPromptTitle}>{roomForPrompt?.name}</Text>
-            <Text style={s.joinPromptSub}>
-              Join this room to start chatting with your campus community
-            </Text>
-
-            <View style={s.joinPromptStats}>
-              <Text style={s.joinPromptMembers}>👥 {roomForPrompt?.member_count ?? 0} members</Text>
+  return (
+    <DesktopLayout>
+      <SafeAreaView style={s.container}>
+        <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={theme.bg} />
+        
+        {isDesktop ? (
+          <View style={s.desktopWrapper}>
+            {/* Sidebar List */}
+            {renderRoomList()}
+            {/* Main Chat Area */}
+            <View style={s.desktopChatContainer}>
+              {renderChat(true)}
             </View>
-
-            <TouchableOpacity
-              style={s.joinPromptBtn}
-              onPress={() => {
-                if (roomForPrompt) {
-                  joinRoom(roomForPrompt.id, true);
-                  setIsJoinPromptVisible(false);
-                }
-              }}
-            >
-              <Text style={s.joinPromptBtnText}>Join & Enter →</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={s.joinPromptCancel} onPress={() => setIsJoinPromptVisible(false)}>
-              <Text style={s.joinPromptCancelText}>Cancel</Text>
-            </TouchableOpacity>
           </View>
-        </View>
-      </Modal>
+        ) : (
+          selectedRoom ? renderChat(false) : renderRoomList()
+        )}
 
-      {/* Toast Notification */}
-      {toastMessage && (
-        <View style={s.toastContainer}>
-          <Text style={s.toastText}>{toastMessage}</Text>
-        </View>
-      )}
+        {/* Campus Selection One-Time Flow */}
+        <CampusPicker
+          visible={isCampusPicking}
+          isLoading={isJoinLoading}
+          onConfirm={handleSetCampus}
+        />
 
-      {/* Create Community Modal */}
-      <Modal visible={isCreating} transparent animationType="slide">
-        <KeyboardAvoidingView style={s.modalOverlay} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-          <View style={s.modalContent}>
-            <Text style={s.modalTitle}>Create Community</Text>
+        {/* Join Prompt Modal */}
+        <Modal visible={isJoinPromptVisible} transparent animationType="fade">
+          <View style={s.joinPromptOverlay}>
+            <View style={s.joinPromptContent}>
+              <Text style={s.joinPromptIcon}>{roomForPrompt?.type === 'global' ? '🌐' : '🏛️'}</Text>
+              <Text style={s.joinPromptTitle}>{roomForPrompt?.name}</Text>
+              <Text style={s.joinPromptSub}>
+                Join this room to start chatting with your campus community
+              </Text>
 
-            <TextInput
-              style={s.modalInput}
-              placeholder="Community Name (e.g. CS 101)"
-              placeholderTextColor={theme.textMuted}
-              value={newRoomName}
-              onChangeText={setNewRoomName}
-              autoFocus
-            />
+              <View style={s.joinPromptStats}>
+                <Text style={s.joinPromptMembers}>👥 {roomForPrompt?.member_count ?? 0} members</Text>
+              </View>
 
-            <TextInput
-              style={[s.modalInput, { height: 80 }]}
-              placeholder="Description (optional)"
-              placeholderTextColor={theme.textMuted}
-              value={newRoomDesc}
-              onChangeText={setNewRoomDesc}
-              multiline
-            />
-
-            <View style={s.modalActions}>
-              <TouchableOpacity style={s.modalBtnCancel} onPress={() => setIsCreating(false)}>
-                <Text style={s.modalCancelText}>Cancel</Text>
+              <TouchableOpacity
+                style={s.joinPromptBtn}
+                onPress={() => {
+                  if (roomForPrompt) {
+                    joinRoom(roomForPrompt.id, true);
+                    setIsJoinPromptVisible(false);
+                  }
+                }}
+              >
+                <Text style={s.joinPromptBtnText}>Join & Enter →</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={[s.modalBtnCreate, !newRoomName.trim() && { opacity: 0.5 }]} disabled={!newRoomName.trim()} onPress={handleCreateCommunity}>
-                <Text style={s.modalCreateText}>Create</Text>
+
+              <TouchableOpacity style={s.joinPromptCancel} onPress={() => setIsJoinPromptVisible(false)}>
+                <Text style={s.joinPromptCancelText}>Cancel</Text>
               </TouchableOpacity>
             </View>
           </View>
-        </KeyboardAvoidingView>
-      </Modal>
+        </Modal>
 
-    </SafeAreaView>
+        {/* Create Community Modal */}
+        <Modal visible={isCreating} transparent animationType="slide">
+          <KeyboardAvoidingView style={s.modalOverlay} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+            <View style={s.modalContent}>
+              <Text style={s.modalTitle}>Create Community</Text>
+
+              <TextInput
+                style={s.modalInput}
+                placeholder="Community Name (e.g. CS 101)"
+                placeholderTextColor={theme.textMuted}
+                value={newRoomName}
+                onChangeText={setNewRoomName}
+                autoFocus
+              />
+
+              <TextInput
+                style={[s.modalInput, { height: 80 }]}
+                placeholder="Description (optional)"
+                placeholderTextColor={theme.textMuted}
+                value={newRoomDesc}
+                onChangeText={setNewRoomDesc}
+                multiline
+              />
+
+              <View style={s.modalActions}>
+                <TouchableOpacity style={s.modalBtnCancel} onPress={() => setIsCreating(false)}>
+                  <Text style={s.modalCancelText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[s.modalBtnCreate, !newRoomName.trim() && { opacity: 0.5 }]} disabled={!newRoomName.trim()} onPress={handleCreateCommunity}>
+                  <Text style={s.modalCreateText}>Create</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </KeyboardAvoidingView>
+        </Modal>
+
+        {/* Member List Modal */}
+        <Modal visible={isMembersVisible} transparent animationType="slide">
+          <View style={s.modalOverlay}>
+            <View style={[s.modalContent, { height: '80%' }]}>
+              <View style={s.modalHeader}>
+                <TouchableOpacity onPress={() => setIsMembersVisible(false)}>
+                  <Text style={s.modalCloseText}>← Members ({roomMembers.length})</Text>
+                </TouchableOpacity>
+              </View>
+              <ScrollView showsVerticalScrollIndicator={false}>
+                <Text style={s.memberSectionTitle}>👥 All Members ({roomMembers.length})</Text>
+                {roomMembers.map((m, i) => (
+                  <View key={i} style={s.memberRow}>
+                    <View style={s.memberAvatar}>
+                      <Text style={s.memberAvatarText}>{(m.profiles?.username || 'U').slice(0, 1).toUpperCase()}</Text>
+                    </View>
+                    <Text style={s.memberUsername}>{m.profiles?.username}</Text>
+                  </View>
+                ))}
+              </ScrollView>
+            </View>
+          </View>
+        </Modal>
+
+        {/* About Modal */}
+        <Modal visible={isAboutVisible} transparent animationType="slide">
+          <View style={s.modalOverlay}>
+            <View style={[s.modalContent, { height: '80%' }]}>
+              <View style={s.modalHeader}>
+                <TouchableOpacity onPress={() => setIsAboutVisible(false)}>
+                  <Text style={s.modalCloseText}>← About Room</Text>
+                </TouchableOpacity>
+              </View>
+              <ScrollView showsVerticalScrollIndicator={false}>
+                <View style={{ alignItems: 'center', marginVertical: 20 }}>
+                  <Text style={{ fontSize: 48 }}>{selectedRoom?.type === 'global' ? '🌐' : '🏛️'}</Text>
+                  <Text style={s.aboutTitle}>{selectedRoom?.name}</Text>
+                </View>
+                <View style={s.aboutSection}>
+                  <Text style={s.aboutSectionTitle}>Description</Text>
+                  <Text style={s.aboutSectionBody}>{selectedRoom?.description || 'Community of builders.'}</Text>
+                </View>
+                <View style={s.aboutSection}>
+                  <Text style={s.aboutSectionTitle}>Rules</Text>
+                  <Text style={s.aboutSectionBody}>{selectedRoom?.rules || "1. Respect others\n2. No spam"}</Text>
+                </View>
+              </ScrollView>
+            </View>
+          </View>
+        </Modal>
+
+        {/* Toast Notification */}
+        {toastMessage && (
+          <View style={s.toastContainer}>
+            <Text style={s.toastText}>{toastMessage}</Text>
+          </View>
+        )}
+
+      </SafeAreaView>
+    </DesktopLayout>
   );
 }
 
@@ -1564,5 +1493,36 @@ function getStyles(theme: any, isDark: boolean) {
       zIndex: 9999
     },
     toastText: { color: theme.green, fontSize: 14, fontWeight: '700' },
+
+    // Desktop Specific
+    desktopWrapper: {
+      flex: 1,
+      flexDirection: 'row',
+    },
+    desktopRoomList: {
+      width: 280,
+      borderRightWidth: 1,
+      borderRightColor: theme.border,
+      backgroundColor: isDark ? theme.bg : '#f8fafc',
+    },
+    desktopChatContainer: {
+      flex: 1,
+      backgroundColor: theme.bg,
+    },
+    emptyChatContainer: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    emptyChatTitle: {
+      fontSize: 20,
+      fontWeight: '800',
+      color: theme.textPrimary,
+    },
+    emptyChatSub: {
+      fontSize: 14,
+      color: theme.textMuted,
+      marginTop: 8,
+    },
   });
 }

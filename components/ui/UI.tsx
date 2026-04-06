@@ -298,13 +298,69 @@ export function SectionHeader({ title }: { title: string }) {
 }
 
 // ─────────────────────────────────────────────────────────────
-// LOADING SCREEN
+// LOADING SCREEN (NOW WITH SKELETON SUPPORT)
 // ─────────────────────────────────────────────────────────────
-export function LoadingScreen() {
+import { FeedSkeleton } from '../skeletons/FeedSkeleton';
+import { ProfileSkeleton } from '../skeletons/ProfileSkeleton';
+import { ChallengesSkeleton } from '../skeletons/ChallengesSkeleton';
+import { TavernSkeleton } from '../skeletons/TavernSkeleton';
+import { SearchSkeleton } from '../skeletons/SearchSkeleton';
+import { ProblemSolverSkeleton } from '../skeletons/ProblemSolverSkeleton';
+import { FormSkeleton } from '../skeletons/FormSkeleton';
+
+interface LoadingScreenProps {
+  type?: 'feed' | 'profile' | 'challenges' | 'tavern' | 'search' | 'problem' | 'form';
+  count?: number;
+}
+
+export function LoadingScreen({ type, count = 3 }: LoadingScreenProps) {
   const { theme } = useTheme();
+
+  if (type === 'feed') {
+    return (
+      <View style={{ flex: 1, backgroundColor: theme.bg, padding: Spacing.md }}>
+        {[...Array(count)].map((_, i) => <FeedSkeleton key={i} />)}
+      </View>
+    );
+  }
+
+  if (type === 'profile') {
+    return <ProfileSkeleton />;
+  }
+
+  if (type === 'challenges') {
+    return <ChallengesSkeleton />;
+  }
+
+  if (type === 'tavern') {
+    return <TavernSkeleton />;
+  }
+
+  if (type === 'search') {
+    return <SearchSkeleton />;
+  }
+
+  if (type === 'problem') {
+    return <ProblemSolverSkeleton />;
+  }
+
+  if (type === 'form') {
+    return <FormSkeleton />;
+  }
+
   return (
     <View style={{ flex: 1, backgroundColor: theme.bg, alignItems: 'center', justifyContent: 'center' }}>
       <ActivityIndicator color={theme.purple} size="large" />
+      <Text style={{ 
+        marginTop: 16, 
+        color: theme.purple, 
+        fontSize: 10, 
+        fontWeight: '900', 
+        letterSpacing: 2,
+        fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace' 
+      }}>
+        INITIALIZING_SYSTEM...
+      </Text>
     </View>
   );
 }

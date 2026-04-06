@@ -76,6 +76,42 @@ function InnerRootLayout() {
 
   const isInitialized = useRef(false);
 
+  // 0. Inject Web Scrollbar Styles
+  useEffect(() => {
+    if (Platform.OS === 'web') {
+      const style = document.createElement('style');
+      style.innerHTML = `
+        ::-webkit-scrollbar {
+          width: 6px;
+          height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+          background: ${isDark ? '#1a1a1a' : '#f1f5f9'};
+        }
+        ::-webkit-scrollbar-thumb {
+          background: ${isDark ? '#333' : '#cbd5e1'};
+          border-radius: 10px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+          background: ${isDark ? '#444' : '#94a3b8'};
+        }
+        /* Hide scrollbar for Chrome, Safari and Opera */
+        .no-scrollbar::-webkit-scrollbar {
+          display: none;
+        }
+        /* Hide scrollbar for IE, Edge and Firefox */
+        .no-scrollbar {
+          -ms-overflow-style: none;  /* IE and Edge */
+          scrollbar-width: none;  /* Firefox */
+        }
+      `;
+      document.head.appendChild(style);
+      return () => {
+        document.head.removeChild(style);
+      };
+    }
+  }, [isDark]);
+
   // 1. Initialize Global Store once
   useEffect(() => {
     if (isInitialized.current) return;
@@ -238,13 +274,12 @@ const styles = StyleSheet.create({
   },
   centerWrapper: {
     flex: 1,
-    alignItems: 'center',
   },
   mainContent: {
     flex: 1,
     width: '100%',
-    maxWidth: 600,
-    borderLeftWidth: Platform.OS === 'web' ? 1 : 0,
-    borderRightWidth: Platform.OS === 'web' ? 1 : 0,
+    // No fixed max-width here - handled by DesktopLayout or screen-specific containers
+    borderLeftWidth: Platform.OS === 'web' ? 0.5 : 0,
+    borderRightWidth: Platform.OS === 'web' ? 0.5 : 0,
   },
 });

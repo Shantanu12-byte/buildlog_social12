@@ -97,6 +97,9 @@ function LogEntryFeedItem({
   const description = post.caption || post.description || 'show';
   const imageUrl = post.image_url || post.imageUrl || null;
 
+  const isBuilding = status?.toLowerCase().includes('build');
+  const isOpenToCollab = collabStatus?.toLowerCase().includes('collab');
+
   return (
     <View style={[s.card, style]}>
       {/* 1. Professional Header Row */}
@@ -107,11 +110,11 @@ function LogEntryFeedItem({
           <View style={s.metaRow}>
             <Text style={s.timestamp}>{timestamp}</Text>
             <View style={s.dot} />
-            <View style={s.statusPill}>
-              <Text style={s.statusText}>{(status || '').toUpperCase()}</Text>
+            <View style={[s.statusPill, isBuilding && !isDark && s.buildingPillLight]}>
+              <Text style={[s.statusText, isBuilding && !isDark && s.buildingTextLight]}>{(status || '').toUpperCase()}</Text>
             </View>
-            <View style={[s.statusPill, s.collabPill]}>
-              <Text style={s.collabText}>{(collabStatus || '').toUpperCase()}</Text>
+            <View style={[s.statusPill, s.collabPill, isOpenToCollab && !isDark && s.collabPillLight]}>
+              <Text style={[s.collabText, isOpenToCollab && !isDark && s.collabTextLight]}>{(collabStatus || '').toUpperCase()}</Text>
             </View>
           </View>
         </View>
@@ -226,12 +229,16 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
     paddingVertical: Spacing.xl,
     borderRadius: Radius.lg,
     borderWidth: 1,
-    borderColor: theme.border,
+    borderColor: isDark ? theme.border : '#e2e8f0',
     marginBottom: 20,
     ...(Platform.OS === 'web' && {
-      maxWidth: 600,
+      maxWidth: 680,
       width: '100%',
       alignSelf: 'center',
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: isDark ? 0 : 0.06,
+      shadowRadius: 8,
     }),
   },
   header: {
@@ -283,6 +290,20 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
   collabPill: {
     backgroundColor: isDark ? 'rgba(34, 197, 94, 0.1)' : 'rgba(34, 197, 94, 0.05)',
     borderColor: theme.border,
+  },
+  collabPillLight: {
+    backgroundColor: '#f0fdf4',
+    borderColor: '#bbf7d0',
+  },
+  collabTextLight: {
+    color: '#15803d',
+  },
+  buildingPillLight: {
+    backgroundColor: '#eff6ff',
+    borderColor: '#bfdbfe',
+  },
+  buildingTextLight: {
+    color: '#1d4ed8',
   },
   collabText: {
     color: theme.green,

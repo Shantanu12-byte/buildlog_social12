@@ -11,6 +11,9 @@ import { useTheme } from '@/context/ThemeContext';
 import { useUserStore } from '@/store/userStore';
 import { supabase } from '@/lib/supabase';
 import { runTestCases, submitSolution } from '@/services/challengeController';
+import { useResponsive } from '@/hooks/useResponsive';
+import { DesktopLayout } from '@/components/ui/DesktopLayout';
+import { LoadingScreen } from '@/components/ui/UI';
 
 const unescape = (str: string) => (str || '').replace(/\\n/g, '\n');
 
@@ -19,8 +22,9 @@ type TabType = 'Problem' | 'Solution' | 'Discuss';
 export default function ProblemSolverScreen() {
   const { id } = useLocalSearchParams();
   const { theme, isDark } = useTheme();
-  const s = React.useMemo(() => getStyles(theme, isDark), [theme, isDark]);
-  const { userId } = useUserStore();
+  const { isDesktop } = useResponsive();
+  const s = React.useMemo(() => getStyles(theme, isDark, isDesktop), [theme, isDark, isDesktop]);
+  const { userProfile, userId } = useUserStore();
   const router = useRouter();
 
   const [loading, setLoading] = useState(true);
@@ -106,19 +110,156 @@ export default function ProblemSolverScreen() {
     }
   };
 
-  if (loading) return (
-    <View style={s.center}>
-      <ActivityIndicator size="large" color={theme.purple} />
+  const [showSkeleton, setShowSkeleton] = useState(true);
+
+  useEffect(() => {
+    if (!loading && problem) {
+      const timer = setTimeout(() => setShowSkeleton(false), 500);
+      return () => clearTimeout(timer);
+    } else {
+      setShowSkeleton(true);
+    }
+  }, [loading, problem]);
+
+  if (showSkeleton) return <LoadingScreen type="problem" />;
+
+
+  const renderLeftPanel = () => (
+    <View style={isDesktop ? s.desktopLeftPanel : { flex: 1 }}>
+      {/* Tabs */}
+      <View style={s.tabs}>
+        {(['Problem', 'Solution', 'Discuss'] as TabType[]).map(t => (
+          <TouchableOpacity 
+            key={t} 
+            onPress={() => setActiveTab(t)}
+            style={[s.tab, activeTab === t && s.activeTab]}
+          >
+            <Text style={[s.tabText, activeTab === t && s.activeTabText]}>{t}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
+      <ScrollView style={s.content} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40 }}>
+        {activeTab === 'Problem' ? (
+          <View style={s.problemContainer}>
+            <Text style={s.description}>{unescape(problem.description)}</Text>
+            
+            {results && (
+              <View style={s.resultsSection}>
+                <Text style={s.resultsHeader}>Test Case Results:</Text>
+                {results.map((res, i) => (
+                  <View key={i} style={s.resultItem}>
+                    <View style={s.resultTitleRow}>
+                      <Feather 
+                        name={res.passed ? "check-circle" : "x-circle"} 
+                        size={16} 
+                        color={res.passed ? theme.green : theme.red} 
+                      />
+                      <Text style={s.resultText}>Case {i + 1}: {res.passed ? 'PASSED' : 'FAILED'}</Text>
+                    </View>
+                    {!res.passed && (
+                      <Text style={s.resultDetail}>Expected: {unescape(res.expected)}, Got: {unescape(res.got)}</Text>
+                    )}
+                  </View>
+                ))}
+              </View>
+            )}
+          </View>
+        ) : isUnlocked ? (
+          <View style={s.solutionContainer}>
+            {activeTab === 'Solution' ? (
+              <>
+                <Text style={s.sectionHeader}>EXPLANATION</Text>
+                <Text style={s.explanationText}>{unescape(problem.explanation) || 'No explanation available for this problem yet.'}</Text>
+                
+                {problem.solution?.[language] && (
+                  <>
+                    <Text style={[s.sectionHeader, { marginTop: 32 }]}>OPTIMAL SOLUTION ({language.toUpperCase()})</Text>
+                    <View style={s.solutionCodeBox}>
+                      <Text style={s.solutionCodeText}>{problem.solution[language]}</Text>
+                    </View>
+                  </>
+                )}
+              </>
+            ) : (
+              <View style={s.discussPlaceholder}>
+                <Feather name="message-square" size={48} color={theme.border} />
+                <Text style={s.discussTitle}>COMMUNITY DISCUSSION</Text>
+                <Text style={s.discussSubtitle}>The discussion forum is being initialized. Check back soon!</Text>
+              </View>
+            )}
+          </View>
+        ) : (
+          <View style={s.emptyTab}>
+            <MaterialCommunityIcons name="lock-outline" size={48} color={theme.border} />
+            <Text style={s.emptyTabText}>Submit your first attempt to unlock {activeTab.toLowerCase()}</Text>
+          </View>
+        )}
+      </ScrollView>
+    </View>
+  );
+
+  const renderRightPanel = () => (
+    <View style={isDesktop ? s.desktopRightPanel : { flex: 1 }}>
+      <View style={s.editorWrapper}>
+        {/* Language Selector */}
+        <View style={s.langHeader}>
+          <View style={s.langSelector}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
+              {['python', 'javascript', 'java', 'cpp'].map(l => (
+                <TouchableOpacity 
+                  key={l}
+                  onPress={() => {
+                    setLanguage(l);
+                    setCode(problem.starter_code?.[l] || '');
+                  }}
+                  style={[s.langBtn, language === l && s.langBtnActive]}
+                >
+                  <Text style={[s.langBtnText, language === l && s.langBtnTextActive]}>{l.toUpperCase()}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        </View>
+
+        {/* Code Editor */}
+        <TextInput
+          style={s.editor}
+          multiline
+          value={code}
+          onChangeText={setCode}
+          autoCapitalize="none"
+          autoCorrect={false}
+          spellCheck={false}
+          placeholder="Write your solution here..."
+          placeholderTextColor={theme.textMuted}
+        />
+      </View>
+
+      {/* Footer / Actions */}
+      <View style={s.footer}>
+        <TouchableOpacity 
+          style={[s.runBtn, executing && s.btnDisabled]} 
+          onPress={handleRun}
+          disabled={executing}
+        >
+          {executing ? <ActivityIndicator size="small" color={theme.purple} /> : <Text style={s.runBtnText}>Run Code</Text>}
+        </TouchableOpacity>
+        <TouchableOpacity 
+          style={[s.submitBtn, (!results || executing) && s.btnDisabled]} 
+          onPress={handleSubmit}
+          disabled={!results || executing}
+        >
+          <Text style={s.submitBtnText}>Submit ✓</Text>
+        </TouchableOpacity>
+      </View>
     </View>
   );
 
   return (
-    <SafeAreaView style={s.container} edges={['top', 'bottom']}>
-      <KeyboardAvoidingView 
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'} 
-        style={{ flex: 1 }}
-      >
-        {/* Header */}
+    <DesktopLayout>
+      <SafeAreaView style={s.container} edges={['top', 'bottom']}>
+        {/* Header (Branded for both) */}
         <LinearGradient
           colors={isDark ? ['#111111', '#0a0a0a'] : ['#ffffff', '#f8fafc']}
           style={s.header}
@@ -139,133 +280,31 @@ export default function ProblemSolverScreen() {
           </View>
         </LinearGradient>
 
-        {/* Tabs */}
-        <View style={s.tabs}>
-          {(['Problem', 'Solution', 'Discuss'] as TabType[]).map(t => (
-            <TouchableOpacity 
-              key={t} 
-              onPress={() => setActiveTab(t)}
-              style={[s.tab, activeTab === t && s.activeTab]}
-            >
-              <Text style={[s.tabText, activeTab === t && s.activeTabText]}>{t}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-
-        <ScrollView style={s.content} showsVerticalScrollIndicator={false}>
-          {activeTab === 'Problem' ? (
-            <View style={s.problemContainer}>
-              <Text style={s.description}>{unescape(problem.description)}</Text>
-              
-              {/* Language Selector */}
-              <View style={s.langSelector}>
-                <Text style={s.langLabel}>Language:</Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                  {['python', 'javascript', 'java', 'cpp'].map(l => (
-                    <TouchableOpacity 
-                      key={l}
-                      onPress={() => {
-                        setLanguage(l);
-                        setCode(problem.starter_code?.[l] || '');
-                      }}
-                      style={[s.langBtn, language === l && s.langBtnActive]}
-                    >
-                      <Text style={[s.langBtnText, language === l && s.langBtnTextActive]}>{l.toUpperCase()}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </ScrollView>
-              </View>
-
-              {/* Code Editor */}
-              <View style={s.editorContainer}>
-                <TextInput
-                  style={s.editor}
-                  multiline
-                  value={code}
-                  onChangeText={setCode}
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  spellCheck={false}
-                  placeholder="Write your solution here..."
-                  placeholderTextColor={theme.textMuted}
-                />
-              </View>
-
-              {/* Results */}
-              {results && (
-                <View style={s.resultsSection}>
-                  <Text style={s.resultsHeader}>Test Case Results:</Text>
-                  {results.map((res, i) => (
-                    <View key={i} style={s.resultItem}>
-                      <Feather 
-                        name={res.passed ? "check-circle" : "x-circle"} 
-                        size={16} 
-                        color={res.passed ? theme.green : theme.red} 
-                      />
-                      <Text style={s.resultText}>Case {i + 1}: {res.passed ? 'PASSED' : 'FAILED'}</Text>
-                      {!res.passed && (
-                        <Text style={s.resultDetail}>Expected: {unescape(res.expected)}, Got: {unescape(res.got)}</Text>
-                      )}
-                    </View>
-                  ))}
-                </View>
-              )}
-            </View>
-          ) : isUnlocked ? (
-            <View style={s.solutionContainer}>
-              {activeTab === 'Solution' ? (
-                <>
-                  <Text style={s.sectionHeader}>EXPLANATION</Text>
-                  <Text style={s.explanationText}>{unescape(problem.explanation) || 'No explanation available for this problem yet.'}</Text>
-                  
-                  {problem.solution?.[language] && (
-                    <>
-                      <Text style={[s.sectionHeader, { marginTop: 32 }]}>OPTIMAL SOLUTION ({language.toUpperCase()})</Text>
-                      <View style={s.solutionCodeBox}>
-                        <Text style={s.solutionCodeText}>{problem.solution[language]}</Text>
-                      </View>
-                    </>
-                  )}
-                </>
-              ) : (
-                <View style={s.discussPlaceholder}>
-                  <Feather name="message-square" size={48} color={theme.border} />
-                  <Text style={s.discussTitle}>COMMUNITY DISCUSSION</Text>
-                  <Text style={s.discussSubtitle}>The discussion forum for this problem is being initialized. Check back soon to see how others solved it!</Text>
-                </View>
-              )}
+        <KeyboardAvoidingView 
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'} 
+          style={{ flex: 1 }}
+        >
+          {isDesktop ? (
+            <View style={s.desktopLayout}>
+              {renderLeftPanel()}
+              {renderRightPanel()}
             </View>
           ) : (
-            <View style={s.emptyTab}>
-              <MaterialCommunityIcons name="lock-outline" size={48} color={theme.border} />
-              <Text style={s.emptyTabText}>Submit your first attempt to unlock {activeTab.toLowerCase()}</Text>
+            <View style={{ flex: 1 }}>
+              {activeTab === 'Problem' && renderLeftPanel()}
+              {activeTab !== 'Problem' && renderLeftPanel()}
+              {/* Note: In mobile, we actually show one or the other but the current logic is a bit more complex. 
+                  Let's stick to a simpler mobile fallback for now. */}
+              {activeTab === 'Problem' && renderRightPanel()}
             </View>
           )}
-        </ScrollView>
-
-        {/* Footer */}
-        <View style={s.footer}>
-          <TouchableOpacity 
-            style={[s.runBtn, executing && s.btnDisabled]} 
-            onPress={handleRun}
-            disabled={executing}
-          >
-            {executing ? <ActivityIndicator color={theme.purple} /> : <Text style={s.runBtnText}>Run Code</Text>}
-          </TouchableOpacity>
-          <TouchableOpacity 
-            style={[s.submitBtn, (!results || executing) && s.btnDisabled]} 
-            onPress={handleSubmit}
-            disabled={!results || executing}
-          >
-            <Text style={s.submitBtnText}>Submit ✓</Text>
-          </TouchableOpacity>
-        </View>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+        </KeyboardAvoidingView>
+      </SafeAreaView>
+    </DesktopLayout>
   );
 }
 
-const getStyles = (theme: any, isDark: boolean) => {
+const getStyles = (theme: any, isDark: boolean, isDesktop?: boolean) => {
   const bg = isDark ? '#0a0a0a' : '#f0f2f5';
   const bgCard = isDark ? '#111111' : '#ffffff';
   const border = isDark ? '#1f2937' : '#e2e8f0';
@@ -276,7 +315,7 @@ const getStyles = (theme: any, isDark: boolean) => {
   return StyleSheet.create({
     container: { flex: 1, backgroundColor: bg },
     center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: bg },
-    header: { flexDirection: 'row', alignItems: 'center', padding: 16, borderBottomWidth: 1, borderBottomColor: border, paddingTop: 10 },
+    header: { flexDirection: 'row', alignItems: 'center', padding: 16, borderBottomWidth: 1, borderBottomColor: border, height: isDesktop ? 70 : 80 },
     backBtn: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)', marginRight: 12 },
     headerInfo: { flex: 1 },
     title: { color: textPrimary, fontSize: 18, fontWeight: '800' },
@@ -285,69 +324,82 @@ const getStyles = (theme: any, isDark: boolean) => {
     difficulty: { fontSize: 11, fontWeight: '900', textTransform: 'uppercase' },
     timer: { color: textMuted, fontSize: 12, fontWeight: '700' },
     
-    tabs: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: border, backgroundColor: isDark ? '#0a0a0a' : '#ffffff' },
+    // Desktop Split Layout
+    desktopLayout: {
+      flex: 1,
+      flexDirection: 'row',
+      backgroundColor: bg,
+    },
+    desktopLeftPanel: {
+      width: '40%',
+      borderRightWidth: 1,
+      borderRightColor: border,
+    },
+    desktopRightPanel: {
+      flex: 1,
+      backgroundColor: isDark ? '#000' : '#ffffff',
+    },
+
+    tabs: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: border, backgroundColor: bgCard },
     tab: { flex: 1, paddingVertical: 14, alignItems: 'center', borderBottomWidth: 2, borderBottomColor: 'transparent' },
     activeTab: { borderBottomColor: theme.purple },
     tabText: { color: textSecondary, fontSize: 13, fontWeight: '700' },
     activeTabText: { color: theme.purple },
 
     content: { flex: 1 },
-    problemContainer: { padding: 20 },
-    description: { color: textPrimary, fontSize: 15, lineHeight: 24, marginBottom: 24 },
+    problemContainer: { padding: 24 },
+    description: { color: textPrimary, fontSize: 15, lineHeight: 26, marginBottom: 24 },
     
-    langSelector: { marginBottom: 20 },
-    langLabel: { color: textMuted, fontSize: 11, fontWeight: '900', marginBottom: 12, letterSpacing: 1, textTransform: 'uppercase' },
-    langBtn: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, backgroundColor: bgCard, borderWidth: 1, borderColor: border, marginRight: 10 },
+    editorWrapper: {
+      flex: 1,
+    },
+    langHeader: {
+      padding: 12,
+      borderBottomWidth: 1,
+      borderBottomColor: border,
+      backgroundColor: bgCard,
+    },
+    langSelector: { flexDirection: 'row', alignItems: 'center' },
+    langBtn: { paddingHorizontal: 16, paddingVertical: 6, borderRadius: 8, backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)', borderWidth: 1, borderColor: border },
     langBtnActive: { backgroundColor: theme.purple, borderColor: theme.purple },
     langBtnText: { color: textSecondary, fontSize: 12, fontWeight: '700' },
     langBtnTextActive: { color: '#ffffff' },
 
-    editorContainer: { 
-      backgroundColor: isDark ? '#000' : '#ffffff', 
-      borderRadius: 16, 
-      borderWidth: 1, 
-      borderColor: border,
-      minHeight: 350,
-      padding: 16,
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 4 },
-      shadowOpacity: isDark ? 0 : 0.05,
-      shadowRadius: 10,
-      elevation: 2
-    },
     editor: { 
+      flex: 1,
       color: isDark ? '#4ade80' : '#0f172a', 
-      fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
-      fontSize: 15,
-      lineHeight: 22,
-      textAlignVertical: 'top'
+      fontFamily: Platform.OS === 'web' ? 'JetBrains Mono, Fira Code, monospace' : (Platform.OS === 'ios' ? 'Courier' : 'monospace'),
+      fontSize: 16,
+      lineHeight: 24,
+      padding: 24,
+      textAlignVertical: 'top',
     },
 
-    resultsSection: { marginTop: 24, padding: 16, backgroundColor: bgCard, borderRadius: 16, borderWidth: 1, borderColor: border },
-    resultsHeader: { color: textPrimary, fontSize: 14, fontWeight: '900', marginBottom: 16, textTransform: 'uppercase', letterSpacing: 1 },
-    resultItem: { flexDirection: 'column', gap: 6, marginBottom: 12, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: border },
+    resultsSection: { marginTop: 24, padding: 20, backgroundColor: bgCard, borderRadius: 16, borderWidth: 1, borderColor: border },
+    resultsHeader: { color: textPrimary, fontSize: 13, fontWeight: '900', marginBottom: 20, textTransform: 'uppercase', letterSpacing: 1 },
+    resultItem: { marginBottom: 16, gap: 8 },
     resultTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-    resultText: { color: textPrimary, fontSize: 13, fontWeight: '700' },
-    resultDetail: { color: textMuted, fontSize: 12, marginLeft: 26, fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace' },
+    resultText: { color: textPrimary, fontSize: 14, fontWeight: '700' },
+    resultDetail: { color: textMuted, fontSize: 12, marginLeft: 26, padding: 12, backgroundColor: isDark ? '#000' : '#f8fafc', borderRadius: 8, fontFamily: 'monospace' },
 
-    footer: { flexDirection: 'row', padding: 16, gap: 12, borderTopWidth: 1, borderTopColor: border, backgroundColor: isDark ? '#0a0a0a' : '#ffffff', paddingBottom: Platform.OS === 'ios' ? 40 : 20 },
-    runBtn: { flex: 1, height: 50, borderRadius: 25, borderWidth: 1, borderColor: theme.purple, alignItems: 'center', justifyContent: 'center' },
+    footer: { flexDirection: 'row', padding: 16, gap: 12, borderTopWidth: 1, borderTopColor: border, backgroundColor: bgCard, paddingBottom: Platform.OS === 'ios' ? 40 : 20 },
+    runBtn: { flex: 1, height: 50, borderRadius: 12, borderWidth: 1, borderColor: theme.purple, alignItems: 'center', justifyContent: 'center' },
     runBtnText: { color: theme.purple, fontSize: 15, fontWeight: '800' },
-    submitBtn: { flex: 1, height: 50, borderRadius: 25, backgroundColor: theme.purple, alignItems: 'center', justifyContent: 'center' },
+    submitBtn: { flex: 1, height: 50, borderRadius: 12, backgroundColor: theme.purple, alignItems: 'center', justifyContent: 'center' },
     submitBtnText: { color: '#ffffff', fontSize: 15, fontWeight: '800' },
     btnDisabled: { opacity: 0.5 },
 
     emptyTab: { padding: 100, alignItems: 'center' },
     emptyTabText: { color: textMuted, marginTop: 16, fontWeight: '700', fontSize: 14, textAlign: 'center' },
 
-    solutionContainer: { padding: 24 },
-    sectionHeader: { color: theme.purple, fontSize: 11, fontWeight: '900', letterSpacing: 1.5, marginBottom: 16 },
-    explanationText: { color: textPrimary, fontSize: 15, lineHeight: 24 },
-    solutionCodeBox: { backgroundColor: isDark ? '#000' : '#f8fafc', padding: 16, borderRadius: 12, borderWidth: 1, borderColor: border, marginTop: 8 },
-    solutionCodeText: { color: isDark ? '#4ade80' : '#475569', fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace', fontSize: 13, lineHeight: 20 },
+    solutionContainer: { padding: 32 },
+    sectionHeader: { color: theme.purple, fontSize: 11, fontWeight: '900', letterSpacing: 1.5, marginBottom: 16, textTransform: 'uppercase' },
+    explanationText: { color: textPrimary, fontSize: 15, lineHeight: 26 },
+    solutionCodeBox: { backgroundColor: isDark ? '#000' : '#f8fafc', padding: 20, borderRadius: 12, borderWidth: 1, borderColor: border, marginTop: 12 },
+    solutionCodeText: { color: isDark ? '#4ade80' : '#475569', fontFamily: 'monospace', fontSize: 13, lineHeight: 22 },
     
-    discussPlaceholder: { padding: 60, alignItems: 'center' },
-    discussTitle: { color: textPrimary, fontSize: 14, fontWeight: '900', marginTop: 20, letterSpacing: 1 },
-    discussSubtitle: { color: textMuted, fontSize: 13, textAlign: 'center', marginTop: 12, lineHeight: 20 }
+    discussPlaceholder: { padding: 80, alignItems: 'center' },
+    discussTitle: { color: textPrimary, fontSize: 14, fontWeight: '900', marginTop: 24, letterSpacing: 1 },
+    discussSubtitle: { color: textMuted, fontSize: 13, textAlign: 'center', marginTop: 16, lineHeight: 22 }
   });
 };

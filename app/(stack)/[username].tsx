@@ -9,12 +9,15 @@ import { supabase } from '@/lib/supabase';
 import { Typography, Spacing, Radius } from '@/constants/theme';
 import { useTheme } from '@/context/ThemeContext';
 import { Avatar, LoadingScreen } from '@/components/ui/UI';
-import { Feather, FontAwesome5 } from '@expo/vector-icons';
+import { Feather, FontAwesome5, MaterialCommunityIcons } from '@expo/vector-icons';
+import { useResponsive } from '@/hooks/useResponsive';
+import { DesktopLayout } from '@/components/ui/DesktopLayout';
 
 export default function PublicProfileScreen() {
   const router = useRouter();
   const { theme, isDark } = useTheme();
-  const s = React.useMemo(() => getStyles(theme, isDark), [theme, isDark]);
+  const { isDesktop } = useResponsive();
+  const s = React.useMemo(() => getStyles(theme, isDark, isDesktop), [theme, isDark, isDesktop]);
 
   const { username } = useLocalSearchParams<{ username: string }>();
   
@@ -208,7 +211,18 @@ export default function PublicProfileScreen() {
     fetchProfileData();
   };
 
-  if (loading) return <LoadingScreen />;
+  const [showSkeleton, setShowSkeleton] = useState(true);
+
+  useEffect(() => {
+    if (!loading) {
+      const timer = setTimeout(() => setShowSkeleton(false), 500);
+      return () => clearTimeout(timer);
+    } else {
+      setShowSkeleton(true);
+    }
+  }, [loading]);
+
+  if (showSkeleton && !refreshing) return <LoadingScreen type="profile" />;
 
   if (notFound) {
     return (
@@ -223,127 +237,159 @@ export default function PublicProfileScreen() {
     );
   }
 
-  return (
-    <SafeAreaView style={s.container}>
-      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={theme.bg} />
-      
-      <ScrollView 
-        style={s.scrollView}
-        contentContainerStyle={s.content}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.purple} />
-        }
-      >
-        <View style={s.header}>
-          <TouchableOpacity onPress={() => router.back()} style={s.iconBtn}>
-            <Feather name="arrow-left" size={24} color={theme.textPrimary} />
-          </TouchableOpacity>
-          <Text style={s.headerTitle}>@{profile?.username}</Text>
-          <View style={{ width: 40 }} />
-        </View>
+  const renderProfileSidebar = () => (
+    <View style={isDesktop ? s.desktopSidebar : undefined}>
+      <View style={s.profileCard}>
+        <Avatar 
+          username={profile?.username || ''} 
+          uri={profile?.avatar_url}
+          size={isDesktop ? 120 : 80} 
+        />
+        <Text style={s.name}>{profile?.username}</Text>
+        <Text style={s.bio}>{profile?.bio || 'Building the future of software.'}</Text>
+        
+        {profile?.college && (
+          <View style={s.collegeTag}>
+            <Text style={s.collegeTxt}>🎓 {profile.college}</Text>
+          </View>
+        )}
 
-        <View style={s.profileCard}>
-          <Avatar 
-            username={profile?.username || ''} 
-            uri={profile?.avatar_url}
-            size={80} 
-          />
-          <Text style={s.name}>{profile?.username}</Text>
-          <Text style={s.bio}>{profile?.bio || 'Building the future of software.'}</Text>
-          
-          {profile?.college && (
-            <View style={s.collegeTag}>
-              <Text style={s.collegeTxt}>🎓 {profile.college}</Text>
-            </View>
-          )}
-
-          <View style={s.statsRow}>
+        <View style={s.statsRow}>
+          <View style={s.statsGrid}>
             <StatItem label="Projects" value={stats.projects} />
             <StatItem label="Builds" value={stats.builds} />
             <StatItem label="Followers" value={stats.followers} />
-            <StatItem label="⚡ Hypes" value={stats.hypes} />
-            <StatItem label="⑂ Forks" value={stats.forks} />
-            <StatItem label="★ Stars" value={stats.stars} />
+            <StatItem label="XP" value={profile?.xp || 0} />
           </View>
+        </View>
 
-          {badges.length > 0 && (
-            <View style={s.badgesSection}>
-              {badges.map((b: any) => (
-                <View key={b.id} style={s.badgeChip}>
-                  <Text style={s.badgeIcon}>{b.icon}</Text>
-                  <Text style={s.badgeLabel}>{b.label}</Text>
-                  {b.tier && <Text style={s.badgeTier}>{b.tier.toUpperCase()}</Text>}
-                </View>
-              ))}
-            </View>
-          )}
+        {badges.length > 0 && (
+          <View style={s.badgesSection}>
+            {badges.map((b: any) => (
+              <View key={b.id} style={s.badgeChip}>
+                <Text style={s.badgeIcon}>{b.icon}</Text>
+                <Text style={s.badgeLabel}>{b.label}</Text>
+              </View>
+            ))}
+          </View>
+        )}
 
-          {insight !== '' && (
-            <Text style={s.insightText}>{insight}</Text>
-          )}
-
-          {isOwner ? (
+        {isOwner ? (
+          <TouchableOpacity 
+            style={s.editBtn} 
+            onPress={() => router.push('/(stack)/edit-profile')}
+          >
+            <Text style={s.editBtnTxt}>Edit Profile</Text>
+          </TouchableOpacity>
+        ) : (
+          <View style={s.actionRow}>
             <TouchableOpacity 
-              style={s.editBtn} 
-              onPress={() => router.push('/(stack)/edit-profile')}
+              style={[s.followBtn, isFollowing && s.followingBtn]} 
+              onPress={handleFollowToggle}
+              disabled={followLoading}
             >
-              <Text style={s.editBtnTxt}>Edit Profile</Text>
+              {followLoading ? (
+                <ActivityIndicator size="small" color={isDark ? "#000" : "#FFF"} />
+              ) : (
+                <Text style={[s.editBtnTxt, { color: isFollowing ? theme.textPrimary : (isDark ? "#000" : "#FFF") }]}>
+                  {isFollowing ? 'Following' : 'Follow'}
+                </Text>
+              )}
             </TouchableOpacity>
-          ) : (
-            <View style={s.actionRow}>
-              <TouchableOpacity 
-                style={[s.followBtn, isFollowing && s.followingBtn]} 
-                onPress={handleFollowToggle}
-                disabled={followLoading}
-              >
-                {followLoading ? (
-                  <ActivityIndicator size="small" color={isDark ? "#000" : "#FFF"} />
-                ) : (
-                  <>
-                    <Feather name={isFollowing ? "check" : "user-plus"} size={16} color={isFollowing ? theme.textPrimary : (isDark ? "#000" : "#FFF")} />
-                    <Text style={[s.editBtnTxt, { color: isFollowing ? theme.textPrimary : (isDark ? "#000" : "#FFF") }]}>{isFollowing ? 'Following' : 'Follow'}</Text>
-                  </>
-                )}
-              </TouchableOpacity>
-              
-              <TouchableOpacity 
-                style={s.msgBtn} 
-                onPress={() => router.push({ pathname: '/(stack)/messages', params: { targetUserId: profile.id } } as any)}
-              >
-                <Feather name="message-square" size={16} color={theme.textPrimary} />
-                <Text style={s.editBtnTxt}>Message</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-        </View>
-
-        <View style={s.linksSection}>
-          <Text style={s.sectionTitle}>CONNECT</Text>
-          <View style={s.linksRow}>
-            {profile?.github_url && (
-              <SocialBtn icon="github" onPress={() => Linking.openURL(profile.github_url)} />
-            )}
-            {profile?.linkedin_url && (
-              <SocialBtn icon="linkedin" onPress={() => Linking.openURL(profile.linkedin_url)} />
-            )}
-            <SocialBtn 
-              icon="id-card" 
-              label="DevCard"
-              onPress={() => router.push(`/devcard?username=${username}`)} 
-            />
           </View>
-        </View>
+        )}
+      </View>
 
-        <View style={{ height: 40 }} />
-      </ScrollView>
-    </SafeAreaView>
+      <View style={s.linksSection}>
+        <Text style={s.sectionTitle}>CONNECT</Text>
+        <View style={s.linksRow}>
+          {profile?.github_url && <SocialBtn icon="github" onPress={() => Linking.openURL(profile.github_url)} />}
+          {profile?.linkedin_url && <SocialBtn icon="linkedin" onPress={() => Linking.openURL(profile.linkedin_url)} />}
+        </View>
+      </View>
+    </View>
+  );
+
+  const renderProfileContent = () => (
+    <View style={isDesktop ? s.desktopMain : undefined}>
+      {insight !== '' && (
+        <View style={s.insightCard}>
+          <Text style={s.sectionTitle}>DEVELOPER INSIGHT</Text>
+          <Text style={s.insightText}>{insight}</Text>
+        </View>
+      )}
+
+      <View style={s.portfolioSection}>
+        <Text style={s.sectionTitle}>BUILD HISTORY</Text>
+        {portfolio.length > 0 ? (
+          <View style={s.repoGrid}>
+            {portfolio.map((repo: any) => (
+              <TouchableOpacity 
+                key={repo.id} 
+                style={s.repoCard}
+                onPress={() => repo.html_url && Linking.openURL(repo.html_url)}
+              >
+                <View style={s.repoHeader}>
+                  <Feather name="box" size={18} color={theme.purple} />
+                  <Text style={s.repoName}>{repo.name}</Text>
+                </View>
+                <Text style={s.repoDesc} numberOfLines={2}>{repo.description || 'No description provided.'}</Text>
+                <View style={s.repoFooter}>
+                  <Text style={s.repoLang}>● {repo.language || 'Code'}</Text>
+                  <Text style={s.repoStars}>★ {repo.stargazers_count || 0}</Text>
+                </View>
+              </TouchableOpacity>
+            ))}
+          </View>
+        ) : (
+          <View style={s.emptyState}>
+            <Feather name="package" size={48} color={theme.border} />
+            <Text style={s.emptyText}>No builds documented yet.</Text>
+          </View>
+        )}
+      </View>
+    </View>
+  );
+
+  return (
+    <DesktopLayout>
+      <SafeAreaView style={s.container}>
+        <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={theme.bg} />
+        
+        {isDesktop ? (
+          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={s.desktopLayout}>
+            {renderProfileSidebar()}
+            {renderProfileContent()}
+          </ScrollView>
+        ) : (
+          <ScrollView 
+            style={s.scrollView}
+            contentContainerStyle={s.content}
+            showsVerticalScrollIndicator={false}
+            refreshControl={
+              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.purple} />
+            }
+          >
+            <View style={s.mobileHeader}>
+              <TouchableOpacity onPress={() => router.back()} style={s.iconBtn}>
+                <Feather name="arrow-left" size={24} color={theme.textPrimary} />
+              </TouchableOpacity>
+              <Text style={s.headerTitle}>@{profile?.username}</Text>
+              <View style={{ width: 40 }} />
+            </View>
+            {renderProfileSidebar()}
+            {renderProfileContent()}
+          </ScrollView>
+        )}
+      </SafeAreaView>
+    </DesktopLayout>
   );
 }
 
 function StatItem({ label, value }: { label: string; value: number }) {
   const { theme, isDark } = useTheme();
-  const s = React.useMemo(() => getStyles(theme, isDark), [theme, isDark]);
+  const { isDesktop } = useResponsive();
+  const s = React.useMemo(() => getStyles(theme, isDark, isDesktop), [theme, isDark, isDesktop]);
   return (
     <View style={s.statItem}>
       <Text style={s.statVal}>{value >= 1000 ? `${(value/1000).toFixed(1)}k` : value}</Text>
@@ -354,7 +400,8 @@ function StatItem({ label, value }: { label: string; value: number }) {
 
 function SocialBtn({ icon, onPress, label }: { icon: string; onPress: () => void; label?: string }) {
   const { theme, isDark } = useTheme();
-  const s = React.useMemo(() => getStyles(theme, isDark), [theme, isDark]);
+  const { isDesktop } = useResponsive();
+  const s = React.useMemo(() => getStyles(theme, isDark, isDesktop), [theme, isDark, isDesktop]);
   return (
     <TouchableOpacity style={s.socialBtn} onPress={onPress}>
       {icon === 'id-card' ? (
@@ -367,73 +414,104 @@ function SocialBtn({ icon, onPress, label }: { icon: string; onPress: () => void
   );
 }
 
-function getStyles(theme: any, isDark: boolean) {
+function getStyles(theme: any, isDark: boolean, isDesktop?: boolean) {
+  const bg = isDark ? '#000000' : '#f8fafc';
+  const bgCard = isDark ? '#0a0a0a' : '#ffffff';
+  const border = isDark ? '#1f2937' : '#e2e8f0';
+  const shadow = !isDark ? {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.05,
+    shadowRadius: 12,
+    elevation: 3,
+  } : {};
+
   return StyleSheet.create({
-  container: { flex: 1, backgroundColor: theme.bg },
-  scrollView: { flex: 1 },
-  content: { paddingHorizontal: 20, paddingBottom: 40 },
-  header: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingTop: 20, marginBottom: 30,
-  },
-  iconBtn: { padding: 8 },
-  headerTitle: { color: theme.textPrimary, fontSize: 16, fontWeight: '700', opacity: 0.8 },
-  
-  profileCard: {
-    backgroundColor: theme.bgCard, borderRadius: 24, padding: 24,
-    alignItems: 'center', borderWidth: 1, borderColor: theme.border,
-  },
-  name: { color: theme.textPrimary, fontSize: 24, fontWeight: '800', marginTop: 16, marginBottom: 8 },
-  bio: { color: theme.textSecondary, fontSize: 14, textAlign: 'center', lineHeight: 20, marginBottom: 16 },
-  collegeTag: { backgroundColor: isDark ? 'rgba(124, 58, 237, 0.1)' : 'rgba(124, 58, 237, 0.05)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12, marginBottom: 20 },
-  collegeTxt: { color: theme.purple, fontSize: 12, fontWeight: '700' },
-  
-  statsRow: { flexDirection: 'row', width: '100%', justifyContent: 'space-around', borderTopWidth: 1, borderTopColor: theme.border, paddingTop: 20 },
-  statItem: { alignItems: 'center' },
-  statVal: { color: theme.textPrimary, fontSize: 18, fontWeight: '800' },
-  statLab: { color: theme.textSecondary, fontSize: 10, fontWeight: '800', textTransform: 'uppercase', marginTop: 4 },
-  
-  editBtn: { backgroundColor: theme.purple, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 14, marginTop: 20 },
-  editBtnTxt: { color: theme.textPrimary, fontSize: 14, fontWeight: '700' },
+    container: { flex: 1, backgroundColor: bg },
+    scrollView: { flex: 1 },
+    content: { paddingBottom: 40 },
+    
+    // Desktop Layout
+    desktopLayout: {
+      flexDirection: 'row',
+      gap: 32,
+      padding: 32,
+      maxWidth: 1200,
+      alignSelf: 'center',
+      width: '100%',
+    },
+    desktopSidebar: {
+      width: 380,
+      ...(Platform.OS === 'web' && {
+        position: 'sticky' as any,
+        top: 32,
+      })
+    },
+    desktopMain: {
+      flex: 1,
+      gap: 24,
+    },
 
-  actionRow: { flexDirection: 'row', gap: 12, marginTop: 20, width: '100%' },
-  followBtn: { 
-    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
-    backgroundColor: theme.purple, paddingVertical: 12, borderRadius: 14 
-  },
-  followingBtn: { backgroundColor: theme.bgInput, borderWidth: 1, borderColor: theme.border },
-  msgBtn: { 
-    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
-    backgroundColor: theme.bgInput, paddingVertical: 12, borderRadius: 14,
-    borderWidth: 1, borderColor: theme.border
-  },
+    mobileHeader: {
+      flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+      paddingHorizontal: 20, paddingTop: 20, marginBottom: 20,
+    },
+    iconBtn: { padding: 8 },
+    headerTitle: { color: theme.textPrimary, fontSize: 16, fontWeight: '700', opacity: 0.8 },
+    
+    profileCard: {
+      backgroundColor: bgCard, borderRadius: 24, padding: 32,
+      alignItems: 'center', borderWidth: 1, borderColor: border,
+      ...shadow
+    },
+    name: { color: theme.textPrimary, fontSize: 28, fontWeight: '800', marginTop: 16, marginBottom: 8 },
+    bio: { color: theme.textSecondary, fontSize: 15, textAlign: 'center', lineHeight: 24, marginBottom: 20 },
+    collegeTag: { backgroundColor: isDark ? 'rgba(124, 58, 237, 0.1)' : 'rgba(124, 58, 237, 0.05)', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 12, marginBottom: 24 },
+    collegeTxt: { color: theme.purple, fontSize: 13, fontWeight: '700' },
+    
+    statsRow: { width: '100%', borderTopWidth: 1, borderTopColor: border, paddingTop: 24 },
+    statsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 20, justifyContent: 'center' },
+    statItem: { alignItems: 'center', minWidth: 70 },
+    statVal: { color: theme.textPrimary, fontSize: 20, fontWeight: '800' },
+    statLab: { color: theme.textSecondary, fontSize: 10, fontWeight: '800', textTransform: 'uppercase', marginTop: 4 },
+    
+    editBtn: { backgroundColor: theme.purple, paddingHorizontal: 32, paddingVertical: 14, borderRadius: 14, marginTop: 24, width: '100%', alignItems: 'center' },
+    editBtnTxt: { color: '#ffffff', fontSize: 15, fontWeight: '800' },
 
-  linksSection: { marginTop: 30 },
-  sectionTitle: { color: theme.textSecondary, fontSize: 11, fontWeight: '900', letterSpacing: 1, marginBottom: 16 },
-  linksRow: { flexDirection: 'row', gap: 12 },
-  socialBtn: { 
-    flexDirection: 'row', alignItems: 'center', gap: 8,
-    backgroundColor: theme.bgInput, paddingHorizontal: 16, paddingVertical: 12, 
-    borderRadius: 14, borderWidth: 1, borderColor: theme.border 
-  },
-  socialBtnLab: { color: theme.textPrimary, fontSize: 13, fontWeight: '600' },
+    actionRow: { flexDirection: 'row', gap: 12, marginTop: 24, width: '100%' },
+    followBtn: { flex: 1, backgroundColor: theme.purple, paddingVertical: 14, borderRadius: 14, alignItems: 'center' },
+    followingBtn: { backgroundColor: 'transparent', borderWidth: 1, borderColor: theme.purple },
 
-  notFoundTitle: { color: theme.textPrimary, fontSize: 24, fontWeight: '800', marginTop: 20 },
-  notFoundSub: { color: theme.textSecondary, fontSize: 14, marginTop: 10, textAlign: 'center', paddingHorizontal: 40 },
-  backBtn: { marginTop: 30, backgroundColor: theme.bgInput, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 12 },
-  backBtnText: { color: theme.textPrimary, fontWeight: '700' },
+    insightCard: { backgroundColor: bgCard, borderRadius: 24, padding: 24, borderWidth: 1, borderColor: border, ...shadow },
+    insightText: { color: theme.textSecondary, fontSize: 15, lineHeight: 26, fontStyle: 'italic' },
 
-  badgesSection: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 16, justifyContent: 'center' },
-  badgeChip: {
-    flexDirection: 'row', alignItems: 'center', gap: 4,
-    backgroundColor: isDark ? 'rgba(124, 58, 237, 0.1)' : 'rgba(124, 58, 237, 0.05)', borderWidth: 1,
-    borderColor: isDark ? 'rgba(124, 58, 237, 0.25)' : 'rgba(124, 58, 237, 0.15)', borderRadius: 999,
-    paddingHorizontal: 10, paddingVertical: 4,
-  },
-  badgeIcon: { fontSize: 14 },
-  badgeLabel: { color: theme.purple, fontSize: 11, fontWeight: '700' },
-  badgeTier: { color: theme.textSecondary, fontSize: 9, fontWeight: '800', letterSpacing: 0.5, marginLeft: 2 },
+    portfolioSection: { gap: 16 },
+    sectionTitle: { color: theme.textMuted, fontSize: 11, fontWeight: '900', letterSpacing: 2, marginBottom: 8, textTransform: 'uppercase' },
+    repoGrid: { gap: 16 },
+    repoCard: { backgroundColor: bgCard, borderRadius: 20, padding: 24, borderWidth: 1, borderColor: border, ...shadow },
+    repoHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 12 },
+    repoName: { color: theme.textPrimary, fontSize: 18, fontWeight: '700' },
+    repoDesc: { color: theme.textSecondary, fontSize: 14, lineHeight: 22, marginBottom: 16 },
+    repoFooter: { flexDirection: 'row', gap: 16 },
+    repoLang: { color: theme.textSecondary, fontSize: 12, fontWeight: '600' },
+    repoStars: { color: theme.textSecondary, fontSize: 12, fontWeight: '600' },
 
-  insightText: { color: theme.textMuted, fontSize: 12, fontStyle: 'italic', textAlign: 'center', marginTop: 12, paddingHorizontal: 10, lineHeight: 18 },
+    linksSection: { marginTop: 32, paddingHorizontal: isDesktop ? 0 : 20 },
+    linksRow: { flexDirection: 'row', gap: 12 },
+    socialBtn: { backgroundColor: bgCard, padding: 14, borderRadius: 14, borderWidth: 1, borderColor: border, ...shadow, flexDirection: 'row', alignItems: 'center', gap: 8 },
+    socialBtnLab: { color: theme.textPrimary, fontSize: 13, fontWeight: '600' },
+
+    emptyState: { alignItems: 'center', paddingVertical: 60, opacity: 0.5 },
+    emptyText: { color: theme.textSecondary, marginTop: 12, fontWeight: '600' },
+
+    badgesSection: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 20, justifyContent: 'center' },
+    badgeChip: { backgroundColor: isDark ? 'rgba(124, 58, 237, 0.1)' : 'rgba(124, 58, 237, 0.05)', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 6, borderWidth: 1, borderColor: border, flexDirection: 'row', alignItems: 'center' },
+    badgeIcon: { fontSize: 16 },
+    badgeLabel: { color: theme.purple, fontSize: 12, fontWeight: '700', marginLeft: 4 },
+
+    notFoundTitle: { color: theme.textPrimary, fontSize: 24, fontWeight: '800', marginTop: 20 },
+    notFoundSub: { color: theme.textSecondary, fontSize: 14, marginTop: 10, textAlign: 'center', paddingHorizontal: 40 },
+    backBtn: { marginTop: 30, backgroundColor: theme.bgInput, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 12 },
+    backBtnText: { color: theme.textPrimary, fontWeight: '700' },
   });
 }

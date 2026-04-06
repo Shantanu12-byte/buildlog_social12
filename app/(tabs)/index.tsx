@@ -15,6 +15,8 @@ import NewsReader from '@/components/NewsReader';
 import { NewsCardSkeleton } from '@/components/NewsCard';
 import { LoadingScreen } from '@/components/ui/UI';
 import { Feather } from '@expo/vector-icons';
+import { useResponsive } from '@/hooks/useResponsive';
+import { DesktopLayout } from '@/components/ui/DesktopLayout';
 import Animated, { 
   useSharedValue, 
   useAnimatedStyle, 
@@ -211,111 +213,174 @@ export default function FeedScreen() {
     scrollX.value = withTiming(tab === 'feed' ? 0 : -width, { duration: 300 });
   };
 
-  if (loading && !refreshing) return <LoadingScreen />;
+  const { isDesktop, isWide } = useResponsive();
+  const [showSkeleton, setShowSkeleton] = useState(true);
+
+  useEffect(() => {
+    if (!loading) {
+      const timer = setTimeout(() => setShowSkeleton(false), 500);
+      return () => clearTimeout(timer);
+    } else {
+      setShowSkeleton(true);
+    }
+  }, [loading]);
+
+  if (showSkeleton && !refreshing) return <LoadingScreen type="feed" count={isDesktop ? 2 : 3} />;
+
+  const renderRightPanel = () => (
+    <View style={s.rightPanel}>
+      <View style={s.sideCard}>
+        <Text style={s.sideCardTitle}>🔥 TRENDING TAGS</Text>
+        <View style={s.tagCloud}>
+          {['React', 'TypeScript', 'Node.js', 'AI', 'Next.js', 'Python', 'WebDev'].map(t => (
+            <TouchableOpacity key={t} style={s.sideTag}>
+              <Text style={s.sideTagText}>{t}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      </View>
+
+      <View style={s.sideCard}>
+        <Text style={s.sideCardTitle}>👥 TOP BUILDERS</Text>
+        {[
+          { name: 'shantanu', hype: 45 },
+          { name: 'alex_dev', hype: 32 },
+          { name: 'karan_codes', hype: 28 },
+        ].map((b, i) => (
+          <View key={b.name} style={s.builderRow}>
+            <Text style={s.builderRank}>{i + 1}.</Text>
+            <Text style={s.builderName}>@{b.name}</Text>
+            <Text style={s.builderHype}>🔥{b.hype}</Text>
+          </View>
+        ))}
+      </View>
+
+      <View style={s.sideCard}>
+        <Text style={s.sideCardTitle}>🏫 YOUR CAMPUS</Text>
+        <Text style={s.campusName}>Prof Ram Meghe</Text>
+        <View style={s.campusOnlineRow}>
+          <View style={s.onlineDot} />
+          <Text style={s.onlineText}>45 members online</Text>
+        </View>
+      </View>
+    </View>
+  );
 
   return (
-    <GestureHandlerRootView style={{ flex: 1, backgroundColor: theme.bg }}>
-      <SafeAreaView style={s.container}>
+    <DesktopLayout>
+      <GestureHandlerRootView style={{ flex: 1, backgroundColor: theme.bg }}>
+        <SafeAreaView style={s.container}>
 
-        {/* Top Header */}
-        <View style={s.topBar}>
-          <Text style={s.logo}>build<Text style={{ color: theme.purple }}>log</Text></Text>
-          
-          <View style={s.tabContainer}>
-            <View style={s.tabsWrapper}>
-              <TouchableOpacity onPress={() => switchTab('feed')} style={s.tabItem}>
-                <Text style={[s.tabText, activeTab === 'feed' && s.tabTextActive]}>Feed</Text>
-              </TouchableOpacity>
-              <TouchableOpacity onPress={() => switchTab('news')} style={s.tabItem}>
-                <Text style={[s.tabText, activeTab === 'news' && s.tabTextActive]}>News</Text>
+          {/* Top Header - Only show if not on desktop desktop layout handles sidebar */}
+          <View style={s.topBar}>
+            <Text style={s.logo}>build<Text style={{ color: theme.purple }}>log</Text></Text>
+            
+            <View style={s.tabContainer}>
+              <View style={s.tabsWrapper}>
+                <TouchableOpacity onPress={() => switchTab('feed')} style={s.tabItem}>
+                  <Text style={[s.tabText, activeTab === 'feed' && s.tabTextActive]}>Feed</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => switchTab('news')} style={s.tabItem}>
+                  <Text style={[s.tabText, activeTab === 'news' && s.tabTextActive]}>News</Text>
+                </TouchableOpacity>
+                
+                {/* Underline Indicator */}
+                <Animated.View style={[s.underline, indicatorStyle]} />
+              </View>
+            </View>
+
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <TouchableOpacity 
+                style={s.iconBtn} 
+                onPress={() => router.push('/(tabs)/search')}
+              >
+                <Feather name="search" size={20} color={theme.textMuted} />
               </TouchableOpacity>
               
-              {/* Underline Indicator */}
-              <Animated.View style={[s.underline, indicatorStyle]} />
+              <TouchableOpacity style={s.iconBtn}>
+                <Feather name="bell" size={20} color={theme.textMuted} />
+              </TouchableOpacity>
             </View>
           </View>
 
-          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-            <TouchableOpacity 
-              style={s.iconBtn} 
-              onPress={() => router.push('/(tabs)/search')}
-            >
-              <Feather name="search" size={20} color={theme.textMuted} />
-            </TouchableOpacity>
-            
-            <TouchableOpacity style={s.iconBtn}>
-              <Feather name="bell" size={20} color={theme.textMuted} />
-            </TouchableOpacity>
+          <View style={s.mainRow}>
+            {/* Center column constraint */}
+            <View style={{ flex: 1, alignItems: 'center' }}>
+              <View style={{ width: width, overflow: 'hidden' }}>
+                <GestureDetector gesture={panoGesture}>
+                  <Animated.View style={[s.contentWrapper, animatedContainerStyle, { width: 2 * width }]}>
+                    
+                    {/* Feed Screen */}
+                    <View style={{ width: width, flex: 1 }}>
+                      <FlatList
+                        data={posts}
+                        keyExtractor={item => item.id}
+                        renderItem={renderItem}
+                        ListHeaderComponent={
+                          <DevNewsFeed 
+                            onOpenReader={(items, status) => {
+                              setNewsItems(items);
+                              setNewsRefreshing(false);
+                            }} 
+                            onRefreshStart={() => setNewsRefreshing(true)}
+                            onRefreshEnd={() => setNewsRefreshing(false)}
+                            forceRefreshKey={refreshing ? Date.now() : 0}
+                          />
+                        }
+                        showsVerticalScrollIndicator={false}
+                        refreshControl={
+                          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.purple} />
+                        }
+                        onEndReached={() => fetchPosts()}
+                        onEndReachedThreshold={0.5}
+                        initialNumToRender={5}
+                        maxToRenderPerBatch={5}
+                        windowSize={10}
+                        removeClippedSubviews={Platform.OS !== 'ios'}
+                        ListFooterComponent={loadingMore ? (
+                          <View style={{ padding: 20, alignItems: 'center' }}>
+                            <ActivityIndicator color={theme.purple} />
+                          </View>
+                        ) : null}
+                      />
+                    </View>
+
+                    {/* News Screen */}
+                    <View style={{ width: width, flex: 1 }}>
+                      {newsItems.length > 0 ? (
+                        <NewsReader 
+                          items={newsItems} 
+                          onClose={() => switchTab('feed')} 
+                        />
+                      ) : newsRefreshing ? (
+                        <View style={{ flex: 1 }}>
+                          {[1, 2, 3].map(i => <NewsCardSkeleton key={i} />)}
+                        </View>
+                      ) : (
+                        <View style={s.errorState}>
+                          <Text style={s.errorIcon}>📡</Text>
+                          <Text style={s.errorTitle}>Could not load dev news</Text>
+                          <TouchableOpacity 
+                            style={s.retryBtn} 
+                            onPress={() => triggerNewsRefresh()}
+                          >
+                            <Text style={s.retryText}>Try Again</Text>
+                          </TouchableOpacity>
+                        </View>
+                      )}
+                    </View>
+
+                  </Animated.View>
+                </GestureDetector>
+              </View>
+            </View>
+
+            {/* Right Side Panel - Desktop Only */}
+            {isWide && renderRightPanel()}
           </View>
-        </View>
-
-        <GestureDetector gesture={panoGesture}>
-          <Animated.View style={[s.contentWrapper, animatedContainerStyle, { width: width * 2 }]}>
-            
-            {/* Feed Screen */}
-            <View style={{ width }}>
-              <FlatList
-                data={posts}
-                keyExtractor={item => item.id}
-                renderItem={renderItem}
-                ListHeaderComponent={
-                  <DevNewsFeed 
-                    onOpenReader={(items, status) => {
-                      setNewsItems(items);
-                      setNewsRefreshing(false);
-                    }} 
-                    onRefreshStart={() => setNewsRefreshing(true)}
-                    onRefreshEnd={() => setNewsRefreshing(false)}
-                    forceRefreshKey={refreshing ? Date.now() : 0}
-                  />
-                }
-                showsVerticalScrollIndicator={false}
-                refreshControl={
-                  <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.purple} />
-                }
-                onEndReached={() => fetchPosts()}
-                onEndReachedThreshold={0.5}
-                initialNumToRender={5}
-                maxToRenderPerBatch={5}
-                windowSize={10}
-                removeClippedSubviews={Platform.OS !== 'ios'}
-                ListFooterComponent={loadingMore ? (
-                  <View style={{ padding: 20, alignItems: 'center' }}>
-                    <ActivityIndicator color={theme.purple} />
-                  </View>
-                ) : null}
-              />
-            </View>
-
-            {/* News Screen */}
-            <View style={{ width }}>
-              {newsItems.length > 0 ? (
-                <NewsReader 
-                  items={newsItems} 
-                  onClose={() => switchTab('feed')} 
-                />
-              ) : newsRefreshing ? (
-                <View style={{ flex: 1 }}>
-                  {[1, 2, 3].map(i => <NewsCardSkeleton key={i} />)}
-                </View>
-              ) : (
-                <View style={s.errorState}>
-                  <Text style={s.errorIcon}>📡</Text>
-                  <Text style={s.errorTitle}>Could not load dev news</Text>
-                  <TouchableOpacity 
-                    style={s.retryBtn} 
-                    onPress={() => triggerNewsRefresh()}
-                  >
-                    <Text style={s.retryText}>Try Again</Text>
-                  </TouchableOpacity>
-                </View>
-              )}
-            </View>
-
-          </Animated.View>
-        </GestureDetector>
-      </SafeAreaView>
-    </GestureHandlerRootView>
+        </SafeAreaView>
+      </GestureHandlerRootView>
+    </DesktopLayout>
   );
 }
 
@@ -410,5 +475,95 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
     color: theme.textPrimary,
     fontSize: 14,
     fontWeight: '700',
+  },
+  mainRow: {
+    flex: 1,
+    flexDirection: 'row',
+  },
+  rightPanel: {
+    width: 300,
+    padding: 24,
+    gap: 20,
+    ...(Platform.OS === 'web' && {
+      position: 'sticky' as any,
+      top: 0,
+    })
+  },
+  sideCard: {
+    backgroundColor: theme.bgCard,
+    borderRadius: 16,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: theme.border,
+  },
+  sideCardTitle: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: theme.textSecondary,
+    marginBottom: 16,
+    letterSpacing: 0.5,
+  },
+  tagCloud: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  sideTag: {
+    backgroundColor: theme.bgInput,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: theme.border,
+  },
+  sideTagText: {
+    fontSize: 11,
+    color: theme.textSecondary,
+    fontWeight: '600',
+  },
+  builderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+    gap: 8,
+  },
+  builderRank: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: theme.textMuted,
+    width: 20,
+  },
+  builderName: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '700',
+    color: theme.textPrimary,
+  },
+  builderHype: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: theme.purple,
+  },
+  campusName: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: theme.textPrimary,
+    marginBottom: 8,
+  },
+  campusOnlineRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  onlineDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#22c55e',
+  },
+  onlineText: {
+    fontSize: 12,
+    color: theme.textMuted,
+    fontWeight: '600',
   },
 });

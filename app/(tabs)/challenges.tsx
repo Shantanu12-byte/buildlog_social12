@@ -11,6 +11,9 @@ import { useUserStore } from '@/store/userStore';
 import { supabase } from '@/lib/supabase';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { trackPageView } from '@/services/analyticsService';
+import { useResponsive } from '@/hooks/useResponsive';
+import { DesktopLayout } from '@/components/ui/DesktopLayout';
+import { LoadingScreen } from '@/components/ui/UI';
 
 const { width } = Dimensions.get('window');
 
@@ -22,6 +25,7 @@ interface Problem {
   tags: string[];
   companies: string[];
   status?: 'solved' | 'attempted' | 'none';
+  xp?: number;
 }
 
 export default function ChallengesScreen() {
@@ -133,21 +137,24 @@ export default function ChallengesScreen() {
     }
   };
 
-  if (loading) {
-    return (
-      <SafeAreaView style={s.container}>
-        <View style={s.center}>
-          <ActivityIndicator size="large" color={theme.purple} />
-          <Text style={s.loadingText}>INITIALIZING CHALLENGES...</Text>
-        </View>
-      </SafeAreaView>
-    );
-  }
+  const { isDesktop } = useResponsive();
+  const [showSkeleton, setShowSkeleton] = useState(true);
 
-  return (
-    <SafeAreaView style={s.container} edges={['top']}>
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={s.content}>
-        {/* Header Section */}
+  useEffect(() => {
+    if (!loading) {
+      const timer = setTimeout(() => setShowSkeleton(false), 500);
+      return () => clearTimeout(timer);
+    } else {
+      setShowSkeleton(true);
+    }
+  }, [loading]);
+
+  if (showSkeleton) return <LoadingScreen type="challenges" />;
+
+  const renderDailyAndStats = () => (
+    <View style={isDesktop ? s.desktopSidebar : undefined}>
+      {/* Header Section (Mobile) */}
+      {!isDesktop && (
         <View style={s.header}>
           <View style={s.headerTopRow}>
             <View>
@@ -158,223 +165,169 @@ export default function ChallengesScreen() {
               <Text style={s.xpText}>⚡ {userProfile?.xp || 0} XP</Text>
             </View>
           </View>
-          
-          <View style={s.headerProgressWrap}>
-            <View style={s.headerProgressBarBg}>
-              <View style={[s.headerProgressBarFill, { width: `${(solvedCount / totalProblems) * 100}%` }]} />
+        </View>
+      )}
+
+      {/* Daily Challenge Card */}
+      {dailyChallenge && (
+        <TouchableOpacity 
+          activeOpacity={0.9}
+          onPress={() => router.push({ pathname: '/(stack)/problem-solver', params: { id: dailyChallenge.id } } as any)}
+        >
+          <LinearGradient
+            colors={isDark ? ['#1a0a2e', '#0f0a1a'] : ['#ffffff', '#f5f3ff']}
+            style={s.dailyCard}
+          >
+            <View style={s.dailyAccent} />
+            <View style={s.dailyHeader}>
+              <View style={s.dailyHeaderLeft}>
+                <Text style={s.dailyLabel}>🔥 DAILY CHALLENGE</Text>
+              </View>
+              <Text style={s.dailyCountdown}>⏰ {timeLeft}</Text>
             </View>
-            <View style={s.headerProgressTextRow}>
-              <Text style={s.headerProgressStatus}>{solvedCount} problems solved</Text>
-              <Text style={s.headerProgressCount}>{solvedCount}/{totalProblems}</Text>
+            
+            <Text style={s.dailyTitle}>{dailyChallenge.title}</Text>
+            
+            <View style={s.dailyMeta}>
+              <View style={s.tagPill}><Text style={[s.tagText, { color: getDifficultyColor(dailyChallenge.difficulty) }]}>{dailyChallenge.difficulty}</Text></View>
+              {dailyChallenge.tags?.[0] && <View style={s.tagPill}><Text style={s.tagText}>{dailyChallenge.tags[0]}</Text></View>}
             </View>
+            
+            <View style={s.dailyAction}>
+              <Text style={s.dailyActionText}>Solve Today →</Text>
+            </View>
+          </LinearGradient>
+        </TouchableOpacity>
+      )}
+
+      {/* Stats Cluster (Simplified for Sidebar) */}
+      <View style={s.statsStatRow}>
+        <View style={s.statsCard}>
+          <Text style={[s.statsValLarge, { color: theme.green }]}>{userProfile?.easy_solved || 0}</Text>
+          <Text style={s.statsLabelSmall}>Easy</Text>
+        </View>
+        <View style={s.statsCard}>
+          <Text style={[s.statsValLarge, { color: theme.amber }]}>{userProfile?.medium_solved || 0}</Text>
+          <Text style={s.statsLabelSmall}>Medium</Text>
+        </View>
+        <View style={s.statsCard}>
+          <Text style={[s.statsValLarge, { color: theme.red }]}>{userProfile?.hard_solved || 0}</Text>
+          <Text style={s.statsLabelSmall}>Hard</Text>
+        </View>
+      </View>
+
+      <View style={s.quickActions}>
+        <TouchableOpacity style={s.actionCard} onPress={() => router.push('/(stack)/daily-memos')}>
+          <MaterialCommunityIcons name="brain" size={20} color={theme.purple} />
+          <Text style={s.actionTitle}>Memos</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={s.actionCard} onPress={() => router.push('/(stack)/company-tracks')}>
+          <Feather name="briefcase" size={18} color={theme.green} />
+          <Text style={s.actionTitle}>Tracks</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+
+  const renderFilterAndList = () => (
+    <View style={isDesktop ? s.desktopListColumn : undefined}>
+      {isDesktop && (
+        <View style={s.desktopHeader}>
+          <Text style={s.headerTitle}>Problems</Text>
+          <View style={s.xpBadge}>
+            <Text style={s.xpText}>⚡ {userProfile?.xp || 0} XP</Text>
           </View>
         </View>
+      )}
 
-        {/* Daily Challenge Card */}
-        {dailyChallenge && (
-          <TouchableOpacity 
-            activeOpacity={0.9}
-            onPress={() => router.push({ pathname: '/(stack)/problem-solver', params: { id: dailyChallenge.id } } as any)}
-          >
-            <LinearGradient
-              colors={isDark ? ['#1a0a2e', '#0f0a1a'] : ['#f5f3ff', '#ede9fe']}
-              style={s.dailyCard}
+      {/* Filters */}
+      <View style={s.filterWrapper}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.filterRow}>
+          {['All', 'Easy', 'Medium', 'Hard'].map((f) => (
+            <TouchableOpacity 
+              key={f} 
+              style={[s.filterBtn, filter === f && s.filterBtnActive]}
+              onPress={() => setFilter(f as any)}
             >
-              <View style={s.dailyAccent} />
-              <View style={s.dailyHeader}>
-                <View style={s.dailyHeaderLeft}>
-                  <Text style={s.dailyLabel}>🔥 DAILY CHALLENGE</Text>
-                </View>
-                <Text style={s.dailyCountdown}>⏰ {timeLeft}</Text>
+              <Text style={[s.filterBtnText, filter === f && s.filterBtnTextActive]}>{f}</Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.filterRow}>
+          {[
+            { id: 'coding', label: 'Coding' },
+            { id: 'mcq', label: 'MCQ' },
+            { id: 'bug_fix', label: 'Bug Fix' },
+            { id: 'output_predict', label: 'Output' }
+          ].map((t) => (
+            <TouchableOpacity 
+              key={t.id} 
+              style={[s.typeFilterBtn, typeFilter === t.id && s.typeFilterBtnActive]}
+              onPress={() => setTypeFilter(typeFilter === t.id ? null : t.id)}
+            >
+              <Text style={[s.filterBtnText, typeFilter === t.id && s.filterBtnTextActive]}>{t.label}</Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      </View>
+
+      {/* Problem List */}
+      <View style={s.listWrapper}>
+        {filteredProblems.map((p, index) => (
+          <TouchableOpacity 
+            key={p.id} 
+            style={s.problemCard}
+            onPress={() => router.push({ pathname: '/(stack)/problem-solver', params: { id: p.id } } as any)}
+          >
+            <View style={[
+              s.statusCircle,
+              { backgroundColor: p.status === 'solved' ? theme.green : p.status === 'attempted' ? theme.amber : isDark ? theme.border : theme.bgInput }
+            ]}>
+              {p.status === 'solved' ? (
+                <Feather name="check" size={16} color="#FFF" />
+              ) : (
+                <Feather name="play" size={14} color={theme.textMuted} />
+              )}
+            </View>
+            
+            <View style={s.problemInfo}>
+              <Text style={s.problemTitle}>{p.title}</Text>
+              <View style={s.problemTagsRow}>
+                <Text style={[s.difficultyText, { color: getDifficultyColor(p.difficulty) }]}>{p.difficulty}</Text>
+                {p.companies?.slice(0, 2).map((c, ci) => (
+                  <View key={ci} style={s.listCompanyPill}><Text style={s.listCompanyPillText}>{c}</Text></View>
+                ))}
               </View>
-              
-              <Text style={s.dailyTitle}>{dailyChallenge.title}</Text>
-              
-              <View style={s.dailyMeta}>
-                <View style={s.tagPill}><Text style={[s.tagText, { color: getDifficultyColor(dailyChallenge.difficulty) }]}>{dailyChallenge.difficulty}</Text></View>
-                {dailyChallenge.tags?.[0] && <View style={s.tagPill}><Text style={s.tagText}>{dailyChallenge.tags[0]}</Text></View>}
-                <View style={s.companyTags}>
-                  {dailyChallenge.companies?.slice(0, 2).map((c, i) => (
-                    <View key={i} style={s.companyPill}>
-                      <Text style={s.companyPillText}>{c}</Text>
-                    </View>
-                  ))}
-                </View>
-              </View>
-              
-              <View style={s.dailyAction}>
-                <Text style={s.dailyActionText}>Solve Today →</Text>
-              </View>
-            </LinearGradient>
+            </View>
+            
+            <Feather name="chevron-right" size={20} color={theme.border} />
           </TouchableOpacity>
+        ))}
+        {filteredProblems.length === 0 && (
+          <View style={s.emptyState}>
+            <Text style={s.emptyText}>No problems matching filters</Text>
+          </View>
         )}
+      </View>
+    </View>
+  );
 
-        {/* Quick Actions Row */}
-        <View style={s.quickActions}>
-          <TouchableOpacity 
-            style={s.actionCard} 
-            onPress={() => router.push('/(stack)/daily-memos')}
-          >
-            <View style={[s.actionIconBox, { backgroundColor: isDark ? 'rgba(124, 58, 237, 0.15)' : 'rgba(124, 58, 237, 0.08)' }]}>
-              <MaterialCommunityIcons name="brain" size={24} color={theme.purple} />
-            </View>
-            <Text style={s.actionTitle}>Daily Memos</Text>
-            <Text style={s.actionSubtitle}>3/10 Today</Text>
-            <View style={s.actionProgressBg}>
-              <View style={[s.actionProgressFill, { width: '30%', backgroundColor: theme.purple }]} />
-            </View>
-          </TouchableOpacity>
-          
-          <TouchableOpacity 
-            style={s.actionCard}
-            onPress={() => router.push('/(stack)/company-tracks')}
-          >
-            <View style={[s.actionIconBox, { backgroundColor: isDark ? 'rgba(34, 197, 94, 0.15)' : 'rgba(34, 197, 94, 0.08)' }]}>
-              <Feather name="briefcase" size={20} color={theme.green} />
-            </View>
-            <Text style={s.actionTitle}>Company Tracks</Text>
-            <Text style={s.actionSubtitle}>{dailyChallenge?.companies?.[0] || 'TCS'}, etc.</Text>
-            <View style={s.tracksBadge}>
-              <Text style={s.tracksBadgeText}>4 tracks</Text>
-            </View>
-          </TouchableOpacity>
-        </View>
-
-        {/* Your Progress Section */}
-        <View style={s.progressSection}>
-          <View style={s.sectionHeader}>
-            <Text style={s.sectionTitle}>YOUR PROGRESS</Text>
-            <View style={s.streakBadge}>
-              <Text style={s.streakText}>🔥 {streakCount} DAY STREAK</Text>
-            </View>
+  return (
+    <DesktopLayout>
+      <SafeAreaView style={s.container} edges={['top']}>
+        {isDesktop ? (
+          <View style={s.desktopLayoutContainer}>
+            {renderDailyAndStats()}
+            {renderFilterAndList()}
           </View>
-          
-          <View style={s.statsStatRow}>
-            <View style={s.statsCard}>
-              <Text style={s.statsValLarge}>{userProfile?.easy_solved || 0}</Text>
-              <Text style={[s.statsLabelSmall, { color: theme.green }]}>Easy</Text>
-              <Text style={s.statsSubLabel}>solved</Text>
-            </View>
-            <View style={s.statsCard}>
-              <Text style={s.statsValLarge}>{userProfile?.medium_solved || 0}</Text>
-              <Text style={[s.statsLabelSmall, { color: theme.amber }]}>Medium</Text>
-              <Text style={s.statsSubLabel}>solved</Text>
-            </View>
-            <View style={s.statsCard}>
-              <Text style={s.statsValLarge}>{userProfile?.hard_solved || 0}</Text>
-              <Text style={[s.statsLabelSmall, { color: theme.red }]}>Hard</Text>
-              <Text style={s.statsSubLabel}>solved</Text>
-            </View>
-          </View>
-
-          <View style={s.totalProgressWrap}>
-            <View style={s.totalProgressHeader}>
-              <Text style={s.totalProgressStatus}>Total: {solvedCount}/{totalProblems}</Text>
-              <Text style={s.totalProgressPercent}>{Math.round((solvedCount/totalProblems)*100)}%</Text>
-            </View>
-            <View style={s.totalProgressBarBg}>
-              <View style={[s.totalProgressBarFill, { width: `${(solvedCount/totalProblems)*100}%` }]} />
-            </View>
-          </View>
-        </View>
-
-        {/* Filters */}
-        <View style={s.filterWrapper}>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.filterRow}>
-            {['All', 'Easy', 'Medium', 'Hard'].map((f) => (
-              <TouchableOpacity 
-                key={f} 
-                style={[s.filterBtn, filter === f && s.filterBtnActive]}
-                onPress={() => setFilter(f as any)}
-              >
-                <Text style={[s.filterBtnText, filter === f && s.filterBtnTextActive]}>{f}</Text>
-              </TouchableOpacity>
-            ))}
+        ) : (
+          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={s.content}>
+            {renderDailyAndStats()}
+            {renderFilterAndList()}
           </ScrollView>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.filterRow}>
-            {[
-              { id: 'coding', label: 'Coding' },
-              { id: 'mcq', label: 'MCQ' },
-              { id: 'bug_fix', label: 'Bug Fix' },
-              { id: 'output_predict', label: 'Output' }
-            ].map((t) => (
-              <TouchableOpacity 
-                key={t.id} 
-                style={[s.typeFilterBtn, typeFilter === t.id && s.typeFilterBtnActive]}
-                onPress={() => setTypeFilter(typeFilter === t.id ? null : t.id)}
-              >
-                <Text style={[s.filterBtnText, typeFilter === t.id && s.filterBtnTextActive]}>{t.label}</Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-        </View>
-
-        {/* Problem List Cluster */}
-        <View style={s.listWrapper}>
-          <View style={s.problemList}>
-            {filteredProblems.map((p, index) => {
-              const isFirst = index === 0;
-              const isLast = index === filteredProblems.length - 1;
-              
-              return (
-                <TouchableOpacity 
-                  key={p.id} 
-                  style={[
-                    s.problemCard,
-                    isFirst && s.problemCardFirst,
-                    isLast && s.problemCardLast
-                  ]}
-                  onPress={() => router.push({ pathname: '/(stack)/problem-solver', params: { id: p.id } } as any)}
-                >
-                  <View style={[
-                    s.statusCircle,
-                    { backgroundColor: p.status === 'solved' ? theme.green : p.status === 'attempted' ? theme.amber : isDark ? theme.border : theme.bgInput }
-                  ]}>
-                    {p.status === 'solved' ? (
-                      <Feather name="check" size={16} color={isDark ? '#000' : '#FFF'} />
-                    ) : p.status === 'attempted' ? (
-                      <Feather name="refresh-cw" size={16} color={isDark ? '#000' : '#FFF'} />
-                    ) : (
-                      <Feather name="lock" size={16} color={theme.textMuted} />
-                    )}
-                  </View>
-                  
-                  <View style={s.problemInfo}>
-                    <Text style={s.problemTitle}>{p.title}</Text>
-                    <View style={s.problemTagsRow}>
-                      {p.tags?.slice(0, 2).map((t, ti) => (
-                        <View key={ti} style={s.listTag}><Text style={s.listTagText}>{t}</Text></View>
-                      ))}
-                      <View style={s.companyTagsInline}>
-                        {p.companies?.slice(0, 1).map((c, ci) => (
-                          <View key={ci} style={s.listCompanyPill}><Text style={s.listCompanyPillText}>{c}</Text></View>
-                        ))}
-                        {p.companies && p.companies.length > 1 && (
-                          <Text style={s.moreCompanies}>+{p.companies.length - 1} more</Text>
-                        )}
-                      </View>
-                    </View>
-                  </View>
-                  
-                  <View style={s.problemMeta}>
-                    <Text style={[s.difficultyBadgeText, { color: getDifficultyColor(p.difficulty) }]}>
-                      {p.difficulty}
-                    </Text>
-                    <Text style={s.companyCount}>{p.companies?.length || 0} Comp.</Text>
-                  </View>
-                </TouchableOpacity>
-              );
-            })}
-            {filteredProblems.length === 0 && (
-              <View style={s.emptyState}>
-                <MaterialCommunityIcons name="script-text-outline" size={48} color={theme.border} />
-                <Text style={s.emptyText}>No problems matching your selection</Text>
-              </View>
-            )}
-          </View>
-        </View>
-      </ScrollView>
-    </SafeAreaView>
+        )}
+      </SafeAreaView>
+    </DesktopLayout>
   );
 }
 
@@ -401,9 +354,30 @@ const getStyles = (theme: any, isDark: boolean) => {
     loadingText: { color: theme.purple, marginTop: 16, fontSize: 10, fontWeight: '900', letterSpacing: 2 },
     content: { padding: 20, paddingBottom: 100 },
     
-    // Section Labels
-    sectionTitle: { color: textMuted, fontSize: 11, fontWeight: '900', letterSpacing: 2, textTransform: 'uppercase', marginBottom: 12 },
-    
+    // Desktop Layout
+    desktopLayoutContainer: {
+      flex: 1,
+      flexDirection: 'row',
+      gap: 32,
+      padding: 32,
+      maxWidth: 1400,
+      alignSelf: 'center',
+      width: '100%',
+    },
+    desktopSidebar: {
+      width: 340,
+      gap: 24,
+    },
+    desktopListColumn: {
+      flex: 1,
+    },
+    desktopHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: 24,
+    },
+
     // Header
     header: { marginBottom: 32, paddingVertical: 10 },
     headerTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 },
@@ -412,93 +386,53 @@ const getStyles = (theme: any, isDark: boolean) => {
     xpBadge: { backgroundColor: theme.purple, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20 },
     xpText: { color: '#ffffff', fontSize: 13, fontWeight: '800' },
     
-    headerProgressWrap: { marginTop: 8 },
-    headerProgressBarBg: { height: 4, backgroundColor: border, borderRadius: 2, overflow: 'hidden', marginBottom: 8 },
-    headerProgressBarFill: { height: '100%', backgroundColor: theme.purple, borderRadius: 2 },
-    headerProgressTextRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-    headerProgressStatus: { color: textSecondary, fontSize: 12, fontWeight: '600' },
-    headerProgressCount: { color: textMuted, fontSize: 12, fontWeight: '700' },
-
     // Daily Challenge
-    dailyCard: { borderRadius: 24, padding: 24, marginBottom: 24, borderWidth: 1, borderColor: isDark ? 'rgba(124, 58, 237, 0.25)' : 'rgba(124, 58, 237, 0.15)', position: 'relative', overflow: 'hidden', ...shadow },
-    dailyAccent: { position: 'absolute', left: 0, top: 24, bottom: 24, width: 3, backgroundColor: theme.purple, borderRadius: 2 },
+    dailyCard: { borderRadius: 24, padding: 24, marginBottom: 0, borderWidth: 1, borderColor: isDark ? 'rgba(124, 58, 237, 0.25)' : 'rgba(124, 58, 237, 0.15)', backgroundColor: bgCard, ...shadow },
+    dailyAccent: { position: 'absolute', left: 0, top: 24, bottom: 24, width: 4, backgroundColor: theme.purple, borderTopRightRadius: 4, borderBottomRightRadius: 4 },
     dailyHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
     dailyHeaderLeft: { flexDirection: 'row', alignItems: 'center' },
-    dailyLabel: { color: isDark ? '#f97316' : theme.purple, fontSize: 11, fontWeight: '800', letterSpacing: 1 },
+    dailyLabel: { color: theme.purple, fontSize: 11, fontWeight: '800', letterSpacing: 1 },
     dailyCountdown: { color: textMuted, fontSize: 11, fontWeight: '600' },
-    dailyTitle: { color: textPrimary, fontSize: 24, fontWeight: '800', marginBottom: 16 },
+    dailyTitle: { color: textPrimary, fontSize: 20, fontWeight: '800', marginBottom: 16 },
     dailyMeta: { flexDirection: 'row', gap: 8, flexWrap: 'wrap', alignItems: 'center' },
     tagPill: { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, borderWidth: 1, borderColor: border },
-    tagText: { fontSize: 11, fontWeight: '700', color: textSecondary },
-    companyTags: { flexDirection: 'row', gap: 6 },
-    companyPill: { backgroundColor: border, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
-    companyPillText: { color: textSecondary, fontSize: 10, fontWeight: '800' },
-    dailyAction: { marginTop: 24, alignSelf: 'flex-end' },
-    dailyActionText: { color: theme.purple, fontSize: 15, fontWeight: '800' },
+    tagText: { fontSize: 10, fontWeight: '700', color: textSecondary },
+    dailyAction: { marginTop: 20, alignSelf: 'flex-end' },
+    dailyActionText: { color: theme.purple, fontSize: 14, fontWeight: '800' },
+
+    // Stats
+    statsStatRow: { flexDirection: 'row', gap: 12 },
+    statsCard: { flex: 1, alignItems: 'center', backgroundColor: bgCard, padding: 16, borderRadius: 16, borderWidth: 1, borderColor: border, ...shadow },
+    statsValLarge: { fontSize: 24, fontWeight: '800' },
+    statsLabelSmall: { color: textMuted, fontSize: 10, fontWeight: '800', marginTop: 4, textTransform: 'uppercase' },
 
     // Quick Actions
-    quickActions: { flexDirection: 'row', gap: 12, marginBottom: 32 },
-    actionCard: { flex: 1, backgroundColor: bgCard, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: border, ...shadow },
-    actionIconBox: { width: 40, height: 40, borderRadius: 10, alignItems: 'center', justifyContent: 'center', marginBottom: 12 },
-    actionTitle: { color: textPrimary, fontSize: 15, fontWeight: '800' },
-    actionSubtitle: { color: textSecondary, fontSize: 11, marginTop: 4, marginBottom: 12 },
-    actionProgressBg: { height: 4, backgroundColor: border, borderRadius: 2, overflow: 'hidden' },
-    actionProgressFill: { height: '100%', borderRadius: 2 },
-    tracksBadge: { alignSelf: 'flex-start', backgroundColor: border, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, marginTop: 8 },
-    tracksBadgeText: { color: textSecondary, fontSize: 10, fontWeight: '800' },
-
-    // Your Progress
-    progressSection: { marginBottom: 32 },
-    sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
-    streakBadge: { backgroundColor: isDark ? '#7c2d12' : '#fff7ed', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 12 },
-    streakText: { color: isDark ? '#f97316' : '#ea580c', fontSize: 11, fontWeight: '800' },
-    
-    statsStatRow: { flexDirection: 'row', gap: 10, marginBottom: 20 },
-    statsCard: { flex: 1, alignItems: 'center', backgroundColor: bgCard, padding: 12, borderRadius: 12, borderWidth: 1, borderColor: border, ...shadow },
-    statsValLarge: { color: textPrimary, fontSize: 20, fontWeight: '800' },
-    statsLabelSmall: { fontSize: 10, fontWeight: '900', marginTop: 4, textTransform: 'uppercase' },
-    statsSubLabel: { color: textMuted, fontSize: 9, fontWeight: '600' },
-
-    totalProgressWrap: { marginTop: 4 },
-    totalProgressHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
-    totalProgressStatus: { color: textSecondary, fontSize: 12, fontWeight: '600' },
-    totalProgressPercent: { color: textPrimary, fontSize: 12, fontWeight: '800' },
-    totalProgressBarBg: { height: 8, backgroundColor: border, borderRadius: 4, overflow: 'hidden' },
-    totalProgressBarFill: { height: '100%', backgroundColor: theme.purple, borderRadius: 4 },
+    quickActions: { flexDirection: 'row', gap: 12 },
+    actionCard: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: bgCard, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: border, ...shadow },
+    actionTitle: { color: textPrimary, fontSize: 14, fontWeight: '700' },
 
     // Filters
-    filterWrapper: { marginBottom: 20, gap: 12 },
-    filterRow: { gap: 8, paddingRight: 20 },
-    filterBtn: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, backgroundColor: bgCard, borderWidth: 1, borderColor: border, ...shadow },
+    filterWrapper: { marginBottom: 24, gap: 12 },
+    filterRow: { gap: 10 },
+    filterBtn: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 12, backgroundColor: bgCard, borderWidth: 1, borderColor: border, ...shadow },
     filterBtnActive: { backgroundColor: theme.purple, borderColor: theme.purple },
-    typeFilterBtn: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, backgroundColor: bgCard, borderWidth: 1, borderColor: border, ...shadow },
+    typeFilterBtn: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 12, backgroundColor: bgCard, borderWidth: 1, borderColor: border, ...shadow },
     typeFilterBtnActive: { backgroundColor: theme.purple, borderColor: theme.purple },
     filterBtnText: { color: textSecondary, fontSize: 13, fontWeight: '600' },
     filterBtnTextActive: { color: '#ffffff', fontWeight: '700' },
 
-    // List Wrapper
-    listWrapper: { backgroundColor: bgCard, borderRadius: 16, borderWidth: 1, borderColor: border, overflow: 'hidden', ...shadow },
-    problemList: {},
-    problemCard: { flexDirection: 'row', alignItems: 'center', padding: 16, borderBottomWidth: 1, borderBottomColor: isDark ? border : '#f1f5f9', gap: 16 },
-    problemCardFirst: { borderTopLeftRadius: 16, borderTopRightRadius: 16 },
-    problemCardLast: { borderBottomWidth: 0, borderBottomLeftRadius: 16, borderBottomRightRadius: 16 },
-    
-    statusCircle: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
+    // List
+    listWrapper: { backgroundColor: bgCard, borderRadius: 20, borderWidth: 1, borderColor: border, overflow: 'hidden', ...shadow },
+    problemCard: { flexDirection: 'row', alignItems: 'center', padding: 18, borderBottomWidth: 1, borderBottomColor: border, gap: 16 },
+    statusCircle: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
     problemInfo: { flex: 1 },
-    problemTitle: { color: textPrimary, fontSize: 16, fontWeight: '700', marginBottom: 6 },
-    problemTagsRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6 },
-    listTag: { backgroundColor: isDark ? border : '#f1f5f9', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
-    listTagText: { color: textSecondary, fontSize: 10, fontWeight: '600' },
-    companyTagsInline: { flexDirection: 'row', alignItems: 'center', gap: 4, marginLeft: 4 },
-    listCompanyPill: { backgroundColor: border, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
+    problemTitle: { color: textPrimary, fontSize: 17, fontWeight: '700', marginBottom: 4 },
+    problemTagsRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+    difficultyText: { fontSize: 12, fontWeight: '800' },
+    listCompanyPill: { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4, borderWidth: 1, borderColor: border },
     listCompanyPillText: { color: textSecondary, fontSize: 10, fontWeight: '700' },
-    moreCompanies: { color: textMuted, fontSize: 10, fontWeight: '600' },
     
-    problemMeta: { alignItems: 'flex-end' },
-    difficultyBadgeText: { fontSize: 13, fontWeight: '800', marginBottom: 4 },
-    companyCount: { color: textMuted, fontSize: 10, fontWeight: '600' },
-    
-    emptyState: { alignItems: 'center', paddingVertical: 60, gap: 12 },
-    emptyText: { color: textMuted, fontSize: 14, textAlign: 'center', maxWidth: 200 }
+    emptyState: { alignItems: 'center', paddingVertical: 80 },
+    emptyText: { color: textMuted, fontSize: 15, fontWeight: '600' }
   });
 };
