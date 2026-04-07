@@ -1,7 +1,7 @@
 const { createClient } = require('@supabase/supabase-js');
 
 // --- CONFIGURATION ---
-// These are the same credentials found in buildlog/lib/supabase.ts
+// These are the same credentials found in codenid/lib/supabase.ts
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL || 'https://trnfhlmwmagsdhabswsl.supabase.co';
 const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRybmZobG13bWFnc2RoYWJzd3NsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM0OTc5NjUsImV4cCI6MjA4OTA3Mzk2NX0.k70D6gXb2eDF1raEodQFlk8vnQ5qNlw--fZVrMYmwwA';
 

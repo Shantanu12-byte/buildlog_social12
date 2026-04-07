@@ -5,7 +5,7 @@
  * Uses GitHub public API — completely free, no token needed.
  */
 
-// Maps GitHub language names → buildlog skill names
+// Maps GitHub language names → codenid skill names
 const LANGUAGE_TO_SKILL: Record<string, string[]> = {
   'JavaScript': ['JavaScript', 'React', 'Node.js', 'Vue', 'Express'],
   'TypeScript': ['TypeScript', 'React', 'Angular', 'Node.js'],
@@ -25,7 +25,7 @@ const LANGUAGE_TO_SKILL: Record<string, string[]> = {
 };
 
 export interface GitHubLanguageResult {
-  detectedSkills: string[];     // Skills buildlog can verify
+  detectedSkills: string[];     // Skills codenid can verify
   rawLanguages: Record<string, number>; // Raw from GitHub API
   error?: string;
 }
@@ -45,7 +45,7 @@ function parseGitHubUrl(url: string): { owner: string; repo: string } | null {
 }
 
 /**
- * Main function — fetch languages from GitHub and map to buildlog skills
+ * Main function — fetch languages from GitHub and map to codenid skills
  */
 export async function detectSkillsFromGitHub(
   githubUrl: string
@@ -61,7 +61,7 @@ export async function detectSkillsFromGitHub(
       {
         headers: {
           'Accept': 'application/vnd.github.v3+json',
-          'User-Agent': 'buildlog-app',
+          'User-Agent': 'codenid-app',
         },
       }
     );

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Modal, View, Text, StyleSheet, TouchableOpacity, Platform } from 'react-native';
+import { Modal, View, Text, StyleSheet, TouchableOpacity, Platform, Image } from 'react-native';
 import { Spacing, Typography, Radius } from '@/constants/theme';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '@/context/ThemeContext';
@@ -25,7 +25,11 @@ export function CustomNotificationModal({ visible, onAuthorize, onCancel }: Cust
         <View style={styles.container}>
           <div style={styles.header}>
             <View style={styles.glitchBox}>
-              <Feather name="zap" size={24} color={isDark ? "#00FF41" : theme.purple} />
+              <Image 
+                source={require('../assets/codenid_logo.png')}
+                style={{ width: 24, height: 24, tintColor: isDark ? "#00FF41" : theme.purple }}
+                resizeMode="contain"
+              />
             </View>
             <Text style={styles.title}>SYSTEM_AUTHORIZATION</Text>
           </div>

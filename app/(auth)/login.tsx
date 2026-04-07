@@ -2,8 +2,9 @@ import React, { useState } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet,
   SafeAreaView, StatusBar, KeyboardAvoidingView,
-  Platform, ScrollView,
+  Platform, ScrollView, Image,
 } from 'react-native';
+import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { supabase } from '../../lib/supabase';
 import { Typography, Spacing, Radius } from '../../constants/theme';
@@ -83,8 +84,8 @@ export default function LoginScreen() {
     }
   }
 
-  async function handleGoogleAuth() {
-    const { error } = await supabase.auth.signInWithOAuth({ provider: 'google' });
+  async function handleGithubAuth() {
+    const { error } = await supabase.auth.signInWithOAuth({ provider: 'github' });
     if (error) setError(error.message);
   }
 
@@ -102,11 +103,13 @@ export default function LoginScreen() {
         >
           {/* Logo + tagline */}
           <View style={s.hero}>
-            <View style={s.logoMark}>
-              <Text style={s.logoMarkText}>bl</Text>
-            </View>
+            <Image 
+              source={require('../../assets/codenid_logo.png')} 
+              style={{ width: 80, height: 80, marginBottom: Spacing.md }} 
+              resizeMode="contain" 
+            />
             <Text style={s.logoText}>
-              build<Text style={{ color: theme.purple }}>log</Text>
+              code<Text style={{ color: theme.purple }}>nid</Text>
             </Text>
             <Text style={s.tagline}>Where developers share what they're building</Text>
           </View>
@@ -181,14 +184,14 @@ export default function LoginScreen() {
               <View style={s.dividerLine} />
             </View>
 
-            {/* Google OAuth */}
+            {/* GitHub OAuth */}
             <TouchableOpacity
               style={s.googleBtn}
-              onPress={handleGoogleAuth}
+              onPress={handleGithubAuth}
               activeOpacity={0.75}
             >
-              <Text style={s.googleIcon}>G</Text>
-              <Text style={s.googleText}>Continue with Google</Text>
+              <Feather name="github" size={22} color={theme.textPrimary} />
+              <Text style={s.googleText}>Continue with GitHub</Text>
             </TouchableOpacity>
           </View>
 

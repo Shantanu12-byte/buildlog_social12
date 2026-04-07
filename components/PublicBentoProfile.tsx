@@ -90,7 +90,7 @@ export function PublicBentoProfile({ user, pinnedProject, recentPosts }: PublicB
 
         {/* Follow Card */}
         <TouchableOpacity style={[styles.card, styles.followCard]} activeOpacity={0.8}>
-          <Text style={styles.followText}>Follow on Buildlog</Text>
+          <Text style={styles.followText}>Follow on CodeNid</Text>
           <Feather name="plus-circle" size={20} color="#FFF" />
         </TouchableOpacity>
 
@@ -140,7 +140,7 @@ export function PublicBentoProfile({ user, pinnedProject, recentPosts }: PublicB
 
       {/* Footer Logo */}
       <View style={styles.footer}>
-        <Text style={styles.footerText}>built with BUILDLOG</Text>
+        <Text style={styles.footerText}>built with CODENID</Text>
       </View>
     </ScrollView>
   );

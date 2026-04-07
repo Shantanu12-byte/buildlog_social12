@@ -377,6 +377,8 @@ export default function TavernScreen() {
   const memberChannelRef = useRef<any>(null);
 
   useEffect(() => {
+    if (!userId) return;
+
     const profile = useUserStore.getState().userProfile;
 
     // Early exit — if campus_id exists and shows joined in store, unlock immediately
@@ -399,12 +401,11 @@ export default function TavernScreen() {
         });
       }
     };
-  }, []);
+  }, [userId]);
 
   async function checkCampusFromDB() {
     setIsCheckingStatus(true);
     try {
-      if (!userId) return;
       
       const { data } = await supabase
         .from('profiles')
@@ -1023,7 +1024,7 @@ export default function TavernScreen() {
   };
 
   return (
-    <DesktopLayout>
+    <DesktopLayout scrollable={false}>
       <SafeAreaView style={s.container}>
         <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={theme.bg} />
         
@@ -1501,6 +1502,7 @@ function getStyles(theme: any, isDark: boolean) {
     },
     desktopRoomList: {
       width: 280,
+      height: '100%',
       borderRightWidth: 1,
       borderRightColor: theme.border,
       backgroundColor: isDark ? theme.bg : '#f8fafc',

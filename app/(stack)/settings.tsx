@@ -18,7 +18,14 @@ export default function SettingsScreen() {
 
   const handleLogout = async () => {
     try {
-      await supabase.auth.signOut();
+      // Manually drop global state instantly for a snappy UI response
+      useUserStore.getState().clearUser();
+      
+      // Fire-and-forget network sign out so a stalled network doesn't hang the app
+      supabase.auth.signOut().catch(() => {});
+      
+      // Force immediate redirect
+      router.replace('/(auth)/login');
     } catch (err: any) {
       if (Platform.OS === 'web') alert('Error signing out');
       else Alert.alert('Error', 'An unexpected error occurred during sign out.');

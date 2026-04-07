@@ -19,7 +19,7 @@ import { useTheme } from '@/context/ThemeContext';
 import { Radius, Spacing } from '@/constants/theme';
 
 // ── Constants ────────────────────────────────────────────────
-const CACHE_KEY = '@buildlog_profile_nav_cache';
+const CACHE_KEY = '@codenid_profile_nav_cache';
 
 interface BadgeRule {
   id: string;

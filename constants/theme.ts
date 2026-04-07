@@ -2,24 +2,24 @@ import { Platform } from 'react-native';
 
 export const darkTheme = {
   // Backgrounds
-  bg:           '#0a0a0a',
-  bgCard:       '#111111',
+  bg:           '#121212',
+  bgCard:       '#1E1E1E',
   bgInput:      '#1a1a1a',
-  bgModal:      '#111111',
+  bgModal:      '#1E1E1E',
 
   // Borders
-  border:       '#1f2937',
-  borderLight:  '#374151',
+  border:       '#2D2D2D',
+  borderLight:  '#3D3D3D',
 
   // Brand
-  purple:       '#7c3aed',
-  purpleDim:    '#4c1d95',
-  purpleGlow:   'rgba(124,58,237,0.3)',
+  purple:       '#2563EB', // Electric Blue (Primary)
+  purpleDim:    '#1D4ED8', // Darker Blue
+  purpleGlow:   'rgba(37,99,235,0.3)', // Blue Glow
 
   // Text
-  textPrimary:  '#ffffff',
-  textSecondary:'#9ca3af',
-  textMuted:    '#4b5563',
+  textPrimary:  '#FFFFFF',
+  textSecondary:'#E0E0E0',
+  textMuted:    '#A0A0A0',
 
   // Status
   green:        '#4ade80',
@@ -47,9 +47,9 @@ export const lightTheme = {
   borderLight:  '#cbd5e1',
 
   // Brand
-  purple:       '#7c3aed',
-  purpleDim:    '#ede9fe',
-  purpleGlow:   'rgba(124,58,237,0.15)',
+  purple:       '#2563EB', // Electric Blue
+  purpleDim:    '#EFF6FF', // Light Blue bg
+  purpleGlow:   'rgba(37,99,235,0.15)',
 
   // Text
   textPrimary:  '#0f172a',
@@ -98,12 +98,12 @@ export const Shadows = {
     ...(Platform.OS === 'web' ? { boxShadow: '0 2px 4px rgba(0,0,0,0.1)' } : {})
   },
   accent: {
-    shadowColor: '#7c3aed',
+    shadowColor: '#2563EB',
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.5,
     shadowRadius: 10,
     elevation: 5,
-    ...(Platform.OS === 'web' ? { boxShadow: '0 0 10px rgba(124, 58, 237, 0.5)' } : {})
+    ...(Platform.OS === 'web' ? { boxShadow: '0 0 10px rgba(37, 99, 235, 0.5)' } : {})
   }
 };
 
@@ -113,7 +113,7 @@ export const getShadow = (type: 'soft' | 'accent') => {
     return {
       boxShadow: type === 'soft' 
         ? '0 2px 4px rgba(0,0,0,0.1)' 
-        : `0 0 10px ${s.shadowColor}80`
+        : `0 0 10px rgba(37,99,235,0.5)`
     };
   }
   return s;
@@ -121,13 +121,13 @@ export const getShadow = (type: 'soft' | 'accent') => {
 
 // Legacy Compatibility helper (MAPPED TO THEME)
 export const getThemeColors = (isEnderMode?: boolean) => ({
-  primary: '#7c3aed',
-  primaryDark: '#4c1d95',
-  background: '#0a0a0a',
-  surface: '#111111',
+  primary: '#2563EB',
+  primaryDark: '#1D4ED8',
+  background: '#121212',
+  surface: '#1E1E1E',
   textPrimary: '#FFFFFF',
-  textSecondary: '#9ca3af',
-  borderSubtle: '#1f2937',
+  textSecondary: '#E0E0E0',
+  borderSubtle: '#2D2D2D',
   accentEmerald: '#4ade80',
 });
 
@@ -137,11 +137,11 @@ export const getInitials = (name: string) => {
 };
 
 export const getAvatarColor = (name: string, isDark: boolean = true) => {
-  const bgColorsDark = ['rgba(124,58,237,0.15)', 'rgba(74,222,128,0.15)', 'rgba(249,115,22,0.15)', 'rgba(156,163,175,0.15)', 'rgba(239,68,68,0.15)'];
-  const textColorsDark = ['#7c3aed', '#4ade80', '#f97316', '#9ca3af', '#ef4444'];
+  const bgColorsDark = ['rgba(37,99,235,0.15)', 'rgba(74,222,128,0.15)', 'rgba(249,115,22,0.15)', 'rgba(156,163,175,0.15)', 'rgba(239,68,68,0.15)'];
+  const textColorsDark = ['#2563EB', '#4ade80', '#f97316', '#E0E0E0', '#ef4444'];
   
-  const bgColorsLight = ['rgba(124,58,237,0.1)', 'rgba(22,163,74,0.1)', 'rgba(234,88,12,0.1)', 'rgba(71,85,105,0.1)', 'rgba(220,38,38,0.1)'];
-  const textColorsLight = ['#7c3aed', '#16a34a', '#ea580c', '#475569', '#dc2626'];
+  const bgColorsLight = ['rgba(37,99,235,0.1)', 'rgba(22,163,74,0.1)', 'rgba(234,88,12,0.1)', 'rgba(71,85,105,0.1)', 'rgba(220,38,38,0.1)'];
+  const textColorsLight = ['#2563EB', '#16a34a', '#ea580c', '#475569', '#dc2626'];
   
   const bgs = isDark ? bgColorsDark : bgColorsLight;
   const txts = isDark ? textColorsDark : textColorsLight;

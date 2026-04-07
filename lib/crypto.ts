@@ -5,10 +5,10 @@ import { supabase } from './supabase';
 
 /**
  * lib/crypto.ts
- * E2EE helper for buildlog using X25519 (tweetnacl)
+ * E2EE helper for codenid using X25519 (tweetnacl)
  */
 
-const KEY_STORAGE_KEY = 'buildlog_private_key';
+const KEY_STORAGE_KEY = 'codenid_private_key';
 
 export interface KeyPair {
   publicKey: string;

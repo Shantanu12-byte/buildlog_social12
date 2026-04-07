@@ -23,7 +23,7 @@ const CATEGORIES = [
 
 /**
  * CreatePostScreen - A professional, monochrome terminal-style screen for creating posts.
- * Aligns with the Buildlog design system while fulfilling all user requirements.
+ * Aligns with the CodeNid design system while fulfilling all user requirements.
  */
 export default function CreatePostScreen({ navigation }) {
   const [content, setContent] = useState('');

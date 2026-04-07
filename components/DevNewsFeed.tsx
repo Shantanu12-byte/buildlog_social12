@@ -5,7 +5,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 // Memory cache for news
 let newsCache: { data: NewsItem[], timestamp: number } | null = null;
 const CACHE_EXPIRY = 30 * 60 * 1000; // 30 minutes
-const STORAGE_KEY = 'buildlog_dev_news_cache';
+const STORAGE_KEY = 'codenid_dev_news_cache';
 
 export interface NewsItem {
   id: string | number;
@@ -24,7 +24,8 @@ export interface NewsItem {
 // Reduced to top 6 tags to minimize network requests (from 12)
 const DEVTO_TAGS = [
   'javascript', 'webdev', 'react', 'python',
-  'ai', 'typescript'
+  'ai', 'typescript', 'rust', 'golang', 'devops',
+  'backend', 'frontend', 'softwareengineering', 'architecture'
 ];
 
 const BASE_DEVTO = 'https://dev.to/api/articles';
@@ -45,7 +46,12 @@ function isStrictlyDevRelated(story: { title: string }) {
   const STRICT_DEV_KEYWORDS = [
     'javascript', 'typescript', 'python', 'rust', 'golang', 'react', 'vue', 'nextjs', 'nodejs',
     'css', 'html', 'tailwind', 'api', 'github', 'git', 'coding', 'programming', 'devops',
-    'docker', 'kubernetes', 'aws', 'llm', 'gpt', 'claude', 'gemini', 'ai model', 'machine learning'
+    'docker', 'kubernetes', 'aws', 'llm', 'gpt', 'claude', 'gemini', 'ai model', 'machine learning',
+    'backend', 'frontend', 'fullstack', 'architecture', 'database', 'sql', 'nosql', 'cloud', 'server',
+    'deploy', 'engineering', 'startup', 'software', 'agile', 'scrum', 'debugging', 'testing',
+    'security', 'hacker', 'linux', 'unix', 'macos', 'windows', 'ios', 'android', 'swift', 'kotlin',
+    'dart', 'flutter', 'react-native', 'expo', 'serverless', 'microservices', 'graphql', 'rest',
+    'performance', 'optimization', 'scaling', 'infrastructure', 'monitoring', 'logging'
   ];
   return STRICT_DEV_KEYWORDS.some(kw => title.includes(kw));
 }
@@ -169,28 +175,36 @@ export default function DevNewsFeed({
 
   const fetchFreshNews = async (): Promise<NewsItem[]> => {
     try {
-      // 1. Fetch from Dev.to tags separately
-      const urls = DEVTO_TAGS.map(tag => `${BASE_DEVTO}?tag=${tag}&top=1&per_page=8`); // Increased per_page from 5 to 8
-      const devToResults = await Promise.all(urls.map(u => fetch(u).then(r => r.json())));
-      const devToItems = devToResults.flat()
-        .filter(d => (d.public_reactions_count || d.positive_reactions_count || 0) >= 3) // Lowered reaction threshold from 5 to 3
-        .map(normalizeDevTo)
-        .filter(d => isStrictlyDevRelated(d));
+      // 1. Fetch from Dev.to using a single "top" request to avoid 429 rate limits
+      // We fetch more items initially since we're using a single endpoint, then filter aggressively
+      const devToUrl = `${BASE_DEVTO}?top=7&per_page=100`;
+      const devToRes = await fetch(devToUrl);
+      
+      let devToItems: NewsItem[] = [];
+      if (devToRes.ok) {
+        const rawDevTo = await devToRes.json();
+        devToItems = rawDevTo
+          .filter((d: any) => (d.public_reactions_count || d.positive_reactions_count || 0) >= 2)
+          .map(normalizeDevTo)
+          .filter((d: any) => isStrictlyDevRelated(d));
+      } else {
+        console.warn(`Dev.to API error: ${devToRes.status}`);
+      }
 
-      // 2. Fetch from HN with 40+ upvote quality filter (Increased from top 15 to 30)
+      // 2. Fetch from HN (Increased from top 30 to 50)
       const hnRes = await fetch('https://hacker-news.firebaseio.com/v0/topstories.json');
       const hnIds = await hnRes.json();
-      const hnTop30 = hnIds.slice(0, 30); // Increased from 15 to 30
+      const hnTop50 = hnIds.slice(0, 50); // Increased from 30 to 50
 
       const hnItemsRaw = await Promise.all(
-        hnTop30.map(async (id: number) => {
+        hnTop50.map(async (id: number) => {
           const itemRes = await fetch(`https://hacker-news.firebaseio.com/v0/item/${id}.json`);
           return itemRes.json();
         })
       );
 
       const hnItems = hnItemsRaw
-        .filter(d => d && d.score >= 40 && isStrictlyDevRelated(d) && !isBlacklisted(d.url)) // Lowered score from 50 to 40
+        .filter(d => d && d.score >= 30 && isStrictlyDevRelated(d) && !isBlacklisted(d.url)) // Lowered score from 40 to 30
         .map(normalizeHN);
 
       // 3. Merge and Deduplicate

@@ -4,7 +4,7 @@ self.addEventListener('push', (event) => {
   const { title, body, icon, url } = data;
 
   const options = {
-    body: body || 'You have a new update on Buildlog!',
+    body: body || 'You have a new update on CodeNid!',
     icon: icon || '/favicon.ico', // Fallback to favicon
     badge: '/favicon.ico',
     data: { url: url || '/' },
@@ -12,7 +12,7 @@ self.addEventListener('push', (event) => {
   };
 
   event.waitUntil(
-    self.registration.showNotification(title || 'Buildlog', options)
+    self.registration.showNotification(title || 'CodeNid', options)
   );
 });
 

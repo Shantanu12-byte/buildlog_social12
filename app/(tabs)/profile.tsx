@@ -456,12 +456,12 @@ export default function ProfileScreen() {
   );
 
   return (
-    <DesktopLayout>
+    <DesktopLayout scrollable={false}>
       <SafeAreaView style={s.container}>
         <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={theme.bg} />
         
         {isDesktop ? (
-          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={s.desktopLayout}>
+          <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false} contentContainerStyle={s.desktopLayout}>
             {renderProfileHeader()}
             {renderProfileContent()}
           </ScrollView>

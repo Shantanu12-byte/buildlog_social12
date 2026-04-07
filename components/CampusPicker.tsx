@@ -81,7 +81,7 @@ export default function CampusPicker({ visible, onConfirm, isLoading }: CampusPi
               </View>
 
               <TouchableOpacity 
-                onPress={() => Linking.openURL('https://buildlog.dev/guidelines')}
+                onPress={() => Linking.openURL('https://codenid.dev/guidelines')}
                 style={s.linkBtn}
               >
                 <Feather name="external-link" size={14} color={theme.purple} style={{marginRight: 6}} />

@@ -49,7 +49,7 @@ export default function NewsReader({
       await Share.share({
         title: current.title,
         url: current.url,
-        message: `${current.title}\n\nRead more on Buildlog: ${current.url}`,
+        message: `${current.title}\n\nRead more on CodeNid: ${current.url}`,
       });
     } catch (error) {
       // Share error handled silently

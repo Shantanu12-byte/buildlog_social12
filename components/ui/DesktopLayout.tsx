@@ -11,9 +11,10 @@ import { supabase } from '@/lib/supabase';
 
 interface DesktopLayoutProps {
   children: React.ReactNode;
+  scrollable?: boolean;
 }
 
-export function DesktopLayout({ children }: DesktopLayoutProps) {
+export function DesktopLayout({ children, scrollable = true }: DesktopLayoutProps) {
   const { isDesktop, isTablet, showSidebar } = useResponsive();
   const { theme, isDark } = useTheme();
   const { userProfile } = useUserStore();
@@ -104,11 +105,19 @@ export function DesktopLayout({ children }: DesktopLayoutProps) {
         </View>
 
         {/* Page Content */}
-        <ScrollView style={styles.scrollArea} showsVerticalScrollIndicator={false}>
-          <View style={styles.contentBox}>
-            {children}
+        {scrollable ? (
+          <ScrollView style={styles.scrollArea} showsVerticalScrollIndicator={false}>
+            <View style={styles.contentBox}>
+              {children}
+            </View>
+          </ScrollView>
+        ) : (
+          <View style={[styles.scrollArea, { overflow: 'hidden' as any }]}>
+            <View style={[styles.contentBox, { flex: 1, paddingBottom: 0 }]}>
+              {children}
+            </View>
           </View>
-        </ScrollView>
+        )}
       </View>
     </View>
   );

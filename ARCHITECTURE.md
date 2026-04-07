@@ -1,6 +1,6 @@
-# Buildlog Application Architecture
+# CodeNid Application Architecture
 
-Buildlog is a modern, community-driven social platform for developers and builders, built with **React Native (Expo)** and **Supabase**. It focuses on real-time campus collaboration, project sharing, and developer news.
+CodeNid is a modern, community-driven social platform for developers and builders, built with **React Native (Expo)** and **Supabase**. It focuses on real-time campus collaboration, project sharing, and developer news.
 
 ---
 

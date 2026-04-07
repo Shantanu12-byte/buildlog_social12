@@ -313,13 +313,15 @@ export default function ChallengesScreen() {
   );
 
   return (
-    <DesktopLayout>
+    <DesktopLayout scrollable={false}>
       <SafeAreaView style={s.container} edges={['top']}>
         {isDesktop ? (
-          <View style={s.desktopLayoutContainer}>
-            {renderDailyAndStats()}
-            {renderFilterAndList()}
-          </View>
+          <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false} contentContainerStyle={{ flexGrow: 1 }}>
+            <View style={s.desktopLayoutContainer}>
+              {renderDailyAndStats()}
+              {renderFilterAndList()}
+            </View>
+          </ScrollView>
         ) : (
           <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={s.content}>
             {renderDailyAndStats()}

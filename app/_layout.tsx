@@ -7,7 +7,6 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { supabase } from '@/lib/supabase';
 import { getOrCreateKeyPair } from '@/lib/crypto';
 import { useUserStore } from '@/store/userStore';
-import { WebSidebar } from '@/components/WebSidebar';
 import { MinecraftLoader } from '@/components/MinecraftLoader';
 import { AuthProvider, useAuth } from '@/context/AuthContext';
 import { ThemeProvider, useTheme } from '@/context/ThemeContext';
@@ -235,8 +234,7 @@ function InnerRootLayout() {
 
   return (
     <SafeAreaProvider style={{ flex: 1, backgroundColor: theme.bg }}>
-      <Animated.View style={[styles.root, animatedStyle, { flexDirection: isDesktop ? 'row' : 'column' }]}>
-        {Platform.OS === 'web' && isDesktop && <WebSidebar />}
+      <Animated.View style={[styles.root, animatedStyle, { flexDirection: 'column' }]}>
         <Animated.View style={[styles.centerWrapper, animatedStyle]}>
           <Animated.View style={[styles.mainContent, animatedStyle, { borderColor: theme.border }]}>
             <Slot />

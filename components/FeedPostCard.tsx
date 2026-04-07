@@ -203,7 +203,7 @@ export function FeedPostCard({ post, likeCount, isLiked, onLikePress, onCheerPre
           <Feather 
             name="plus" 
             size={16} 
-            color={isLiked ? "#FFFFFF" : theme.purple} 
+            color={isLiked ? "#FFFFFF" : theme.orange} 
             style={{ fontWeight: 'bold' }}
           />
           <Text style={[styles.hypeText, isLiked && styles.hypeTextActive]}>
@@ -390,9 +390,9 @@ function getStyles(theme: any, isDark: boolean) {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: isDark ? 'rgba(124,58,237,0.1)' : 'rgba(124,58,237,0.05)',
+    backgroundColor: isDark ? 'rgba(249,115,22,0.1)' : 'rgba(249,115,22,0.05)',
     borderWidth: 1,
-    borderColor: isDark ? 'rgba(124,58,237,0.3)' : 'rgba(124,58,237,0.2)',
+    borderColor: isDark ? 'rgba(249,115,22,0.3)' : 'rgba(249,115,22,0.2)',
     borderRadius: Radius.full,
     paddingHorizontal: 20,
     paddingVertical: 10,
@@ -400,11 +400,11 @@ function getStyles(theme: any, isDark: boolean) {
     minWidth: 120,
   },
   hypeBtnActive: {
-    backgroundColor: theme.purple,
-    borderColor: theme.purple,
+    backgroundColor: theme.orange,
+    borderColor: theme.orange,
   },
   hypeText: {
-    color: theme.purple,
+    color: theme.orange,
     fontSize: Typography.sizes.sm,
     fontWeight: '700',
   },

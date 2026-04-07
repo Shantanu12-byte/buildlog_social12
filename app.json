@@ -1,24 +1,24 @@
 {
   "expo": {
-    "name": "buildlog",
-    "slug": "buildlog",
+    "name": "codenid",
+    "slug": "codenid",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/developer_emblem.png",
-    "scheme": "buildlog",
+    "icon": "./assets/codenid_logo.png",
+    "scheme": "codenid",
     "userInterfaceStyle": "dark",
-    "backgroundColor": "#000000",
+    "backgroundColor": "#121212",
     "splash": {
-      "image": "./assets/images/buildlog_splash.png",
+      "image": "./assets/codenid_logo.png",
       "resizeMode": "contain",
-      "backgroundColor": "#0A0A0A"
+      "backgroundColor": "#121212"
     },
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true
     },
     "android": {
-      "package": "com.shant.buildlog",
+      "package": "com.shant.codenid",
       "versionCode": 1,
       "jsEngine": "hermes",
       "permissions": [
@@ -37,19 +37,20 @@
     },
     "web": {
       "output": "single",
-      "favicon": "./assets/images/favicon.png"
+      "favicon": "./assets/codenid_logo.png"
     },
     "plugins": [
       "expo-router",
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/buildlog_splash.png",
+          "image": "./assets/codenid_logo.png",
           "imageWidth": 200,
           "resizeMode": "contain",
-          "backgroundColor": "#0A0A0A",
+          "backgroundColor": "#121212",
           "dark": {
-            "backgroundColor": "#0A0A0A"
+            "image": "./assets/codenid_logo.png",
+            "backgroundColor": "#121212"
           }
         }
       ],

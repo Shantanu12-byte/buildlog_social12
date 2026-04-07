@@ -36,7 +36,7 @@ export const AvatarBlock = ({ url, username = '?', size = 40, tier = 'Default' }
       ) : (
         <View style={styles.fallback}>
           <Image 
-            source={require('../assets/developer_emblem.png')}
+            source={require('../assets/codenid_logo.png')}
             style={[StyleSheet.absoluteFill, { opacity: 0.2 }]}
             contentFit="contain"
           />

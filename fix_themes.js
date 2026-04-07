@@ -1,7 +1,7 @@
 const fs = require('fs');
 
 function fixUsername() {
-  const path = "c:\\Productive Social Media\\buildlog\\app\\(stack)\\[username].tsx";
+  const path = "c:\\Productive Social Media\\codenid\\app\\(stack)\\[username].tsx";
   let content = fs.readFileSync(path, 'utf8');
 
   // Imports
@@ -45,7 +45,7 @@ function fixUsername() {
 }
 
 function fixAddLog() {
-  const path = "c:\\Productive Social Media\\buildlog\\app\\(stack)\\add-log.tsx";
+  const path = "c:\\Productive Social Media\\codenid\\app\\(stack)\\add-log.tsx";
   let content = fs.readFileSync(path, 'utf8');
 
   content = content.replace("import { Colors, FontSizes, Spacing } from '@/constants/theme';", 
@@ -76,7 +76,7 @@ function fixAddLog() {
 }
 
 function fixIdTsx() {
-  const path = "c:\\Productive Social Media\\buildlog\\app\\project\\[id].tsx";
+  const path = "c:\\Productive Social Media\\codenid\\app\\project\\[id].tsx";
   let content = fs.readFileSync(path, 'utf8');
 
   content = content.replace("import { Colors, FontSizes, Spacing } from '@/constants/theme';", 

@@ -7,7 +7,7 @@ export const AuthConfiguration = {
   clientId: GITHUB_CLIENT_ID,
   redirectUrl: Platform.select({
     web: typeof window !== 'undefined' ? `${window.location.origin}/connect-github` : 'http://localhost:19006/connect-github',
-    default: 'com.buildlog://oauth',
+    default: 'com.codenid://oauth',
   }),
   // Explicitly include repo and read:org for private repository access and organization data
   // This prevents authorization-based 404 errors when retrieving Proof of Work.

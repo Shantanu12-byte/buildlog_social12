@@ -93,14 +93,14 @@ export default function PublicProfilePage() {
       <Stack.Screen 
         options={{
           headerShown: false,
-          title: `${name} | Buildlog`,
+          title: `${name} | CodeNid`,
         }}
       />
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={theme.bg} />
       {Platform.OS === 'web' && (
         <Head>
-          <title>{name} | Buildlog</title>
-          <meta property="og:title" content={`${name} | Buildlog`} />
+          <title>{name} | CodeNid</title>
+          <meta property="og:title" content={`${name} | CodeNid`} />
           <meta property="og:description" content={`${bio} | 🔥 ${streak} day streak`} />
           <meta property="og:image" content={avatarUrl} />
           <meta name="twitter:card" content="summary_large_image" />

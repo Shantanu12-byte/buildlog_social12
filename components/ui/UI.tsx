@@ -1,5 +1,5 @@
 /**
- * buildlog — Shared Components
+ * codenid — Shared Components
  * All reusable UI atoms and molecules live here.
  * Import from here, never duplicate.
  */

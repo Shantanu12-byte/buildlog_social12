@@ -269,7 +269,7 @@ export default function ProjectDetailScreen() {
   const handleShareLog = (logContent: string, index: number) => {
     const totalLogs = logs.length;
     const dayNumber = totalLogs - index; // Correct day calculation for reversed list
-    const message = `[BUILDLOG]: Day ${dayNumber}/${project?.challenge_duration || 30} of my project: ${logContent}. Join the tavern: https://buildlog.dev`;
+    const message = `[CODENID]: Day ${dayNumber}/${project?.challenge_duration || 30} of my project: ${logContent}. Join the tavern: https://codenid.dev`;
     const url = `whatsapp://send?text=${encodeURIComponent(message)}`;
     
     Linking.canOpenURL(url).then(supported => {

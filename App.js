@@ -14,7 +14,7 @@ import MainFeed from './components/MainFeed';
 const Stack = createNativeStackNavigator();
 
 /**
- * App - The root navigation controller for the Buildlog app.
+ * App - The root navigation controller for the CodeNid app.
  * Handles the 3-step authentication flow: Logged Out, Onboarding, and Main Feed.
  */
 export default function App() {
@@ -87,6 +87,6 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#000000', // Matches Buildlog design system
+    backgroundColor: '#000000', // Matches CodeNid design system
   },
 });

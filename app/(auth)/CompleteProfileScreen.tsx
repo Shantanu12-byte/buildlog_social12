@@ -24,7 +24,7 @@ import { useTheme } from '@/context/ThemeContext';
 
 // ── Constants ────────────────────────────────────────────────
 
-const CACHE_KEY = '@buildlog_username_cache';
+const CACHE_KEY = '@codenid_username_cache';
 
 const ALL_STACKS = [
   'JavaScript', 'TypeScript', 'Python', 'Java', 'C++',
@@ -300,6 +300,19 @@ export default function CompleteProfileScreen() {
     validateUsername(suggested);
   }
 
+  async function handleSignOut() {
+    try {
+      setLoading(true);
+      setError('');
+      await supabase.auth.signOut();
+      router.replace('/(auth)/login');
+    } catch (err: any) {
+      setError(err.message || 'Failed to sign out');
+    } finally {
+      setLoading(false);
+    }
+  }
+
   async function handleSubmit() {
     if (!username.trim()) {
       setError('Username is required');
@@ -362,7 +375,7 @@ export default function CompleteProfileScreen() {
       if (uError) throw uError;
 
       if (earnedBadges.length > 0) {
-        await AsyncStorage.setItem('@buildlog_badges', JSON.stringify(earnedBadges));
+        await AsyncStorage.setItem('@codenid_badges', JSON.stringify(earnedBadges));
       }
       
       
@@ -534,7 +547,7 @@ export default function CompleteProfileScreen() {
                 <TextInput
                   value={bio}
                   onChangeText={setBio}
-                  placeholder="Building buildlog — Instagram for devs..."
+                  placeholder="Building codenid — Instagram for devs..."
                   placeholderTextColor={theme.textMuted}
                   multiline
                   autoCapitalize="sentences"
@@ -680,10 +693,17 @@ export default function CompleteProfileScreen() {
           )}
 
           <View style={s.navRow}>
-            {step > 0 && (
+            {step > 0 ? (
               <Button
                 label="Back"
                 onPress={() => setStep(st => st - 1)}
+                variant="secondary"
+                style={{ flex: 1 }}
+              />
+            ) : (
+              <Button
+                label="Sign Out"
+                onPress={handleSignOut}
                 variant="secondary"
                 style={{ flex: 1 }}
               />

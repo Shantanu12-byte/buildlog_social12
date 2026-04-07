@@ -32,7 +32,7 @@ export function WebSidebar() {
           <View style={s.logoIcon}>
             <Feather name="zap" size={24} color="#7c3aed" />
           </View>
-          <Text style={s.logoText}>BUILDLOG</Text>
+          <Text style={s.logoText}>CODENID</Text>
         </View>
 
         <View style={s.divider} />
@@ -139,10 +139,6 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
     borderRightWidth: 1,
     borderRightColor: theme.border,
     paddingVertical: 24,
-    position: 'fixed' as any,
-    left: 0,
-    top: 0,
-    zIndex: 1000,
     justifyContent: 'space-between',
   },
   logoContainer: {

@@ -168,7 +168,8 @@ export default function FeedScreen() {
 
   // Swiping Logic
   const panoGesture = Gesture.Pan()
-    .activeOffsetX([-10, 10]) 
+    .activeOffsetX([-20, 20]) 
+    .failOffsetY([-10, 10]) 
     .onUpdate((e) => {
       const baseValue = activeTab === 'feed' ? 0 : -width;
       scrollX.value = baseValue + e.translationX;
@@ -267,7 +268,7 @@ export default function FeedScreen() {
   );
 
   return (
-    <DesktopLayout>
+    <DesktopLayout scrollable={false}>
       <GestureHandlerRootView style={{ flex: 1, backgroundColor: theme.bg }}>
         <SafeAreaView style={s.container}>
 
@@ -306,8 +307,8 @@ export default function FeedScreen() {
           <View style={s.mainRow}>
             {/* Center column constraint */}
             <View style={{ flex: 1, alignItems: 'center' }}>
-              <View style={{ width: width, overflow: 'hidden' }}>
-                <GestureDetector gesture={panoGesture}>
+              <View style={{ width: width, flex: 1, overflow: 'hidden' }}>
+                {Platform.OS === 'web' ? (
                   <Animated.View style={[s.contentWrapper, animatedContainerStyle, { width: 2 * width }]}>
                     
                     {/* Feed Screen */}
@@ -371,7 +372,73 @@ export default function FeedScreen() {
                     </View>
 
                   </Animated.View>
-                </GestureDetector>
+                ) : (
+                  <GestureDetector gesture={panoGesture}>
+                    <Animated.View style={[s.contentWrapper, animatedContainerStyle, { width: 2 * width }]}>
+                      
+                      {/* Feed Screen */}
+                      <View style={{ width: width, flex: 1 }}>
+                        <FlatList
+                          data={posts}
+                          keyExtractor={item => item.id}
+                          renderItem={renderItem}
+                          ListHeaderComponent={
+                            <DevNewsFeed 
+                              onOpenReader={(items, status) => {
+                                setNewsItems(items);
+                                setNewsRefreshing(false);
+                              }} 
+                              onRefreshStart={() => setNewsRefreshing(true)}
+                              onRefreshEnd={() => setNewsRefreshing(false)}
+                              forceRefreshKey={refreshing ? Date.now() : 0}
+                            />
+                          }
+                          showsVerticalScrollIndicator={false}
+                          refreshControl={
+                            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.purple} />
+                          }
+                          onEndReached={() => fetchPosts()}
+                          onEndReachedThreshold={0.5}
+                          initialNumToRender={5}
+                          maxToRenderPerBatch={5}
+                          windowSize={10}
+                          removeClippedSubviews={Platform.OS !== 'ios'}
+                          ListFooterComponent={loadingMore ? (
+                            <View style={{ padding: 20, alignItems: 'center' }}>
+                              <ActivityIndicator color={theme.purple} />
+                            </View>
+                          ) : null}
+                        />
+                      </View>
+
+                      {/* News Screen */}
+                      <View style={{ width: width, flex: 1 }}>
+                        {newsItems.length > 0 ? (
+                          <NewsReader 
+                            items={newsItems} 
+                            onClose={() => switchTab('feed')} 
+                          />
+                        ) : newsRefreshing ? (
+                          <View style={{ flex: 1 }}>
+                            {[1, 2, 3].map(i => <NewsCardSkeleton key={i} />)}
+                          </View>
+                        ) : (
+                          <View style={s.errorState}>
+                            <Text style={s.errorIcon}>📡</Text>
+                            <Text style={s.errorTitle}>Could not load dev news</Text>
+                            <TouchableOpacity 
+                              style={s.retryBtn} 
+                              onPress={() => triggerNewsRefresh()}
+                            >
+                              <Text style={s.retryText}>Try Again</Text>
+                            </TouchableOpacity>
+                          </View>
+                        )}
+                      </View>
+
+                    </Animated.View>
+                  </GestureDetector>
+                )}
               </View>
             </View>
 

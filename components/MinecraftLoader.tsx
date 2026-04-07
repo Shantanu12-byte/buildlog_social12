@@ -65,7 +65,7 @@ export function MinecraftLoader() {
   return (
     <View style={[styles.container, { backgroundColor: theme.bg }]}>
       <Text style={[styles.title, { color: isEnderMode ? '#FFD700' : theme.purple }]}>
-        BUILDLOG
+        CODENID
       </Text>
       
       <TouchableOpacity 
