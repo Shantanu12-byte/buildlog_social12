@@ -274,7 +274,7 @@ export default function FeedScreen() {
 
           {/* Top Header - Only show if not on desktop desktop layout handles sidebar */}
           <View style={s.topBar}>
-            <Text style={s.logo}>build<Text style={{ color: theme.purple }}>log</Text></Text>
+            <Text style={s.logo}>code<Text style={{ color: theme.purple }}>nid</Text></Text>
             
             <View style={s.tabContainer}>
               <View style={s.tabsWrapper}>

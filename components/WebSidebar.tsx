@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Platform, Switch } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Platform, Switch, Image } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useRouter, usePathname } from 'expo-router';
 import { FontSizes, Spacing, Radius } from '@/constants/theme';
@@ -30,7 +30,11 @@ export function WebSidebar() {
         {/* Logo Section */}
         <View style={s.logoContainer}>
           <View style={s.logoIcon}>
-            <Feather name="zap" size={24} color="#7c3aed" />
+            <Image 
+              source={require('../assets/codenid_logo.png')}
+              style={{ width: 24, height: 24 }}
+              resizeMode="contain"
+            />
           </View>
           <Text style={s.logoText}>CODENID</Text>
         </View>
