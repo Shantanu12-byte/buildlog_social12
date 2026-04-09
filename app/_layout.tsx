@@ -24,6 +24,24 @@ if (!__DEV__) {
   console.warn = () => {};
 }
 
+
+// 🌐 SUPPRESS SUPABASE LOCK ERRORS & CAPTURE PWA PROMPT
+if (Platform.OS === 'web') {
+  window.addEventListener('unhandledrejection', (event) => {
+    if (event.reason && event.reason.name === 'AbortError' && typeof event.reason.message === 'string' && event.reason.message.includes('steal')) {
+      event.preventDefault(); // Eat the harmless Supabase dev-mode lock steal error
+    }
+  });
+
+  // Store the install prompt event
+  window.addEventListener('beforeinstallprompt', (e) => {
+    // Prevent the mini-infobar from appearing on mobile
+    e.preventDefault();
+    // Stash the event so it can be triggered later.
+    (window as any).deferredPrompt = e;
+  });
+}
+
 // 🔔 NOTIFICATION HANDLER CONFIG
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -191,10 +209,11 @@ function InnerRootLayout() {
         const profile = userProfile;
         
         // Priority: If either the DB or the local Auth context says onboarding is done, trust it.
-        const isOnboarded = !!profile?.onboarding_complete || isOnboardingFinished;
+        const hasUsername = !!(profile?.username && profile.username.trim() !== '');
+        const isOnboarded = !!profile?.onboarding_complete || hasUsername || isOnboardingFinished;
 
-        if (profile && profile.onboarding_complete !== isOnboardingFinished) {
-          updateOnboardingStatus(!!profile.onboarding_complete);
+        if (profile && isOnboarded !== isOnboardingFinished) {
+          updateOnboardingStatus(isOnboarded);
         }
 
         if (profile?.id && Platform.OS === 'web') {

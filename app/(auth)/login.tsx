@@ -12,6 +12,7 @@ import { Input, Button } from '../../components/ui/UI';
 import { useTheme } from '@/context/ThemeContext';
 import { checkRateLimit } from '@/lib/rateLimit';
 import { sanitizeText } from '@/lib/sanitize';
+import { WebDownloadBanner } from '@/components/WebDownloadBanner';
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -88,6 +89,20 @@ export default function LoginScreen() {
     const { error } = await supabase.auth.signInWithOAuth({ provider: 'github' });
     if (error) setError(error.message);
   }
+
+  const handleInstallApp = async () => {
+    if (Platform.OS !== 'web') return;
+    const promptEvent = (window as any).deferredPrompt;
+    if (promptEvent) {
+      promptEvent.prompt();
+      const { outcome } = await promptEvent.userChoice;
+      if (outcome === 'accepted') {
+        (window as any).deferredPrompt = null;
+      }
+    } else {
+      window.alert('To install the web app:\n\n1. On Chrome (Android/Desktop): Look for the "Install" icon in the address bar.\n2. On Safari (iOS): Tap the Share button and select "Add to Home Screen".');
+    }
+  };
 
   return (
     <SafeAreaView style={s.container}>
@@ -207,6 +222,16 @@ export default function LoginScreen() {
             </TouchableOpacity>
           </View>
 
+          {Platform.OS === 'web' && (
+            <TouchableOpacity 
+              style={s.webAppDownloadBtn}
+              onPress={handleInstallApp}
+            >
+              <Feather name="smartphone" size={18} color={theme.purple} />
+              <Text style={s.webAppDownloadText}>Download Web App</Text>
+            </TouchableOpacity>
+          )}
+
           {/* Social proof */}
           <View style={s.socialProof}>
             {['React', 'Flutter', 'Node.js', 'Python', 'Go', 'Rust'].map((tag, i) => (
@@ -217,6 +242,7 @@ export default function LoginScreen() {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
+      <WebDownloadBanner />
     </SafeAreaView>
   );
 }
@@ -322,4 +348,13 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
     borderRadius: Radius.sm, paddingHorizontal: 10, paddingVertical: 5,
   },
   techTagText: { color: theme.textSecondary, fontSize: Typography.sizes.xs, fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace' },
+  webAppDownloadBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing.sm,
+    backgroundColor: isDark ? 'rgba(124, 58, 237, 0.1)' : 'rgba(124, 58, 237, 0.05)',
+    borderWidth: 1, borderColor: theme.purple,
+    borderRadius: Radius.md, paddingVertical: Spacing.md,
+    marginTop: -Spacing.xl, marginBottom: Spacing.xl, marginHorizontal: 'auto',
+    paddingHorizontal: Spacing.xl,
+  },
+  webAppDownloadText: { color: theme.purple, fontSize: Typography.sizes.sm, fontWeight: '600' },
 });
