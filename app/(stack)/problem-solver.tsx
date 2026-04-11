@@ -97,7 +97,13 @@ export default function ProblemSolverScreen() {
         setIsUnlocked(true);
         if (res.allPassed) {
           Alert.alert('Success!', `Congratulations! You've solved this challenge. +${problem.difficulty === 'Easy' ? 10 : 25} XP`, [
-            { text: 'Return', onPress: () => router.back() }
+            { 
+              text: 'Return', 
+              onPress: () => {
+                if (router.canGoBack()) router.back();
+                else router.replace('/(tabs)/challenges');
+              }
+            }
           ]);
         } else {
           Alert.alert('Failed', 'Some test cases did not pass. Try again!');
@@ -264,7 +270,13 @@ export default function ProblemSolverScreen() {
           colors={isDark ? ['#111111', '#0a0a0a'] : ['#ffffff', '#f8fafc']}
           style={s.header}
         >
-          <TouchableOpacity onPress={() => router.back()} style={s.backBtn}>
+          <TouchableOpacity 
+            onPress={() => {
+              if (router.canGoBack()) router.back();
+              else router.replace('/(tabs)/challenges');
+            }} 
+            style={s.backBtn}
+          >
             <Feather name="arrow-left" size={24} color={theme.textPrimary} />
           </TouchableOpacity>
           <View style={s.headerInfo}>

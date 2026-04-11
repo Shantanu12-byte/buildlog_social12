@@ -161,7 +161,8 @@ export default function EditProfileScreen() {
           if (username.trim() !== originalUsername && originalUsername !== '') {
             router.replace({ pathname: '/profile/[username]', params: { username: username.trim() } } as any);
           } else {
-            router.back();
+            if (router.canGoBack()) router.back();
+            else router.replace('/(tabs)/profile');
           }
         } 
       }]);
@@ -191,7 +192,13 @@ export default function EditProfileScreen() {
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={theme.bg} />
       <ScrollView contentContainerStyle={s.scrollContent}>
         <View style={s.header}>
-          <TouchableOpacity onPress={() => router.back()} style={s.backBtn}>
+          <TouchableOpacity 
+            onPress={() => {
+              if (router.canGoBack()) router.back();
+              else router.replace('/(tabs)/profile');
+            }} 
+            style={s.backBtn}
+          >
             <Feather name="arrow-left" size={24} color={theme.textPrimary} />
           </TouchableOpacity>
           <Text style={s.headerTitle}>EDIT_PROFILE</Text>
@@ -299,7 +306,10 @@ export default function EditProfileScreen() {
 
           <Button
             label="ABORT_CHANGES"
-            onPress={() => router.back()}
+            onPress={() => {
+              if (router.canGoBack()) router.back();
+              else router.replace('/(tabs)/profile');
+            }}
             variant="ghost"
             style={{ marginTop: 8 }}
           />

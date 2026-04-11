@@ -238,7 +238,13 @@ export default function PublicProfileScreen() {
         <Feather name="user-x" size={64} color={theme.textMuted} />
         <Text style={s.notFoundTitle}>User Not Found</Text>
         <Text style={s.notFoundSub}>The developer handle @{username} doesn't exist in our logs.</Text>
-        <TouchableOpacity style={s.backBtn} onPress={() => router.back()}>
+        <TouchableOpacity 
+          style={s.backBtn} 
+          onPress={() => {
+            if (router.canGoBack()) router.back();
+            else router.replace('/(tabs)/profile');
+          }}
+        >
           <Text style={s.backBtnText}>Go Back</Text>
         </TouchableOpacity>
       </SafeAreaView>
@@ -379,7 +385,13 @@ export default function PublicProfileScreen() {
             }
           >
             <View style={s.mobileHeader}>
-              <TouchableOpacity onPress={() => router.back()} style={s.iconBtn}>
+              <TouchableOpacity 
+                onPress={() => {
+                  if (router.canGoBack()) router.back();
+                  else router.replace('/(tabs)/profile');
+                }} 
+                style={s.iconBtn}
+              >
                 <Feather name="arrow-left" size={24} color={theme.textPrimary} />
               </TouchableOpacity>
               <Text style={s.headerTitle}>@{profile?.username}</Text>

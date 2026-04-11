@@ -116,7 +116,7 @@ export default function ChallengesScreen() {
       }
 
     } catch (error) {
-      console.error('Error loading challenges:', error);
+      console.error('[challenges] Error loading data:', error);
     } finally {
       setLoading(false);
     }

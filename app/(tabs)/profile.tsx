@@ -63,27 +63,46 @@ export default function ProfileScreen() {
         }
       }
 
-      // 1. Consolidated Fetch via Postgres RPC (Reduces 3 DB hits to 1)
-      const { data: rpcData, error: rpcError } = await supabase.rpc('get_profile_stats', { 
-        user_id_param: userId 
-      });
+      setLoading(true);
 
-      if (rpcError) {
-        console.warn('[profile] RPC stats fetch failed:', rpcError);
-      }
+      // Run stats and GitHub check in parallel to prevent bottlenecks
+      await Promise.all([
+        (async () => {
+          try {
+            // 1. Consolidated Fetch via Postgres RPC
+            const { data: rpcData, error: rpcError } = await supabase.rpc('get_profile_stats', { 
+              user_id_param: userId 
+            });
 
-      if (rpcData?.posts) {
-        setPosts(rpcData.posts);
-      }
-      
-      setStats(prev => ({
-        ...prev,
-        projects: rpcData?.projects_count || 0,
-        followers: rpcData?.followers_count || 0,
-        following: rpcData?.following_count || 0,
-        hypes: rpcData?.hypes_count || 0,
-        builds: rpcData?.builds_count || 0,
-      }));
+            if (rpcError) console.warn('[profile] RPC stats fetch failed:', rpcError);
+            if (rpcData?.posts) setPosts(rpcData.posts);
+            
+            setStats(prev => ({
+              ...prev,
+              projects: rpcData?.projects_count || 0,
+              followers: rpcData?.followers_count || 0,
+              following: rpcData?.following_count || 0,
+              hypes: rpcData?.hypes_count || 0,
+              builds: rpcData?.builds_count || 0,
+            }));
+          } catch (e) {}
+        })(),
+        (async () => {
+          try {
+            // 4. GitHub Integration
+            setIsSyncingGithub(true);
+            const status = await ProfilePortfolioController.checkGitHubStatus(userId);
+            setGithubStatus(status);
+            
+            if (status.isConnected && status.hasSufficientScopes) {
+              const repoData = await ProfilePortfolioController.loadUserProjects(userId);
+              setGithubProjects(repoData.projects || []);
+            }
+          } catch (e) {} finally {
+            setIsSyncingGithub(false);
+          }
+        })()
+      ]);
 
       // 2. Local Persistence (Flame Streak & Time)
       const [streakStr, timeStr] = await Promise.all([
@@ -117,17 +136,9 @@ export default function ProfileScreen() {
       });
       setLearningStats(statsByTopic);
 
-      // 4. GitHub Integration
-      setIsSyncingGithub(true);
-      const status = await ProfilePortfolioController.checkGitHubStatus(userId);
-      setGithubStatus(status);
-      
-      if (status.isConnected && status.hasSufficientScopes) {
-        const repoData = await ProfilePortfolioController.loadUserProjects(userId);
-        setGithubProjects(repoData.projects || []);
-      }
-
-    } catch (err: any) { } finally {
+    } catch (err: any) { 
+      console.error('[profile] Critical error in fetchProfileData:', err);
+    } finally {
       setIsSyncingGithub(false);
       setLoading(false);
       setRefreshing(false);
@@ -136,13 +147,16 @@ export default function ProfileScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      fetchProfileData();
+      let isMounted = true;
+      
+      const load = async () => {
+        if (isMounted) await fetchProfileData();
+      };
+      
+      load();
+      return () => { isMounted = false; };
     }, [fetchProfileData])
   );
-
-  useEffect(() => {
-    fetchProfileData();
-  }, [fetchProfileData]);
 
   const onRefresh = () => {
     setRefreshing(true);
