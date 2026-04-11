@@ -63,22 +63,26 @@ export default function ProfileScreen() {
         }
       }
 
-      // 1. Parallel Secondary Fetches (Counts, Posts)
-      const fetchActions = [
-        supabase.from('posts').select('*', { count: 'exact' }).eq('author_id', userId).order('created_at', { ascending: false }).limit(30),
-        supabase.from('followers').select('id', { count: 'exact' }).eq('following_id', userId),
-        supabase.from('followers').select('id', { count: 'exact' }).eq('follower_id', userId),
-      ];
+      // 1. Consolidated Fetch via Postgres RPC (Reduces 3 DB hits to 1)
+      const { data: rpcData, error: rpcError } = await supabase.rpc('get_profile_stats', { 
+        user_id_param: userId 
+      });
 
-      const [postsRes, followersRes, followingRes] = await Promise.all(fetchActions);
+      if (rpcError) {
+        console.warn('[profile] RPC stats fetch failed:', rpcError);
+      }
 
-      if (postsRes.data) setPosts(postsRes.data);
+      if (rpcData?.posts) {
+        setPosts(rpcData.posts);
+      }
       
       setStats(prev => ({
         ...prev,
-        projects: postsRes.count || 0,
-        followers: followersRes.count || 0,
-        following: followingRes.count || 0,
+        projects: rpcData?.projects_count || 0,
+        followers: rpcData?.followers_count || 0,
+        following: rpcData?.following_count || 0,
+        hypes: rpcData?.hypes_count || 0,
+        builds: rpcData?.builds_count || 0,
       }));
 
       // 2. Local Persistence (Flame Streak & Time)

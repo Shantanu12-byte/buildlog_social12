@@ -16,10 +16,12 @@
     "express": "^4.18.2",
     "leo-profanity": "^1.9.0",
     "node-cron": "^4.2.1",
+    "pg": "^8.20.0",
     "socket.io": "^4.8.3",
     "web-push": "^3.6.7"
   },
   "devDependencies": {
+    "autocannon": "^8.0.0",
     "nodemon": "^3.0.1"
   }
 }

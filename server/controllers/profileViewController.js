@@ -20,8 +20,12 @@ const supabase = createClient(
 // IN-MEMORY LRU CACHE
 // Zero-dependency, O(1) read/write, auto-eviction
 // ══════════════════════════════════════════════════════════════
-const CACHE_MAX = 200;       // Max cached profiles
-const CACHE_TTL = 5 * 60000; // 5 minutes
+// ══════════════════════════════════════════════════════════════
+// IN-MEMORY LRU CACHE: AGGRESSIVE CACHING v2
+// High-capacity, zero-dependency, 1-hour expiration
+// ══════════════════════════════════════════════════════════════
+const CACHE_MAX = 2000;         // Expanded capacity (2k profiles)
+const CACHE_TTL = 3600000;      // 1-hour TTL for high-speed delivery
 
 const cache = new Map();
 
@@ -220,28 +224,29 @@ async function getProfileByUsername(req, res) {
       });
     }
 
-    // 5. Fetch stats in parallel (projects, builds, followers, hypes)
-    const [projRes, buildsRes, followersRes, hypesRes, reposRes] = await Promise.all([
-      supabase.from('posts').select('id', { count: 'exact', head: true }).eq('user_id', profile.id),
-      supabase.from('quest_logs').select('id', { count: 'exact', head: true }).eq('user_id', profile.id),
-      supabase.from('followers').select('id', { count: 'exact', head: true }).eq('following_id', profile.id),
-      supabase.from('likes').select('id', { count: 'exact', head: true }).eq('post_owner_id', profile.id),
-      // Fetch user's posts as "portfolio" items
-      supabase.from('posts').select('id, title, caption, image_url, created_at, skills, github_url')
-        .eq('user_id', profile.id)
-        .order('created_at', { ascending: false })
-        .limit(20),
-    ]);
+    // 5. Consolidated Query via Postgres RPC (Reduces 5 connection hits to 1)
+    const { data: rpcData, error: rpcError } = await supabase.rpc('get_profile_stats', { 
+      user_id_param: profile.id 
+    });
+
+    if (rpcError) {
+      console.error('RPC stats consolidation error:', rpcError);
+      // Fail gracefully or continue with empty stats if DB function is missing
+    }
 
     const stats = {
-      projects: projRes.count || 0,
-      builds: buildsRes.count || 0,
-      followers: followersRes.count || 0,
-      hypes: hypesRes.count || 0,
+      projects: rpcData?.projects_count || 0,
+      builds: rpcData?.builds_count || 0,
+      followers: rpcData?.followers_count || 0,
+      following: rpcData?.following_count || 0,
+      hypes: rpcData?.hypes_count || 0,
       forks: profile.fork_count || 0,
       stars: profile.star_count || 0,
       streak: profile.streak_count || 0,
     };
+
+    const portfolioData = rpcData?.posts || [];
+
 
     // 6. Compute badges (deterministic rule-based)
     const badges = computeBadges(profile, stats);
@@ -281,7 +286,7 @@ async function getProfileByUsername(req, res) {
       verifiedSkills: profile.verified_skills || {},
 
       // ── Automated Proof of Work Portfolio ──
-      portfolio: (reposRes.data || []).map(post => ({
+      portfolio: (portfolioData || []).map(post => ({
         id: post.id,
         title: post.title,
         caption: post.caption,

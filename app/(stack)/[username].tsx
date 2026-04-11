@@ -109,28 +109,36 @@ export default function PublicProfileScreen() {
 
         setProfile(prof);
         
-        const [followRes, projRes, buildsRes, followersRes, hypesRes] = await Promise.all([
-          user?.id ? supabase.from('followers').select('id').eq('follower_id', user.id).eq('following_id', prof.id).maybeSingle() : Promise.resolve({ data: null }),
-          supabase.from('posts').select('id', { count: 'exact', head: true }).eq('author_id', prof.id),
-          supabase.from('quest_logs').select('id', { count: 'exact', head: true }).eq('user_id', prof.id),
-          supabase.from('followers').select('id', { count: 'exact', head: true }).eq('following_id', prof.id),
-          supabase.from('likes').select('id', { count: 'exact', head: true }).eq('post_id', prof.id),
-        ]);
+        // Single-hit consolidated stats fetch via Postgres RPC
+        const { data: rpcData, error: rpcError } = await supabase.rpc('get_profile_stats', { 
+          user_id_param: prof.id 
+        });
+
+        if (rpcError) {
+          console.warn('[username] RPC fallback failed:', rpcError);
+        }
 
         if (user?.id === prof.id) {
           setIsOwner(true);
-        } else {
-          setIsFollowing(!!followRes.data);
+        } else if (user?.id) {
+          const { data: followData } = await supabase
+            .from('followers')
+            .select('id')
+            .eq('follower_id', user.id)
+            .eq('following_id', prof.id)
+            .maybeSingle();
+          setIsFollowing(!!followData);
         }
 
         setStats({
-          projects: projRes.count || 0,
-          builds: buildsRes.count || 0,
-          followers: followersRes.count || 0,
-          hypes: hypesRes.count || 0,
+          projects: rpcData?.projects_count || 0,
+          builds: rpcData?.builds_count || 0,
+          followers: rpcData?.followers_count || 0,
+          hypes: rpcData?.hypes_count || 0,
           forks: prof?.fork_count || 0,
           stars: prof?.star_count || 0,
         });
+        setPortfolio(rpcData?.posts || []);
       }
     } catch (err: any) { } finally {
       setLoading(false);
