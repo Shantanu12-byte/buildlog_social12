@@ -47,6 +47,7 @@ export default function ProfileScreen() {
   const [followersModalVisible, setFollowersModalVisible] = useState(false);
   const [followersList, setFollowersList] = useState<any[]>([]);
   const [followersLoading, setFollowersLoading] = useState(false);
+  const [followingList, setFollowingList] = useState<any[]>([]);
 
   const fetchProfileData = useCallback(async () => {
     if (!userId) {
@@ -185,23 +186,50 @@ export default function ProfileScreen() {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
-      const { data: follows } = await supabase
-        .from('followers')
-        .select('follower_id')
-        .eq('following_id', user.id);
-      if (follows && follows.length > 0) {
-        const ids = follows.map((f: any) => f.follower_id);
-        const { data: profiles } = await supabase
-          .from('profiles')
-          .select('id, username, avatar_url, bio')
-          .in('id', ids);
-        setFollowersList(profiles || []);
-      } else {
-        setFollowersList([]);
+      
+      const { data: followers, error } = await supabase
+        .from('profiles')
+        .select(`
+          id,
+          username,
+          avatar_url,
+          full_name,
+          bio,
+          followers!inner(following_id)
+        `)
+        .eq('followers.following_id', user.id);
+
+      if (error) {
+        console.error('Followers fetch error:', error);
+        return;
       }
+
+      setFollowersList(followers || []);
     } catch (e) { } finally {
       setFollowersLoading(false);
     }
+  };
+
+  const handleViewFollowing = async (userId: string) => {
+    const { data: following, error } =
+      await supabase
+        .from('profiles')
+        .select(`
+          id,
+          username,
+          avatar_url,
+          full_name,
+          bio,
+          followers!inner(follower_id)
+        `)
+        .eq('followers.follower_id', userId);
+
+    if (error) {
+      console.error('Following fetch error:', error);
+      return;
+    }
+
+    setFollowingList(following || []);
   };
 
   const [showSkeleton, setShowSkeleton] = useState(true);
@@ -522,6 +550,42 @@ export default function ProfileScreen() {
               <Text style={s.nameText}>{displayName}</Text>
               <Text style={s.handleText}>@{username}</Text>
               <Text style={s.bioText}>{activeProfile?.bio || 'Building the future.'}</Text>
+
+              <View style={[s.profileActionsGrid, { marginTop: 16 }]}>
+                <TouchableOpacity style={s.actionBtnHighlight} onPress={() => router.push('/(stack)/new-post')}>
+                  <Text style={s.actionBtnTextWhite}>New Post</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={s.actionBtnHalf} onPress={() => router.push('/(stack)/edit-profile')}>
+                  <Text style={s.actionBtnText}>Edit</Text>
+                </TouchableOpacity>
+              </View>
+
+              <View style={s.socialRow}>
+                <TouchableOpacity 
+                  style={s.socialPillGitHub}
+                  onPress={() => activeProfile?.github_url && Linking.openURL(activeProfile.github_url)}
+                >
+                  <FontAwesome5 name="github" size={14} color={theme.purple} />
+                  <Text style={[s.socialText, { color: theme.purple }]}>GitHub</Text>
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  style={s.socialPillLinkedIn}
+                  onPress={() => activeProfile?.linkedin_url && Linking.openURL(activeProfile.linkedin_url)}
+                >
+                  <FontAwesome5 name="linkedin" size={14} color={theme.green} />
+                  <Text style={[s.socialText, { color: theme.green }]}>LinkedIn</Text>
+                </TouchableOpacity>
+              </View>
+
+              <View style={s.campusSection}>
+                <View style={s.campusInfo}>
+                  <Text style={s.campusLabel}>CAMPUS</Text>
+                  <Text style={s.campusValue}>{activeProfile?.campus_name || 'Not Joined'}</Text>
+                </View>
+                {activeProfile?.campus_name && (
+                  <FontAwesome5 name="university" size={24} color={theme.purple} style={{opacity: 0.2, position: 'absolute', right: 20}} />
+                )}
+              </View>
             </View>
 
             {/* Render Tab View */}

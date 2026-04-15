@@ -50,21 +50,6 @@ export default function FeedScreen() {
 
   useEffect(() => {
     fetchPosts(true);
-
-    const channel = supabase
-      .channel('feed-updates')
-      .on('postgres_changes', { 
-        event: 'INSERT', 
-        schema: 'public', 
-        table: 'posts' 
-      }, async () => {
-        fetchPosts(true);
-      })
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
   }, []);
 
   useEffect(() => {
@@ -89,7 +74,21 @@ export default function FeedScreen() {
     try {
       const { data, error } = await supabase
         .from('posts')
-        .select('*, profiles:author_id(username, avatar_url)')
+        .select(`
+          id,
+          title,
+          projectTitle,
+          caption,
+          image_url,
+          likes_count,
+          comments,
+          created_at,
+          author_id,
+          profiles:author_id(
+            username,
+            avatar_url
+          )
+        `)
         .order('created_at', { ascending: false })
         .range(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE - 1);
 

@@ -645,7 +645,17 @@ export default function TavernScreen() {
   const [newRoomDesc, setNewRoomDesc] = useState('');
 
   async function fetchRooms() {
-    const { data, error } = await supabase.from('chat_rooms').select('*').order('online_count', { ascending: false });
+    const { data, error } = await supabase.from('chat_rooms').select(`
+      id,
+      name,
+      type,
+      campus_id,
+      description,
+      online_count,
+      member_count,
+      created_by,
+      created_at
+    `).order('online_count', { ascending: false });
     if (!error) setRooms(data ?? []);
   }
 
@@ -697,7 +707,15 @@ export default function TavernScreen() {
     if (channelRef.current) supabase.removeChannel(channelRef.current);
     if (memberChannelRef.current) supabase.removeChannel(memberChannelRef.current);
 
-    const { data } = await supabase.from('messages').select('*').eq('room_id', room.id).order('created_at', { ascending: true }).limit(100);
+    const { data } = await supabase.from('messages').select(`
+      id,
+      content,
+      created_at,
+      sender_id,
+      sender_username,
+      sender_college,
+      room_id
+    `).eq('room_id', room.id).order('created_at', { ascending: true }).limit(100);
     setMessages(data ?? []);
     setChatLoading(false);
 
@@ -722,18 +740,8 @@ export default function TavernScreen() {
       )
       .subscribe();
 
-    // Realtime Member Count
-    memberChannelRef.current = supabase
-      .channel(`members:${room.id}`)
-      .on('postgres_changes', {
-        event: '*',
-        schema: 'public',
-        table: 'room_members',
-        filter: `room_id=eq.${room.id}`
-      }, () => {
-        fetchRoomDetails(room.id);
-      })
-      .subscribe();
+    // Realtime Member Count (Disabled for Austerity Limits)
+    // fetchRoomDetails is now called once natively below instead of keeping a socket open.
 
     setRooms(prev => prev.map(r => r.id === room.id ? { ...r, unread_count: 0 } : r));
     fetchRoomDetails(room.id);
@@ -752,13 +760,14 @@ export default function TavernScreen() {
     const { data, error } = await supabase
       .from('room_members')
       .select(`
+        id,
         user_id,
+        room_id,
         joined_at,
-        profiles (
+        profiles(
           username,
           avatar_url,
-          full_name,
-          last_seen
+          full_name
         )
       `)
       .eq('room_id', roomId)
