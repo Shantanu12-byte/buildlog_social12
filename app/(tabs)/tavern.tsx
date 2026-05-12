@@ -10,9 +10,10 @@ import React, { useEffect, useState, useRef, useCallback } from 'react';
 import {
   View, Text, FlatList, TouchableOpacity, TextInput,
   StyleSheet, SafeAreaView, StatusBar, KeyboardAvoidingView,
-  Platform, ActivityIndicator, Modal, Alert, ScrollView,
+  Platform, ActivityIndicator, Modal, Alert, ScrollView, Animated
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
+import { Feather } from '@expo/vector-icons';
 import { trackPageView } from '@/services/analyticsService';
 import { supabase } from '@/lib/supabase';
 import { LoadingScreen } from '@/components/ui/UI';
@@ -58,67 +59,149 @@ function formatTime(dateStr: string): string {
 
 
 
-const RoomCard = React.memo(({
-  room,
-  isActive,
-  isJoined,
-  onPress,
-  onJoin
-}: {
-  room: Room;
-  isActive: boolean;
-  isJoined: boolean;
-  onPress: () => void;
-  onJoin: (roomId: string) => void;
-}) => {
-  const { theme, isDark } = useTheme();
-  const s = React.useMemo(() => getStyles(theme, isDark), [theme, isDark]);
-  const isGlobal = room.type === 'global';
+const getRoomIcon = (name: string) => {
+  const n = name.toLowerCase();
+  if (n.includes('cs') || n.includes('computer')) return { name: 'monitor', color: '#1d4ed8' };
+  if (n.includes('it') || n.includes('information')) return { name: 'globe', color: '#0891b2' };
+  if (n.includes('civil')) return { name: 'home', color: '#b45309' };
+  if (n.includes('mech')) return { name: 'settings', color: '#6b7280' };
+  if (n.includes('elect')) return { name: 'zap', color: '#ca8a04' };
+  if (n.includes('ai') || n.includes('data')) return { name: 'database', color: '#7c3aed' };
+  if (n.includes('global') || n.includes('dev')) return { name: 'globe', color: '#16a34a' };
+  return { name: 'users', color: '#1d4ed8' };
+};
+
+const getColor = (username: string) => {
+  const colors = ['#f87171', '#fb923c', '#fbbf24', '#a3e635', '#34d399', '#2dd4bf', '#38bdf8', '#818cf8', '#c084fc', '#f472b6'];
+  let hash = 0;
+  for (let i = 0; i < username.length; i++) hash = username.charCodeAt(i) + ((hash << 5) - hash);
+  return colors[Math.abs(hash) % colors.length];
+};
+
+const OnlineStack = ({ count, memberCount, roomId }: { count: number, memberCount: number, roomId: string }) => {
+  const u1 = String.fromCharCode(65 + (roomId.charCodeAt(0) % 26));
+  const u2 = String.fromCharCode(65 + (roomId.charCodeAt(1) % 26));
+  const u3 = String.fromCharCode(65 + (roomId.charCodeAt(2) % 26));
+  const users = [{id:'1', username: u1}, {id:'2', username: u2}, {id:'3', username: u3}];
+  const { isDark } = useTheme();
+
   return (
-    <TouchableOpacity style={[s.roomCard, isActive && s.roomCardActive]} onPress={onPress} activeOpacity={0.75}>
-      <View style={s.roomIcon}>
-        <Text style={s.roomIconText}>{isGlobal ? '🌐' : '🏛️'}</Text>
-        {!!room.unread_count && room.unread_count > 0 && (
-          <View style={s.unreadBadge}>
-            <Text style={s.unreadText}>{room.unread_count}</Text>
-          </View>
-        )}
-      </View>
-      <View style={{ flex: 1, marginLeft: 16 }}>
-        <View style={s.roomNameRow}>
-          <Text style={s.roomName} numberOfLines={1}>{room.name}</Text>
+    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+      {count > 0 && users.slice(0, Math.min(count, 3)).map((u, i) => (
+        <View key={u.id} style={{
+          width: 20, height: 20, borderRadius: 10,
+          borderWidth: 1.5, borderColor: isDark ? '#111111' : '#ffffff',
+          backgroundColor: getColor(u.username),
+          justifyContent: 'center', alignItems: 'center',
+          marginLeft: i > 0 ? -8 : 0,
+          zIndex: 3 - i
+        }}>
+          <Text style={{ fontSize: 9, fontWeight: 'bold', color: 'white' }}>{u.username}</Text>
         </View>
-        <Text style={s.roomDesc} numberOfLines={1}>
-          {room.description || (isGlobal ? 'Global public server' : 'Your campus community')}
+      ))}
+      <Text style={{ fontSize: 11, color: isDark ? '#9ca3af' : '#6b7280', marginLeft: count > 0 ? 6 : 0, fontWeight: '500' }}>
+        {count > 3 ? `+${count-3} · ` : ''}
+        {count} online · {memberCount} members
+      </Text>
+    </View>
+  );
+};
+
+const RoomCard = React.memo(({ room, isActive, isJoined, onPress, onJoin }: { room: Room; isActive: boolean; isJoined: boolean; onPress: () => void; onJoin: (roomId: string) => void; }) => {
+  const { theme, isDark } = useTheme();
+  const icon = getRoomIcon(room.name);
+  const [lastMsg, setLastMsg] = useState<{content: string, sender_username: string, created_at: string} | null>(null);
+  const pulseAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    supabase.from('messages')
+      .select('content, sender_username, created_at')
+      .eq('room_id', room.id)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single()
+      .then(({ data }) => {
+        if (data) {
+          setLastMsg(data as any);
+          const msgTime = new Date(data.created_at).getTime();
+          if (Date.now() - msgTime < 300000) {
+            Animated.loop(
+              Animated.sequence([
+                Animated.timing(pulseAnim, { toValue: 1, duration: 1000, useNativeDriver: true }),
+                Animated.timing(pulseAnim, { toValue: 0, duration: 1000, useNativeDriver: true })
+              ])
+            ).start();
+          }
+        }
+      });
+  }, [room.id]);
+
+  function formatTimeAgo(dateStr: string) {
+    const diff = Math.floor((Date.now() - new Date(dateStr).getTime()) / 1000);
+    if (diff < 60) return 'just now';
+    if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+    if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+    return `${Math.floor(diff / 86400)}d ago`;
+  }
+
+  const bg = isDark ? '#111111' : '#ffffff';
+  const border = isDark ? '#1f2937' : '#e2e8f0';
+
+  return (
+    <TouchableOpacity 
+      style={{
+        backgroundColor: bg, borderRadius: 16, padding: 16, marginBottom: 12, borderWidth: 1, borderColor: border,
+        flexDirection: 'column', position: 'relative'
+      }} 
+      onPress={onPress} activeOpacity={0.8}
+    >
+      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+        <View style={{ width: 48, height: 48, borderRadius: 12, backgroundColor: icon.color, justifyContent: 'center', alignItems: 'center' }}>
+          <Feather name={icon.name as any} size={22} color="#ffffff" />
+        </View>
+        <View style={{ flex: 1, marginLeft: 16, paddingRight: 80 }}>
+          <Text style={{ color: isDark ? '#ffffff' : '#0f172a', fontSize: 16, fontWeight: '800' }} numberOfLines={1}>{room.name}</Text>
+          <Text style={{ color: isDark ? '#9ca3af' : '#475569', fontSize: 13, marginTop: 4 }} numberOfLines={1}>{room.description || 'Your campus community'}</Text>
+        </View>
+        <View style={{ position: 'absolute', right: 0, top: 0 }}>
+          {isJoined ? (
+            <View style={{ paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20, borderWidth: 1, borderColor: '#16a34a' }}>
+              <Text style={{ color: '#16a34a', fontSize: 12, fontWeight: '800' }}>✓ Joined</Text>
+            </View>
+          ) : (
+            <TouchableOpacity style={{ backgroundColor: icon.color, paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20 }} onPress={(e) => { e.stopPropagation(); onJoin(room.id); }}>
+              <Text style={{ color: '#ffffff', fontSize: 12, fontWeight: '800' }}>Join</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      </View>
+      <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 16 }}>
+        <View style={{ width: 8, height: 8, marginRight: 8, justifyContent: 'center', alignItems: 'center' }}>
+          <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: room.online_count && room.online_count > 0 ? '#4ade80' : '#6b7280' }} />
+          {room.online_count && room.online_count > 0 ? (
+            <Animated.View style={{
+              position: 'absolute', width: 8, height: 8, borderRadius: 4, backgroundColor: '#4ade80',
+              transform: [{ scale: pulseAnim.interpolate({ inputRange: [0, 1], outputRange: [1, 2] }) }],
+              opacity: pulseAnim.interpolate({ inputRange: [0, 1], outputRange: [1, 0] })
+            }} />
+          ) : null}
+        </View>
+        <OnlineStack count={room.online_count || 0} memberCount={room.member_count || 0} roomId={room.id} />
+      </View>
+      <View style={{ height: 1, backgroundColor: isDark ? '#1f2937' : '#e2e8f0', marginVertical: 12 }} />
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+        <Text style={{ flex: 1, color: isDark ? '#6b7280' : '#94a3b8', fontSize: 12 }} numberOfLines={1}>
+          {lastMsg ? (
+            <Text><Text style={{ fontWeight: 'bold' }}>@{lastMsg.sender_username}: </Text>{lastMsg.content}</Text>
+          ) : 'No messages yet · Be first!'}
         </Text>
-
-        <View style={s.roomStatsRow}>
-          <Text style={s.roomStatText}>👥 {room.member_count ?? 0} members</Text>
-          <Text style={s.roomStatSeparator}>·</Text>
-          <Text style={s.roomOnlineText}>● {room.online_count ?? 0} online</Text>
-        </View>
-      </View>
-
-      <View style={s.roomCardAction}>
-        {isJoined ? (
-          <View style={s.joinedPill}>
-            <Text style={s.joinedPillText}>Joined ✓</Text>
-          </View>
-        ) : (
-          <TouchableOpacity
-            style={s.joinBtnSmall}
-            onPress={(e) => {
-              e.stopPropagation();
-              onJoin(room.id);
-            }}
-          >
-            <Text style={s.joinBtnSmallText}>+ Join Room</Text>
-          </TouchableOpacity>
-        )}
+        {lastMsg && <Text style={{ color: isDark ? '#6b7280' : '#94a3b8', fontSize: 11, marginLeft: 8 }}>{formatTimeAgo(lastMsg.created_at)}</Text>}
       </View>
     </TouchableOpacity>
   );
 });
+
+RoomCard.displayName = 'RoomCard';
 
 const MessageBubble = React.memo(({ msg, isMe, onLongPress }: { msg: Message; isMe: boolean; onLongPress?: () => void }) => {
   const { theme, isDark } = useTheme();
@@ -172,6 +255,8 @@ const MessageBubble = React.memo(({ msg, isMe, onLongPress }: { msg: Message; is
     </TouchableOpacity>
   );
 });
+
+MessageBubble.displayName = 'MessageBubble';
 
 function DateSeparator({ date }: { date: string }) {
   const { theme, isDark } = useTheme();
@@ -954,12 +1039,30 @@ export default function TavernScreen() {
           data={filteredRooms}
           keyExtractor={item => item.id}
           showsVerticalScrollIndicator={false}
-          contentContainerStyle={{ paddingBottom: 100 }}
+          contentContainerStyle={{ paddingBottom: 100, paddingHorizontal: 16, paddingTop: 10 }}
+          ListHeaderComponent={
+            filteredRooms.length > 0 ? (
+              <View style={{ marginBottom: 16 }}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <Text style={{ color: isDark ? '#6b7280' : '#94a3b8', fontSize: 11, fontWeight: '800', letterSpacing: 2 }}>
+                    {activeTab === 'campus' ? 'CAMPUS ROOMS' : 'GLOBAL SERVERS'}
+                  </Text>
+                  <View style={{ backgroundColor: isDark ? '#1e1b4b' : '#e0e7ff', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10 }}>
+                    <Text style={{ color: isDark ? '#818cf8' : '#4338ca', fontSize: 10, fontWeight: '800' }}>{filteredRooms.length} rooms</Text>
+                  </View>
+                </View>
+                <View style={{ height: 1, backgroundColor: isDark ? '#1f2937' : '#e2e8f0', marginTop: 12 }} />
+              </View>
+            ) : null
+          }
           ListEmptyComponent={
-            <View style={s.emptyList}>
-              <Text style={s.emptyIcon}>{activeTab === 'campus' ? '🎓' : '🌐'}</Text>
-              <Text style={s.emptyTitle}>{activeTab === 'campus' ? 'No chats' : 'No servers'}</Text>
-              <Text style={s.emptySub}>Join or create one!</Text>
+            <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 40, backgroundColor: isDark ? '#111111' : '#ffffff', borderRadius: 16, borderWidth: 1, borderColor: isDark ? '#1f2937' : '#e2e8f0', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 2 }}>
+              <Text style={{ fontSize: 48, marginBottom: 16 }}>🏛️</Text>
+              <Text style={{ color: isDark ? '#ffffff' : '#0f172a', fontSize: 18, fontWeight: '800', marginBottom: 4 }}>No rooms yet</Text>
+              <Text style={{ color: isDark ? '#9ca3af' : '#475569', fontSize: 14, marginBottom: 24, textAlign: 'center' }}>Create your dept{'\n'}community!</Text>
+              <TouchableOpacity style={{ backgroundColor: '#1d4ed8', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 20 }} onPress={() => setIsCreating(true)}>
+                <Text style={{ color: '#ffffff', fontSize: 14, fontWeight: '800' }}>+ Create Room</Text>
+              </TouchableOpacity>
             </View>
           }
           renderItem={({ item }) => (
@@ -979,8 +1082,16 @@ export default function TavernScreen() {
       )}
 
       {activeTab === 'campus' && (isJoined || userProfile?.is_joined_to_campus) && !selectedRoom && campusSubTab === 'community' && (
-        <TouchableOpacity style={s.fab} onPress={() => setIsCreating(true)} activeOpacity={0.8}>
-          <Text style={s.fabIcon}>+</Text>
+        <TouchableOpacity 
+          style={{
+            position: 'absolute', bottom: 20, right: 20, width: 56, height: 56,
+            backgroundColor: '#1d4ed8', borderRadius: 28, justifyContent: 'center', alignItems: 'center',
+            shadowColor: '#1d4ed8', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.4, shadowRadius: 20, elevation: 6
+          }} 
+          onPress={() => setIsCreating(true)} 
+          activeOpacity={0.8}
+        >
+          <Text style={{ color: '#fff', fontSize: 24, fontWeight: '400', lineHeight: 28 }}>+</Text>
         </TouchableOpacity>
       )}
     </View>

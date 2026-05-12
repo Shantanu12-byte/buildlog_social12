@@ -134,7 +134,7 @@ export default function CampusOnboardingScreen() {
               );
             })
           ) : (
-            <Text style={s.noResults}>No campus found for "{searchQuery}"</Text>
+            <Text style={s.noResults}>No campus found for &quot;{searchQuery}&quot;</Text>
           )}
         </View>
 

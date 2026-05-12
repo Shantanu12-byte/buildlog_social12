@@ -336,7 +336,7 @@ export default function FeedScreen() {
                         initialNumToRender={5}
                         maxToRenderPerBatch={5}
                         windowSize={10}
-                        removeClippedSubviews={Platform.OS !== 'ios'}
+                        removeClippedSubviews={(Platform.OS as string) !== 'ios'}
                         ListFooterComponent={loadingMore ? (
                           <View style={{ padding: 20, alignItems: 'center' }}>
                             <ActivityIndicator color={theme.purple} />
@@ -401,7 +401,7 @@ export default function FeedScreen() {
                           initialNumToRender={5}
                           maxToRenderPerBatch={5}
                           windowSize={10}
-                          removeClippedSubviews={Platform.OS !== 'ios'}
+                          removeClippedSubviews={(Platform.OS as string) !== 'ios'}
                           ListFooterComponent={loadingMore ? (
                             <View style={{ padding: 20, alignItems: 'center' }}>
                               <ActivityIndicator color={theme.purple} />

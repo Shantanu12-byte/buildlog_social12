@@ -126,7 +126,7 @@ export default function LoginScreen() {
             <Text style={s.logoText}>
               code<Text style={{ color: theme.purple }}>nid</Text>
             </Text>
-            <Text style={s.tagline}>Where developers share what they're building</Text>
+            <Text style={s.tagline}>Where developers share what they&apos;re building</Text>
           </View>
 
           {/* Mode toggle */}
@@ -150,7 +150,7 @@ export default function LoginScreen() {
           </View>
 
           {/* Form */}
-          <View style={s.form} accessibilityRole="form">
+          <View style={s.form} accessibilityRole={"form" as any}>
             <Input
               label="Email"
               value={email}

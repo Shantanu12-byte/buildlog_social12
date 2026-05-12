@@ -105,7 +105,7 @@ const DashboardPage = () => {
     <div className="space-y-8 animate-in fade-in duration-500">
       <div>
         <h1 className="text-2xl font-bold">Good morning, Admin 👋</h1>
-        <p className="text-gray-400 mt-1 text-sm">Here's what's happening on Buildlog today.</p>
+        <p className="text-gray-400 mt-1 text-sm">Here&apos;s what&apos;s happening on Buildlog today.</p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">

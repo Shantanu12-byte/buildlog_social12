@@ -78,7 +78,7 @@ export default function PublicProfilePage() {
       <View style={s.center}>
         <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={theme.bg} />
         <Text style={s.errorText}>404</Text>
-        <Text style={s.errorSubText}>Builder "@ {username}" not found or profile is private.</Text>
+        <Text style={s.errorSubText}>Builder &quot;@ {username}&quot; not found or profile is private.</Text>
       </View>
     );
   }

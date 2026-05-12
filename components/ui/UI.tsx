@@ -198,10 +198,12 @@ interface InputProps {
   style?: ViewStyle;
   label?: string;
   autoCapitalize?: 'none' | 'sentences' | 'words' | 'characters';
+  textContentType?: string;
+  autoComplete?: string;
 }
 export function Input({
   placeholder, value, onChangeText,
-  secureTextEntry, multiline, style, label, autoCapitalize,
+  secureTextEntry, multiline, style, label, autoCapitalize, textContentType, autoComplete
 }: InputProps) {
   const { theme, isDark } = useTheme();
   const s = React.useMemo(() => getStyles(theme, isDark), [theme, isDark]);
@@ -222,6 +224,8 @@ export function Input({
         secureTextEntry={secureTextEntry}
         multiline={multiline}
         autoCapitalize={autoCapitalize || 'none'}
+        textContentType={textContentType as any}
+        autoComplete={autoComplete as any}
         onFocus={() => setFocused(true)}
         onBlur={() => setFocused(false)}
         style={[s.input, { 

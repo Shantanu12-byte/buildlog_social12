@@ -1,11 +1,11 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   View, Text, StyleSheet, Dimensions, 
-  TouchableOpacity, Linking, Platform, StatusBar
+  TouchableOpacity, Linking, Platform, Image, Animated
 } from 'react-native';
 import * as WebBrowser from 'expo-web-browser';
 import { useTheme } from '@/context/ThemeContext';
-import { Spacing } from '@/constants/theme';
+import { LinearGradient } from 'expo-linear-gradient';
 
 const { width, height } = Dimensions.get('window');
 
@@ -22,6 +22,102 @@ export interface NewsItem {
   description?: string;
 }
 
+const categoryVisuals: Record<string, string[]> = {
+  'AI/ML': [
+    'vibrant glowing neural network',
+    'colorful AI brain visualization',
+    'electric blue purple synapses',
+    'neon digital mind map',
+    'glowing matrix particles cyan',
+  ],
+  'WEB DEV': [
+    'vibrant colorful browser UI design',
+    'neon code editor dark theme',
+    'floating 3d UI components glow',
+    'colorful web design elements',
+    'electric blue frontend code visual',
+  ],
+  'DEVOPS': [
+    'colorful cloud infrastructure nodes',
+    'vibrant server network diagram',
+    'neon blue server room glowing',
+    'electric cloud computing visual',
+    'bright kubernetes pod network',
+  ],
+  'OPEN SRC': [
+    'vibrant open source community',
+    'colorful GitHub contribution graph',
+    'glowing green code collaboration',
+    'neon network of developers',
+    'bright git branch visualization',
+  ],
+  'LANGUAGES': [
+    'vibrant colorful code syntax',
+    'neon programming language symbols',
+    'electric colored data structures',
+    'glowing algorithm visualization',
+    'bright colorful terminal output',
+  ],
+  'INDUSTRY': [
+    'vibrant tech startup workspace',
+    'colorful innovation concept art',
+    'neon city tech skyline',
+    'bright modern tech office',
+    'electric product launch visual',
+  ],
+};
+
+const categoryEmoji: Record<string, string> = {
+  'AI/ML': '🤖',
+  'WEB DEV': '🌐',
+  'DEVOPS': '☁️',
+  'OPEN SRC': '🔓',
+  'LANGUAGES': '💻',
+  'INDUSTRY': '🚀',
+  'DEV': '⚡',
+};
+
+const fallbackGradients: Record<string, string[]> = {
+  'AI/ML': ['#4c1d95', '#1e1b4b'],
+  'WEB DEV': ['#1e3a8a', '#0c4a6e'],
+  'DEVOPS': ['#7c2d12', '#431407'],
+  'OPEN SRC': ['#14532d', '#052e16'],
+  'LANGUAGES': ['#713f12', '#1c1500'],
+  'INDUSTRY': ['#701a75', '#2d0a2e'],
+  'DEV': ['#1e3a8a', '#0f172a'],
+};
+
+const categoryShimmerColors: Record<string, string[]> = {
+  'AI/ML': ['#1a0533', '#3b0764', '#1a0533'],
+  'WEB DEV': ['#0c1a4a', '#1e3a8a', '#0c1a4a'],
+  'DEVOPS': ['#2a0f00', '#7c2d12', '#2a0f00'],
+  'OPEN SRC': ['#042f0e', '#14532d', '#042f0e'],
+  'LANGUAGES': ['#1c1500', '#713f12', '#1c1500'],
+  'INDUSTRY': ['#2d0a2e', '#701a75', '#2d0a2e'],
+};
+
+export const generateNewsImage = (title: string, category: string) => {
+  const visuals = categoryVisuals[category.toUpperCase()] || categoryVisuals['AI/ML'];
+  const visual = visuals[title.length % visuals.length];
+
+  const stopWords = ['the','a','an','is','are','was','were','be','been','has',
+    'have','had','do','does','did','will','would','could','should','may','might',
+    'to','of','in','on','at','by','for','with','about','into','from'];
+
+  const keyWords = title
+    .toLowerCase()
+    .split(' ')
+    .filter(w => !stopWords.includes(w))
+    .slice(0, 3)
+    .join(' ');
+
+  const prompt = encodeURIComponent(
+    `${visual}, ${keyWords}, ultra vibrant colors, cinematic lighting, 4k quality, dramatic, eye catching, professional photography style, no text, no words, no letters, sharp focus, high contrast`
+  );
+
+  return `https://image.pollinations.ai/prompt/${prompt}?width=900&height=500&seed=${Math.abs(title.charCodeAt(0) * title.length)}&model=flux&enhance=true&nologo=true`;
+};
+
 function formatTimeAgo(timestamp: number): string {
   const diff = Math.floor(Date.now() / 1000) - timestamp;
   if (diff < 60) return 'just now';
@@ -36,13 +132,51 @@ function formatScore(score?: number): string {
   return score.toString();
 }
 
+const Shimmer = ({ category }: { category: string }) => {
+  const anim = React.useRef(new Animated.Value(0.4)).current;
+  const tagUpper = category.toUpperCase();
+  const colors = categoryShimmerColors[tagUpper] || categoryShimmerColors['AI/ML'];
+  const emoji = categoryEmoji[tagUpper] || categoryEmoji['DEV'];
+
+  React.useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(anim, { toValue: 1, duration: 800, useNativeDriver: true }),
+        Animated.timing(anim, { toValue: 0.4, duration: 800, useNativeDriver: true })
+      ])
+    ).start();
+  }, []);
+
+  return (
+    <Animated.View style={[StyleSheet.absoluteFill, { opacity: anim, justifyContent: 'center', alignItems: 'center' }]}>
+      <LinearGradient colors={colors as any} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFillObject} />
+      <Text style={{ fontSize: 48, opacity: 0.3 }}>{emoji}</Text>
+    </Animated.View>
+  );
+};
+
 export default function NewsCard({ 
   item, 
 }: { 
   item: NewsItem;
 }) {
   const { theme, isDark } = useTheme();
+  const [imageLoaded, setImageLoaded] = useState(false);
+  const [imageError, setImageError] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+  
   const s = React.useMemo(() => getStyles(theme, isDark), [theme, isDark]);
+
+  useEffect(() => {
+    setImageLoaded(false);
+    setImageError(false);
+    
+    // Add timeout to fallback if image takes too long (8 seconds)
+    const timer = setTimeout(() => {
+      if (!imageLoaded) setImageError(true);
+    }, 8000);
+    return () => clearTimeout(timer);
+  }, [item.id]);
 
   const handleOpenArticle = async () => {
     const targetUrl = item.source === 'dev.to' ? (item.canonical_url || item.url) : item.url;
@@ -56,76 +190,110 @@ export default function NewsCard({
         window.open(targetUrl, '_blank');
       }
     } catch (e) {
-      // Article open error handled silently
       if (Platform.OS === 'web') window.open(targetUrl, '_blank');
       else Linking.openURL(targetUrl);
     }
   };
 
-  const getTagColor = (tag: string) => {
-    switch (tag.toLowerCase()) {
-      case 'ai/ml': return theme.aiColor || theme.purple;
-      case 'web dev': return theme.webColor || theme.purple;
-      case 'open source': return theme.osColor || theme.green;
-      case 'devops': return theme.devopsColor || theme.orange;
-      case 'languages': return theme.langColor || theme.amber;
-      default: return theme.textMuted;
+  const getCategoryStyles = (tag: string) => {
+    switch (tag.toUpperCase()) {
+      case 'AI/ML': return { bg: '#7c3aed40', text: '#a78bfa', border: '#7c3aed60' };
+      case 'WEB DEV': return { bg: '#1d4ed840', text: '#60a5fa', border: '#1d4ed860' };
+      case 'DEVOPS': return { bg: '#ea580c40', text: '#fb923c', border: '#ea580c60' };
+      case 'OPEN SRC': return { bg: '#16a34a40', text: '#4ade80', border: '#16a34a60' };
+      case 'LANGUAGES': return { bg: '#ca8a0440', text: '#fbbf24', border: '#ca8a0460' };
+      case 'INDUSTRY': return { bg: '#db277740', text: '#f472b6', border: '#db277760' };
+      default: return { bg: '#4b556340', text: '#9ca3af', border: '#4b556360' };
     }
   };
 
-  const tagColor = getTagColor(item.tag);
+  const catStyle = getCategoryStyles(item.tag);
+  const imageUrl = generateNewsImage(item.title, item.tag);
+  
+  const tagUpper = item.tag.toUpperCase();
+  const fbGradient = fallbackGradients[tagUpper] || fallbackGradients['DEV'];
+  const fbEmoji = categoryEmoji[tagUpper] || categoryEmoji['DEV'];
 
   return (
     <View style={s.card}>
-      <View style={s.contentContainer}>
-        {/* Category & Read Time */}
-        <View style={s.metaTop}>
-          <View style={[s.tagPill, { backgroundColor: tagColor + '20', borderColor: tagColor }]}>
-            <Text style={[s.tagText, { color: tagColor }]}>{item.tag.toUpperCase()}</Text>
-          </View>
+      <View style={s.imageSection}>
+        {!imageError ? (
+          <>
+            {!imageLoaded && (
+              <View style={[StyleSheet.absoluteFill, { zIndex: 1 }]}>
+                <Shimmer category={item.tag} />
+              </View>
+            )}
+            <Image 
+              source={{ uri: imageUrl }} 
+              style={s.image} 
+              onLoad={() => setImageLoaded(true)}
+              onError={() => setImageError(true)}
+            />
+            {/* Subtle Vignette Overlay for Web */}
+            {Platform.OS === 'web' && (
+              <View style={[StyleSheet.absoluteFill, { 
+                backgroundImage: 'radial-gradient(ellipse at center, transparent 40%, rgba(0,0,0,0.5) 100%)' 
+              } as any]} pointerEvents="none" />
+            )}
+            {/* Simple dark overlay for Native to simulate vignette */}
+            {Platform.OS !== 'web' && (
+              <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.2)' }]} pointerEvents="none" />
+            )}
+          </>
+        ) : (
+          <LinearGradient colors={fbGradient as any} style={s.fallbackGradient}>
+            <Text style={s.fallbackEmoji}>{fbEmoji}</Text>
+            <Text style={s.fallbackText}>{tagUpper}</Text>
+          </LinearGradient>
+        )}
+        
+        <LinearGradient 
+          colors={['transparent', isDark ? '#0a0a0a' : '#f0f2f5']} 
+          style={s.gradientOverlay} 
+          pointerEvents="none"
+        />
+        
+        <View style={[s.categoryPill, { backgroundColor: catStyle.bg, borderColor: catStyle.border }]}>
+          <Text style={[s.categoryText, { color: catStyle.text }]}>{tagUpper}</Text>
+        </View>
+      </View>
+
+      <View style={s.contentSection}>
+        <View style={s.readTimeRow}>
           <Text style={s.readTime}>4 MIN READ</Text>
         </View>
 
-        {/* Headline */}
         <Text style={s.headline} numberOfLines={3}>
           {item.title.toUpperCase()}
         </Text>
 
-        {/* Summary */}
-        <Text style={s.summary} numberOfLines={5}>
-          {(item.description || '').slice(0, 220)}
-          {item.description && item.description.length > 220 ? '...' : ''}
-        </Text>
+        <TouchableOpacity onPress={() => setExpanded(!expanded)} activeOpacity={0.8}>
+          <Text style={s.summary} numberOfLines={expanded ? undefined : 3}>
+            {item.description || 'No description available for this transmission.'}
+          </Text>
+        </TouchableOpacity>
 
         <View style={s.divider} />
 
-        {/* Author & Source Row */}
         <View style={s.sourceRow}>
           <View style={s.authorBadge}>
-            <View>
-              <Text style={s.sourceName}>NEWS // {item.source.toUpperCase()}</Text>
-              <View style={s.statsSubRow}>
-                <Text style={s.statsText}>T-{formatTimeAgo(item.time).toUpperCase()}</Text>
-                <Text style={s.statsText}>  //  </Text>
-                <Text style={s.statsText}>SCORE: {formatScore(item.score)}</Text>
-              </View>
-            </View>
+            <Text style={s.sourceName}>NEWS {"//"} {item.source.toUpperCase()}</Text>
+            <Text style={s.statsText}>{formatTimeAgo(item.time).toUpperCase()} {"//"} SCORE: {formatScore(item.score)}</Text>
           </View>
 
-          {/* Action Button */}
           <TouchableOpacity 
-            style={s.readButton} 
+            style={[s.readButton, { borderColor: catStyle.border }]} 
             onPress={handleOpenArticle}
             activeOpacity={0.7}
           >
-            <Text style={s.readButtonText}>READ_TRANSMISSION →</Text>
+            <Text style={[s.readButtonText, { color: catStyle.text }]}>READ TRANSMISSION →</Text>
           </TouchableOpacity>
         </View>
-      </View>
 
-      {/* Subtle Bottom Swipe Hint */}
-      <View style={s.swipeHint}>
-        <Text style={s.swipeHintText}>↑ SWIPE_NEXT</Text>
+        <View style={s.swipeHint}>
+          <Text style={s.swipeHintText}>↑ SWIPE_NEXT</Text>
+        </View>
       </View>
     </View>
   );
@@ -137,146 +305,180 @@ export function NewsCardSkeleton() {
   const s = React.useMemo(() => getStyles(theme, isDark), [theme, isDark]);
 
   return (
-    <View style={[s.card, { backgroundColor: theme.bg }]}>
-      <View style={s.contentContainer}>
-        <View style={s.metaTop}>
-          <View style={[s.skeleton, { width: 80, height: 24, backgroundColor: theme.bgInput }]} />
-          <View style={[s.skeleton, { width: 60, height: 16, backgroundColor: theme.bgInput }]} />
-        </View>
-        <View style={[s.skeleton, { width: '90%', height: 32, marginTop: 20, marginHorizontal: 20, backgroundColor: theme.bgInput }]} />
-        <View style={[s.skeleton, { width: '80%', height: 32, marginTop: 10, marginHorizontal: 20, backgroundColor: theme.bgInput }]} />
-        <View style={[s.skeleton, { width: '95%', height: 16, marginTop: 24, marginHorizontal: 20, backgroundColor: theme.bgInput }]} />
-        <View style={[s.skeleton, { width: '90%', height: 16, marginTop: 8, marginHorizontal: 20, backgroundColor: theme.bgInput }]} />
-        <View style={[s.skeleton, { height: 1, marginVertical: 20, marginHorizontal: 20, backgroundColor: theme.border }]} />
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginHorizontal: 20 }}>
-          <View style={[s.skeleton, { width: 120, height: 32, backgroundColor: theme.bgInput }]} />
-          <View style={[s.skeleton, { width: 100, height: 32, borderRadius: 20, backgroundColor: theme.bgInput }]} />
+    <View style={s.card}>
+      <View style={s.imageSection}>
+         <Shimmer category="DEV" />
+      </View>
+      <View style={s.contentSection}>
+        <View style={[s.skeleton, { width: 80, height: 12, alignSelf: 'flex-end', marginTop: 16 }]} />
+        <View style={[s.skeleton, { width: '90%', height: 28, marginTop: 16 }]} />
+        <View style={[s.skeleton, { width: '70%', height: 28, marginTop: 8 }]} />
+        <View style={[s.skeleton, { width: '100%', height: 14, marginTop: 24 }]} />
+        <View style={[s.skeleton, { width: '80%', height: 14, marginTop: 8 }]} />
+        <View style={s.divider} />
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+          <View>
+            <View style={[s.skeleton, { width: 100, height: 12 }]} />
+            <View style={[s.skeleton, { width: 140, height: 12, marginTop: 6 }]} />
+          </View>
+          <View style={[s.skeleton, { width: 140, height: 36, borderRadius: 4 }]} />
         </View>
       </View>
     </View>
   );
 }
 
-const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
-  card: {
-    width: width,
-    height: Platform.OS === 'web' ? '100%' : height,
-    backgroundColor: theme.bg,
-    paddingBottom: Platform.OS === 'ios' ? 40 : 20,
-  },
-  contentContainer: {
-    flex: 1,
-  },
-  metaTop: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: 24,
-    paddingHorizontal: 20,
-  },
-  tagPill: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 4,
-    borderWidth: 1,
-  },
-  tagText: {
-    fontSize: 10,
-    fontWeight: '900',
-    letterSpacing: 1,
-    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
-  },
-  readTime: {
-    color: theme.textMuted,
-    fontSize: 10,
-    fontWeight: '800',
-    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
-  },
-  headline: {
-    fontSize: 28,
-    fontWeight: '900',
-    color: theme.textPrimary,
-    lineHeight: 34,
-    marginTop: 24,
-    paddingHorizontal: 20,
-    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
-    letterSpacing: -1,
-  },
-  summary: {
-    fontSize: 15,
-    color: theme.textSecondary,
-    lineHeight: 24,
-    fontWeight: '500',
-    marginTop: 20,
-    paddingHorizontal: 20,
-  },
-  divider: {
-    height: 1,
-    backgroundColor: theme.border,
-    marginHorizontal: 20,
-    marginVertical: 24,
-  },
-  sourceRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    marginBottom: 12,
-  },
-  authorBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  sourceName: {
-    color: theme.textPrimary,
-    fontSize: 12,
-    fontWeight: '800',
-    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
-  },
-  statsSubRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 4,
-  },
-  statsText: {
-    color: theme.textMuted,
-    fontSize: 11,
-    fontWeight: '700',
-    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
-  },
-  readButton: {
-    borderWidth: 1,
-    borderColor: theme.purple,
-    height: 38,
-    paddingHorizontal: 16,
-    borderRadius: 4,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: theme.purpleGlow,
-  },
-  readButtonText: {
-    color: theme.purple,
-    fontSize: 11,
-    fontWeight: '900',
-    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
-  },
-  swipeHint: {
-    position: 'absolute',
-    bottom: 30,
-    left: 0,
-    right: 0,
-    alignItems: 'center',
-  },
-  swipeHintText: {
-    color: theme.border,
-    fontSize: 10,
-    fontWeight: '900',
-    letterSpacing: 2,
-    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
-  },
-  skeleton: {
-    borderRadius: 4,
-    opacity: 0.5,
-  },
-});
+const getStyles = (theme: any, isDark: boolean) => {
+  const bg = isDark ? '#0a0a0a' : '#f0f2f5';
+  const textPrimary = isDark ? '#ffffff' : '#0f172a';
+  const textSecondary = isDark ? '#9ca3af' : '#475569';
+  const textMuted = isDark ? '#4b5563' : '#94a3b8';
+
+  return StyleSheet.create({
+    card: {
+      width: '100%',
+      height: '100%',
+      backgroundColor: bg,
+    },
+    imageSection: {
+      height: height * 0.42,
+      width: '100%',
+      position: 'relative',
+      overflow: 'hidden',
+      backgroundColor: '#0a0a0a',
+    },
+    image: {
+      width: '100%',
+      height: '100%',
+      resizeMode: 'cover',
+    },
+    fallbackGradient: {
+      flex: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    fallbackEmoji: {
+      fontSize: 64,
+      marginBottom: 10,
+    },
+    fallbackText: {
+      color: '#fff',
+      fontSize: 16,
+      fontWeight: '900',
+      letterSpacing: 2,
+      fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+    },
+    gradientOverlay: {
+      position: 'absolute',
+      bottom: 0,
+      left: 0,
+      right: 0,
+      height: 120,
+    },
+    categoryPill: {
+      position: 'absolute',
+      bottom: 20,
+      left: 20,
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      borderRadius: 16,
+      borderWidth: 1,
+      zIndex: 10,
+    },
+    categoryText: {
+      fontSize: 10,
+      fontWeight: '900',
+      letterSpacing: 1,
+      fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+    },
+    contentSection: {
+      flex: 1,
+      paddingHorizontal: 20,
+      paddingTop: 16,
+      position: 'relative',
+    },
+    readTimeRow: {
+      alignItems: 'flex-end',
+      marginBottom: 8,
+    },
+    readTime: {
+      color: textMuted,
+      fontSize: 11,
+      fontWeight: '800',
+      letterSpacing: 1,
+      fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+    },
+    headline: {
+      fontSize: 24,
+      fontWeight: '900',
+      color: textPrimary,
+      lineHeight: 28.8, 
+      fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+    },
+    summary: {
+      fontSize: 14,
+      color: textSecondary,
+      lineHeight: 22.4, 
+      marginTop: 12,
+      fontWeight: '400',
+    },
+    divider: {
+      height: 1,
+      backgroundColor: isDark ? '#1f2937' : '#e2e8f0',
+      marginVertical: 16,
+    },
+    sourceRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+    },
+    authorBadge: {
+      flex: 1,
+    },
+    sourceName: {
+      color: textMuted,
+      fontSize: 11,
+      fontWeight: '800',
+      fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+    },
+    statsText: {
+      color: textMuted,
+      fontSize: 11,
+      marginTop: 2,
+      fontWeight: '800',
+      fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+    },
+    readButton: {
+      borderWidth: 1,
+      paddingHorizontal: 14,
+      paddingVertical: 8,
+      borderRadius: 4,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    readButtonText: {
+      fontSize: 11,
+      fontWeight: '900',
+      fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+    },
+    swipeHint: {
+      position: 'absolute',
+      bottom: 20,
+      left: 0,
+      right: 0,
+      alignItems: 'center',
+    },
+    swipeHintText: {
+      color: isDark ? '#374151' : '#cbd5e1', 
+      fontSize: 10,
+      fontWeight: '800',
+      letterSpacing: 2,
+      fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+    },
+    skeleton: {
+      borderRadius: 4,
+      backgroundColor: isDark ? '#1f2937' : '#e2e8f0',
+      opacity: 0.5,
+    },
+  });
+};

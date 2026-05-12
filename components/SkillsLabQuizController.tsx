@@ -117,7 +117,7 @@ const SkillsLabQuizController = ({
         <View style={s.levelBadge}>
           <Text style={s.levelText}>{level.toUpperCase()}</Text>
         </View>
-        <Text style={s.progressText}>QUE {questionIndex + 1} // {currentQuestions.length}</Text>
+        <Text style={s.progressText}>QUE {questionIndex + 1} {"//"} {currentQuestions.length}</Text>
       </View>
       
       <ScrollView style={s.scrollArea} showsVerticalScrollIndicator={false}>

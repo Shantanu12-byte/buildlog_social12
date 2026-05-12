@@ -149,7 +149,7 @@ export default function CampusPicker({ visible, onConfirm, isLoading }: CampusPi
                   })
                 ) : (
                   <View style={s.emptySearch}>
-                    <Text style={s.emptySearchText}>No campus found matching "{searchQuery}"</Text>
+                    <Text style={s.emptySearchText}>No campus found matching &quot;{searchQuery}&quot;</Text>
                   </View>
                 )}
               </ScrollView>

@@ -7,7 +7,8 @@ import {
   ActivityIndicator, 
   RefreshControl,
   Alert,
-  Platform
+  Platform,
+  TouchableOpacity
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
@@ -35,6 +36,8 @@ const PostItem = React.memo(({ item, onLike }) => (
     </View>
   </View>
 ));
+
+PostItem.displayName = 'PostItem';
 
 export default function MainFeed() {
   const [posts, setPosts] = useState([]);

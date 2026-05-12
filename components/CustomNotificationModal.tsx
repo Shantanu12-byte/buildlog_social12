@@ -67,7 +67,7 @@ export function CustomNotificationModal({ visible, onAuthorize, onCancel }: Cust
           </View>
 
           <View style={styles.footer}>
-            <Text style={styles.footerText}>// ENCRYPTED_CONNECTION_SECURED</Text>
+            <Text style={styles.footerText}>{"//"} ENCRYPTED_CONNECTION_SECURED</Text>
           </View>
         </View>
       </View>

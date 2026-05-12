@@ -283,7 +283,7 @@ export default function NewProjectScreen() {
           </View>
 
           <View style={s.footer}>
-            <Text style={s.footerText}>// POWERED_BY_GITHUB_API_v3</Text>
+            <Text style={s.footerText}>{"//"} POWERED_BY_GITHUB_API_v3</Text>
           </View>
 
         </ScrollView>

@@ -107,7 +107,7 @@ const SkillsLabController = ({
   return (
     <View style={s.container}>
       <View style={s.headerRow}>
-        <Text style={s.header}>{language.toUpperCase()} // {level.toUpperCase()}</Text>
+        <Text style={s.header}>{language.toUpperCase()} {"//"} {level.toUpperCase()}</Text>
         <Text style={s.progressText}>{questionIndex + 1} OF {currentQuestions.length}</Text>
       </View>
       

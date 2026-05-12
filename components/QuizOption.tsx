@@ -101,6 +101,8 @@ const QuizOption = forwardRef((props: QuizOptionProps, ref) => {
   );
 });
 
+QuizOption.displayName = 'QuizOption';
+
 export default QuizOption;
 
 const styles = StyleSheet.create({

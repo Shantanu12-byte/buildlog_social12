@@ -166,7 +166,7 @@ function LogEntryFeedItem({
                    <Text style={s.statusText}>{(repoName || '').toUpperCase()}</Text>
                 </View>
               )}
-              {language && <Text style={s.timestamp}>// {(language || '').toUpperCase()}</Text>}
+              {language && <Text style={s.timestamp}>{"// "} {(language || '').toUpperCase()}</Text>}
             </View>
             <Text style={s.title}>{(title || '').toUpperCase()}</Text>
             <Text style={s.description}>{description}</Text>

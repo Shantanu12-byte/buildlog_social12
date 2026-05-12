@@ -166,7 +166,7 @@ export default function DailyMemosScreen() {
           <View style={s.emptyState}>
             <MaterialCommunityIcons name="check-circle" size={80} color={theme.green} />
             <Text style={s.emptyTitle}>ALL MEMOS COMPLETE!</Text>
-            <Text style={s.emptySub}>You've earned +{score * 5} XP today.</Text>
+            <Text style={s.emptySub}>You&apos;ve earned +{score * 5} XP today.</Text>
             <TouchableOpacity style={s.returnBtn} onPress={() => router.back()}>
               <Text style={s.returnBtnText}>Back to Challenges</Text>
             </TouchableOpacity>

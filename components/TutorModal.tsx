@@ -38,7 +38,7 @@ export default function TutorModal({ visible, onClose, feedback, codeSnippet }: 
           <Text style={styles.feedbackText}>{feedback}</Text>
           
           <TouchableOpacity style={styles.dismissBtn} onPress={onClose}>
-            <Text style={styles.dismissText}>Let's Try Again!</Text>
+            <Text style={styles.dismissText}>Let&apos;s Try Again!</Text>
             <Feather name="arrow-right" size={16} color={isDark ? "#000" : "#FFF"} />
           </TouchableOpacity>
         </View>

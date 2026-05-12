@@ -237,7 +237,7 @@ export default function PublicProfileScreen() {
       <SafeAreaView style={[s.container, { justifyContent: 'center', alignItems: 'center' }]}>
         <Feather name="user-x" size={64} color={theme.textMuted} />
         <Text style={s.notFoundTitle}>User Not Found</Text>
-        <Text style={s.notFoundSub}>The developer handle @{username} doesn't exist in our logs.</Text>
+        <Text style={s.notFoundSub}>The developer handle @{username} doesn&apos;t exist in our logs.</Text>
         <TouchableOpacity 
           style={s.backBtn} 
           onPress={() => {
